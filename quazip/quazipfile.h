@@ -107,7 +107,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * QuaZipFile constructed by this constructor can be used for read
      * only access. Use QuaZipFile(QuaZip*,QObject*) for writing.
      **/
-    QuaZipFile(const QString& zipName, QObject *parent =NULL);
+    QuaZipFile(const QString& zipName, QObject *parent = NULL);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object, \a
      * zipName specifies ZIP archive file name and \a fileName and \a cs
@@ -119,7 +119,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * \sa QuaZip::setCurrentFile()
      **/
     QuaZipFile(const QString& zipName, const QString& fileName,
-        QuaZip::CaseSensitivity cs =QuaZip::csDefault, QObject *parent =NULL);
+        QuaZip::CaseSensitivity cs = QuaZip::csDefault, QObject *parent = NULL);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object.
      *
@@ -169,7 +169,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * zip.close();
      * \endcode
      **/
-    QuaZipFile(QuaZip *zip, QObject *parent =NULL);
+    QuaZipFile(QuaZip *zip, QObject *parent = NULL);
     /// Destroys a QuaZipFile instance.
     /** Closes file if open, destructs internal QuaZip object (if it
      * exists and \em is internal, of course).
@@ -185,12 +185,12 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      *
      * \sa setZipName() getFileName()
      **/
-    QString getZipName()const;
+    QString getZipName() const;
     /// Returns a pointer to the associated QuaZip object.
     /** Returns \c NULL if there is no associated QuaZip or it is
      * internal (so you will not mess with it).
      **/
-    QuaZip* getZip()const;
+    QuaZip *getZip() const;
     /// Returns file name.
     /** This function returns file name you passed to this object either
      * by using
@@ -201,7 +201,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * Returns null string if there is no file name set yet. This is the
      * case when this QuaZipFile operates on the existing QuaZip object
      * (constructor QuaZipFile(QuaZip*,QObject*) or setZip() was used).
-     * 
+     *
      * \sa getActualFileName
      **/
     QString getFileName() const;
@@ -243,7 +243,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      *
      * \sa getZipName(), getFileName(), QuaZip::CaseSensitivity
      **/
-    QString getActualFileName()const;
+    QString getActualFileName() const;
     /// Sets the ZIP archive file name.
     /** Automatically creates internal QuaZip object and destroys
      * previously created internal QuaZip object, if any.
@@ -280,7 +280,8 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      *
      * \sa QuaZip::setCurrentFile
      **/
-    void setFileName(const QString& fileName, QuaZip::CaseSensitivity cs =QuaZip::csDefault);
+    void setFileName(
+      const QString& fileName, QuaZip::CaseSensitivity cs = QuaZip::csDefault);
     /// Opens a file for reading.
     /** Returns \c true on success, \c false otherwise.
      * Call getZipError() to get error code.
@@ -297,6 +298,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      **/
     inline bool open(OpenMode mode, const char *password)
     {return open(mode, NULL, NULL, false, password);}
+
     /// Opens a file for reading.
     /** \overload
      * Argument \a password specifies a password to decrypt the file.
@@ -309,7 +311,8 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * \a method should not be \c NULL. \a level can be \c NULL if you
      * don't want to know the compression level.
      **/
-    bool open(OpenMode mode, int *method, int *level, bool raw, const char *password =NULL);
+    bool open(OpenMode mode, int *method, int *level, bool raw,
+        const char *password = NULL);
     /// Opens a file for writing.
     /** \a info argument specifies information about file. It should at
      * least specify a correct file name. Also, it is a good idea to
@@ -338,53 +341,14 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * Arguments \a windowBits, \a memLevel, \a strategy provide zlib
      * algorithms tuning. See deflateInit2() in zlib.
      **/
-    bool open(OpenMode mode, const QuaZipNewInfo& info,
-        const char *password =NULL, quint32 crc =0,
-        int method =Z_DEFLATED, int level =Z_DEFAULT_COMPRESSION, bool raw =false,
-        int windowBits =-MAX_WBITS, int memLevel =DEF_MEM_LEVEL, int strategy =Z_DEFAULT_STRATEGY);
+    bool open(
+        OpenMode mode, const QuaZipNewInfo& info,
+        const char *password = NULL, quint32 crc = 0, int method = Z_DEFLATED,
+        int level = Z_DEFAULT_COMPRESSION, bool raw = false,
+        int windowBits = -MAX_WBITS, int memLevel = DEF_MEM_LEVEL,
+        int strategy = Z_DEFAULT_STRATEGY);
     /// Returns \c true, but \ref quazipfile-sequential "beware"!
-    virtual bool isSequential()const;
-    /// Returns current position in the file.
-    /** Implementation of the QIODevice::pos(). When reading, this
-     * function is a wrapper to the ZIP/UNZIP unztell(), therefore it is
-     * unable to keep track of the ungetChar() calls (which is
-     * non-virtual and therefore is dangerous to reimplement). So if you
-     * are using ungetChar() feature of the QIODevice, this function
-     * reports incorrect value until you get back characters which you
-     * ungot.
-     *
-     * When writing, pos() returns number of bytes already written
-     * (uncompressed unless you use raw mode).
-     *
-     * \note Although
-     * \ref quazipfile-sequential "QuaZipFile is a sequential device"
-     * and therefore pos() should always return zero, it does not,
-     * because it would be misguiding. Keep this in mind.
-     *
-     * This function returns -1 if the file or archive is not open.
-     *
-     * Error code returned by getZipError() is not affected by this
-     * function call.
-     **/
-    virtual qint64 pos()const;
-    /// Returns \c true if the end of file was reached.
-    /** This function returns \c false in the case of error. This means
-     * that you called this function on either not open file, or a file
-     * in the not open archive or even on a QuaZipFile instance that
-     * does not even have QuaZip instance associated. Do not do that
-     * because there is no means to determine whether \c false is
-     * returned because of error or because end of file was reached.
-     * Well, on the other side you may interpret \c false return value
-     * as "there is no file open to check for end of file and there is
-     * no end of file therefore".
-     *
-     * When writing, this function always returns \c true (because you
-     * are always writing to the end of file).
-     *
-     * Error code returned by getZipError() is not affected by this
-     * function call.
-     **/
-    virtual bool atEnd()const;
+    virtual bool isSequential() const;
     /// Returns file size.
     /** This function returns csize() if the file is open for reading in
      * raw mode, usize() if it is open for reading in normal mode and
@@ -398,7 +362,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * name would be very misguiding otherwise, so just keep in mind
      * this inconsistence.
      **/
-    virtual qint64 size()const;
+    virtual qint64 size() const;
     /// Returns compressed file size.
     /** Equivalent to calling getFileInfo() and then getting
      * compressedSize field, but more convenient and faster.
@@ -407,7 +371,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      *
      * Returns -1 on error, call getZipError() to get error code.
      **/
-    qint64 csize()const;
+    qint64 csize() const;
     /// Returns uncompressed file size.
     /** Equivalent to calling getFileInfo() and then getting
      * uncompressedSize field, but more convenient and faster. See
@@ -417,7 +381,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      *
      * Returns -1 on error, call getZipError() to get error code.
      **/
-    qint64 usize()const;
+    qint64 usize() const;
     /// Gets information about current file.
     /** This function does the same thing as calling
      * QuaZip::getCurrentFileInfo() on the associated QuaZip object,
@@ -449,8 +413,6 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
     virtual void close();
     /// Returns the error code returned by the last ZIP/UNZIP API call.
     int getZipError() const;
-    /// Returns the number of bytes available for reading.
-    virtual qint64 bytesAvailable() const;
 };
 
 #endif
