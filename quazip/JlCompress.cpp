@@ -28,11 +28,13 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 static bool copyData(QIODevice &inFile, QIODevice &outFile)
 {
-    while (!inFile.atEnd()) {
-        char buf[4096];
-        qint64 readLen = inFile.read(buf, 4096);
-        if (readLen <= 0)
+    while (true) {
+        char buf[8192];
+        qint64 readLen = inFile.read(buf, 8192);
+        if (readLen < 0)
             return false;
+        if (readLen == 0)
+            return true;
         if (outFile.write(buf, readLen) != readLen)
             return false;
     }

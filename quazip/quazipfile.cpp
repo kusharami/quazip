@@ -371,7 +371,7 @@ bool QuaZipFile::isSequential()const
 qint64 QuaZipFile::size()const
 {
   if(!isOpen()) {
-    qWarning("QuaZipFile::atEnd(): file is not open");
+    qWarning("QuaZipFile::size(): file is not open");
     return -1;
   }
   if(openMode()&ReadOnly)

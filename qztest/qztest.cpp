@@ -121,13 +121,16 @@ bool createTestArchive(QuaZip &zip, const QString &zipName,
                     .constData());
                 return false;
             }
-            while (!file.atEnd()) {
+            while (true) {
                 char buf[4096];
                 qint64 l = file.read(buf, 4096);
-                if (l <= 0) {
+                if (l < 0) {
                     qWarning("Couldn't read %s", filePath.toUtf8()
                         .constData());
                     return false;
+                }
+                if (l == 0) {
+                    break;
                 }
                 if (zipFile.write(buf, l) != l) {
                     qWarning("Couldn't write to %s in %s",
