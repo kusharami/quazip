@@ -8,6 +8,7 @@ DEPENDPATH += .
 INCLUDEPATH += .
 !win32: LIBS += -lz
 win32 {
+    INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
     # workaround for qdatetime.h macro bug
     DEFINES += NOMINMAX
 }

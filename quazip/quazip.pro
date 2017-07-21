@@ -47,6 +47,7 @@ CONFIG(debug, debug|release) {
 }
 
 unix:!symbian {
+    LIBS += -lz
     headers.path=$$PREFIX/include/quazip
     headers.files=$$HEADERS
     target.path=$$PREFIX/lib/$${LIB_ARCH}
