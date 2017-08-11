@@ -2,8 +2,10 @@ TEMPLATE = lib
 CONFIG += qt warn_on
 QT -= gui
 
-# Creating pkgconfig .pc file
-CONFIG += create_prl no_install_prl create_pc
+!win32 {
+    # Creating pkgconfig .pc file
+    CONFIG += create_prl no_install_prl create_pc
+}
 
 QMAKE_PKGCONFIG_PREFIX = $$PREFIX
 QMAKE_PKGCONFIG_INCDIR = $$headers.path
@@ -11,7 +13,7 @@ QMAKE_PKGCONFIG_REQUIRES = Qt5Core
 
 # The ABI version.
 
-!win32:VERSION = 1.0.0
+VERSION = 1.0.1
 
 # 1.0.0 is the first stable ABI.
 # The next binary incompatible change will be 2.0.0 and so on.
@@ -42,8 +44,14 @@ include(quazip.pri)
 
 
 CONFIG(debug, debug|release) {
-     mac: TARGET = $$join(TARGET,,,_debug) 
-     win32: TARGET = $$join(TARGET,,,d)
+     mac: TARGET = $$join(TARGET,,,_debug)
+     win32: {
+        TARGET = $$join(TARGET,,,d)
+    }
+}
+
+win32 {
+    TARGET_EXT = .dll
 }
 
 unix:!symbian {
@@ -54,9 +62,11 @@ unix:!symbian {
     QMAKE_PKGCONFIG_DESTDIR = pkgconfig
     INSTALLS += headers target
 
-	OBJECTS_DIR=.obj
-	MOC_DIR=.moc
-	
+        OBJECTS_DIR=.obj
+        MOC_DIR=.moc
+
+}
+
 }
 
 win32 {
