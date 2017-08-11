@@ -67,6 +67,8 @@ unix:!symbian {
 
 }
 
+macx {
+    QMAKE_SONAME_PREFIX = @executable_path/../lib
 }
 
 win32 {
