@@ -5,7 +5,7 @@ win32 {
 DEFINES += ZLIB_CONST
 DEPENDPATH += $$PWD
 HEADERS += \
-        $$PWD/crypt.h \
+        $$PWD/minizip_crypt.h \
         $$PWD/ioapi.h \
         $$PWD/JlCompress.h \
         $$PWD/quaadler32.h \
