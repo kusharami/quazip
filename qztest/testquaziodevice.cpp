@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP test suite.
 
@@ -23,90 +24,99 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
 #include "testquaziodevice.h"
-#include <quazip/quaziodevice.h>
 #include <QBuffer>
 #include <QByteArray>
 #include <QtTest/QtTest>
+#include <quazip/quaziodevice.h>
 
-void TestQuaZIODevice::read()
-{
-    QByteArray buf(256, 0);
-    z_stream zouts;
-    zouts.zalloc = (alloc_func) NULL;
-    zouts.zfree = (free_func) NULL;
-    zouts.opaque = NULL;
-    deflateInit(&zouts, Z_DEFAULT_COMPRESSION);
-    zouts.next_in = reinterpret_cast<Bytef*>(const_cast<char*>("test"));
-    zouts.avail_in = 4;
-    zouts.next_out = reinterpret_cast<Bytef*>(buf.data());
-    zouts.avail_out = buf.size();
-    deflate(&zouts, Z_FINISH);
-    deflateEnd(&zouts);
-    QBuffer testBuffer(&buf);
-    testBuffer.open(QIODevice::ReadOnly);
-    QuaZIODevice testDevice(&testBuffer);
-    QVERIFY(testDevice.open(QIODevice::ReadOnly));
-    char outBuf[5];
-    QCOMPARE(testDevice.read(outBuf, 5), static_cast<qint64>(4));
-    testDevice.close();
-    QVERIFY(!testDevice.isOpen());
+void TestQuaZIODevice::read() {
+  QByteArray buf(256, 0);
+  z_stream zouts;
+  zouts.zalloc = (alloc_func)NULL;
+  zouts.zfree = (free_func)NULL;
+  zouts.opaque = NULL;
+  deflateInit(&zouts, Z_DEFAULT_COMPRESSION);
+  zouts.next_in = reinterpret_cast<const Bytef *>("test");
+  zouts.avail_in = 4;
+  zouts.next_out = reinterpret_cast<Bytef *>(buf.data());
+  zouts.avail_out = buf.size();
+  deflate(&zouts, Z_FINISH);
+  deflateEnd(&zouts);
+  QBuffer testBuffer(&buf);
+  testBuffer.open(QIODevice::ReadOnly);
+  QuaZIODevice testDevice(&testBuffer);
+  QVERIFY(testDevice.open(QIODevice::ReadOnly));
+  char outBuf[5];
+  QCOMPARE(testDevice.read(outBuf, 5), static_cast<qint64>(4));
+  testDevice.close();
+  QVERIFY(!testDevice.isOpen());
+  QVERIFY(!testDevice.hasError());
 }
 
-void TestQuaZIODevice::readMany()
-{
-    QByteArray buf(256, 0);
-    z_stream zouts;
-    zouts.zalloc = (alloc_func) NULL;
-    zouts.zfree = (free_func) NULL;
-    zouts.opaque = NULL;
-    deflateInit(&zouts, Z_DEFAULT_COMPRESSION);
-    zouts.next_in = reinterpret_cast<Bytef*>(const_cast<char*>("testtest"));
-    zouts.avail_in = 8;
-    zouts.next_out = reinterpret_cast<Bytef*>(buf.data());
-    zouts.avail_out = buf.size();
-    deflate(&zouts, Z_FINISH);
-    deflateEnd(&zouts);
-    QBuffer testBuffer(&buf);
-    testBuffer.open(QIODevice::ReadOnly);
-    QuaZIODevice testDevice(&testBuffer);
-    QVERIFY(testDevice.open(QIODevice::ReadOnly));
-    char outBuf[4];
-    QCOMPARE(testDevice.read(outBuf, 4), static_cast<qint64>(4));
-    QVERIFY(!testDevice.atEnd());
-    QVERIFY(testDevice.bytesAvailable() > 0);
-    QCOMPARE(testDevice.read(4).size(), 4);
-    QCOMPARE(testDevice.bytesAvailable(), static_cast<qint64>(0));
-    QVERIFY(testDevice.atEnd());
-    testDevice.close();
-    QVERIFY(!testDevice.isOpen());
+void TestQuaZIODevice::readMany() {
+  QByteArray buf(256, 0);
+  z_stream zouts;
+  zouts.zalloc = (alloc_func)NULL;
+  zouts.zfree = (free_func)NULL;
+  zouts.opaque = NULL;
+  deflateInit(&zouts, Z_DEFAULT_COMPRESSION);
+  zouts.next_in = reinterpret_cast<const Bytef *>("testtest");
+  zouts.avail_in = 8;
+  zouts.next_out = reinterpret_cast<Bytef *>(buf.data());
+  zouts.avail_out = buf.size();
+  deflate(&zouts, Z_FINISH);
+  deflateEnd(&zouts);
+  QBuffer testBuffer(&buf);
+  testBuffer.open(QIODevice::ReadOnly);
+  QuaZIODevice testDevice(&testBuffer);
+  QVERIFY(!testDevice.open(QIODevice::WriteOnly));
+  QVERIFY(testDevice.hasError());
+  QVERIFY(testDevice.open(QIODevice::ReadOnly));
+  QVERIFY(!testDevice.hasError());
+  char outBuf[4];
+  QCOMPARE(testDevice.read(outBuf, 4), static_cast<qint64>(4));
+  QVERIFY(!testDevice.hasError());
+  QVERIFY(!testDevice.atEnd());
+  QVERIFY(testDevice.bytesAvailable() > 0);
+  QCOMPARE(testDevice.read(4).size(), 4);
+  QVERIFY(!testDevice.hasError());
+  QCOMPARE(testDevice.bytesAvailable(), static_cast<qint64>(0));
+  QVERIFY(testDevice.atEnd());
+  testDevice.close();
+  QVERIFY(!testDevice.hasError());
+  QVERIFY(!testDevice.isOpen());
 }
 
-void TestQuaZIODevice::write()
-{
-    QByteArray buf(256, 0);
-    QBuffer testBuffer(&buf);
-    testBuffer.open(QIODevice::WriteOnly);
-    QuaZIODevice *testDevice = new QuaZIODevice(&testBuffer);
-    QCOMPARE(testDevice->getIoDevice(), &testBuffer);
-    QVERIFY(testDevice->open(QIODevice::WriteOnly));
-    QCOMPARE(testDevice->write("test", 4), static_cast<qint64>(4));
-    testDevice->close();
-    QVERIFY(!testDevice->isOpen());
-    z_stream zins;
-    zins.zalloc = (alloc_func) NULL;
-    zins.zfree = (free_func) NULL;
-    zins.opaque = NULL;
-    inflateInit(&zins);
-    zins.next_in = reinterpret_cast<Bytef*>(buf.data());
-    zins.avail_in = testBuffer.pos();
-    char outBuf[5];
-    zins.next_out = reinterpret_cast<Bytef*>(outBuf);
-    zins.avail_out = 5;
-    inflate(&zins, Z_FINISH);
-    inflateEnd(&zins);
-    int size = 5 - zins.avail_out;
-    QCOMPARE(size, 4);
-    outBuf[4] = '\0';
-    QCOMPARE(static_cast<const char*>(outBuf), "test");
-    delete testDevice; // Test D0 destructor
+void TestQuaZIODevice::write() {
+  QByteArray buf(256, 0);
+  QBuffer testBuffer(&buf);
+  testBuffer.open(QIODevice::WriteOnly);
+  QuaZIODevice *testDevice = new QuaZIODevice(&testBuffer);
+  QCOMPARE(testDevice->getIoDevice(), &testBuffer);
+  QVERIFY(!testDevice->open(QIODevice::ReadWrite));
+  QVERIFY(testDevice->hasError());
+  QVERIFY(testDevice->open(QIODevice::WriteOnly));
+  QVERIFY(!testDevice->hasError());
+  QCOMPARE(testDevice->write("test", 4), static_cast<qint64>(4));
+  QVERIFY(!testDevice->hasError());
+  testDevice->close();
+  QVERIFY(!testDevice->hasError());
+  QVERIFY(!testDevice->isOpen());
+  z_stream zins;
+  zins.zalloc = (alloc_func)NULL;
+  zins.zfree = (free_func)NULL;
+  zins.opaque = NULL;
+  inflateInit(&zins);
+  zins.next_in = reinterpret_cast<Bytef *>(buf.data());
+  zins.avail_in = uInt(testBuffer.pos());
+  char outBuf[5];
+  zins.next_out = reinterpret_cast<Bytef *>(outBuf);
+  zins.avail_out = 5;
+  inflate(&zins, Z_FINISH);
+  inflateEnd(&zins);
+  int size = 5 - zins.avail_out;
+  QCOMPARE(size, 4);
+  outBuf[4] = '\0';
+  QCOMPARE(static_cast<const char *>(outBuf), "test");
+  delete testDevice; // Test D0 destructor
 }

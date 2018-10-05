@@ -13,7 +13,7 @@ QMAKE_PKGCONFIG_REQUIRES = Qt5Core
 
 # The ABI version.
 
-VERSION = 1.0.1
+VERSION = 1.1.0
 
 # 1.0.0 is the first stable ABI.
 # The next binary incompatible change will be 2.0.0 and so on.

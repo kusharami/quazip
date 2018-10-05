@@ -2,6 +2,7 @@ INCLUDEPATH += $$PWD
 win32 {
     INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
 }
+DEFINES += ZLIB_CONST
 DEPENDPATH += $$PWD
 HEADERS += \
         $$PWD/crypt.h \

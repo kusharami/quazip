@@ -1,7 +1,6 @@
 TEMPLATE = app
 QT -= gui
-QT += network
-CONFIG += qtestlib
+QT += network testlib
 CONFIG += console
 CONFIG -= app_bundle
 DEPENDPATH += .
@@ -12,6 +11,7 @@ win32 {
     # workaround for qdatetime.h macro bug
     DEFINES += NOMINMAX
 }
+DEFINES += ZLIB_CONST
 
 CONFIG(staticlib): DEFINES += QUAZIP_STATIC
 
