@@ -25,380 +25,262 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "quaziodevice.h"
 
-#define QUAZIO_BUFFER_SIZE 16384
+#include "quaziodevice_utils.h"
+#include "private/quaziodeviceprivate.h"
 
-/// \cond internal
-class QuaZIODevicePrivate {
-public:
-  QuaZIODevice *owner;
-  QIODevice *io;
-  qint64 ioStartPosition;
-  qint64 ioPosition;
-  bool atEnd;
-  bool hasError;
-  z_stream zstream;
-  Bytef zbuffer[QUAZIO_BUFFER_SIZE];
-
-  QuaZIODevicePrivate(QuaZIODevice *owner, QIODevice *io);
-  bool flushBuffer(int size = QUAZIO_BUFFER_SIZE);
-  bool seekInternal(qint64 pos);
-  qint64 readInternal(char *data, qint64 maxlen);
-  bool initRead();
-  qint64 writeInternal(const char *data, qint64 maxlen);
-  bool initWrite();
-  bool seekInit();
-  bool check(int code);
-  void close();
-  void setError(const QString &message);
-};
-
-QuaZIODevicePrivate::QuaZIODevicePrivate(QuaZIODevice *owner, QIODevice *io)
-	: owner(owner), io(io), ioStartPosition(io ? io->pos() : 0), ioPosition(0),
-	  atEnd(false), hasError(io == nullptr) {
-  Q_ASSERT(io);
-  memset(&zstream, 0, sizeof(zstream));
+QuaZIODevice::QuaZIODevice(QuaZIODevicePrivate *p, QObject *parent)
+    : QIODevice(parent)
+    , d(p)
+{
+    Q_ASSERT(p);
 }
 
-bool QuaZIODevicePrivate::flushBuffer(int size) {
-  if (io->write(reinterpret_cast<char *>(zbuffer), size) != size) {
-	setError(io->errorString());
-  }
-
-  return !hasError;
+QuaZIODevice::QuaZIODevice(QObject *parent)
+    : QuaZIODevice(new QuaZIODevicePrivate(this), parent)
+{
 }
-
-bool QuaZIODevicePrivate::seekInternal(qint64 pos) {
-  if (!owner->isOpen() || owner->isWritable())
-	return false;
-
-  if (io->isSequential())
-	return true;
-
-  qint64 currentPos = qint64(zstream.total_out);
-  currentPos -= pos;
-  if (currentPos > 0) {
-	if (!check(inflateReset(&zstream))) {
-	  return false;
-	}
-
-	ioPosition = ioStartPosition;
-
-	zstream.next_in = zbuffer;
-	zstream.avail_in = 0;
-  } else {
-	pos = -currentPos;
-  }
-
-  while (pos > 0) {
-	char buf[4096];
-
-	auto blockSize = qMin(pos, qint64(sizeof(buf)));
-
-	auto readBytes = readInternal(buf, blockSize);
-	if (readBytes != blockSize) {
-	  return false;
-	}
-	pos -= readBytes;
-  }
-
-  return true;
-}
-
-qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen) {
-  if (!owner->isOpen() || !seekInit()) {
-	return -1;
-  }
-
-  zstream.next_out = reinterpret_cast<decltype(zstream.next_out)>(data);
-
-  qint64 count = maxlen;
-  auto blockSize = std::numeric_limits<decltype(zstream.avail_out)>::max();
-  bool run = true;
-
-  while (run && count > 0) {
-	if (count < blockSize) {
-	  blockSize = static_cast<decltype(blockSize)>(count);
-	}
-
-	zstream.avail_out = blockSize;
-
-	while (zstream.avail_out > 0) {
-	  if (zstream.avail_in == 0) {
-		auto readResult =
-			io->read(reinterpret_cast<char *>(zbuffer), sizeof(zbuffer));
-
-		zstream.avail_in =
-			readResult >= 0
-				? static_cast<decltype(zstream.avail_in)>(readResult)
-				: 0;
-		if (readResult <= 0) {
-		  run = false;
-		  atEnd = true;
-		  if (readResult < 0) {
-			setError(io->errorString());
-		  }
-		  break;
-		}
-
-		zstream.next_in = zbuffer;
-		ioPosition += zstream.avail_in;
-	  }
-
-	  int code = inflate(&zstream, Z_NO_FLUSH);
-	  if (code == Z_STREAM_END) {
-		run = false;
-		atEnd = true;
-		break;
-	  }
-
-	  if (!check(code)) {
-		run = false;
-		break;
-	  }
-	}
-
-	count -= blockSize - zstream.avail_out;
-  }
-
-  return maxlen - count;
-}
-
-bool QuaZIODevicePrivate::initRead() {
-  if (!io->isReadable()) {
-	setError("Dependent device is not readable.");
-	return false;
-  }
-
-  atEnd = false;
-  zstream.next_in = zbuffer;
-  zstream.avail_in = 0;
-
-  return check(inflateInit(&zstream));
-}
-
-qint64 QuaZIODevicePrivate::writeInternal(const char *data, qint64 maxlen) {
-  if (!io->isOpen() || !seekInit()) {
-	return -1;
-  }
-
-  qint64 count = maxlen;
-  auto blockSize = std::numeric_limits<decltype(zstream.avail_in)>::max();
-
-  zstream.next_in = reinterpret_cast<decltype(zstream.next_in)>(data);
-
-  bool run = true;
-  while (run && count > 0) {
-	if (count < blockSize) {
-	  blockSize = static_cast<decltype(blockSize)>(count);
-	}
-
-	zstream.avail_in = blockSize;
-
-	while (zstream.avail_in > 0) {
-	  if (!check(deflate(&zstream, Z_NO_FLUSH))) {
-		run = false;
-		break;
-	  }
-	  if (zstream.avail_out == 0) {
-		if (!flushBuffer()) {
-		  run = false;
-		  break;
-		}
-
-		ioPosition += sizeof(zbuffer);
-		zstream.next_out = zbuffer;
-		zstream.avail_out = sizeof(zbuffer);
-	  }
-	}
-
-	count -= blockSize - zstream.avail_in;
-  }
-
-  return maxlen - count;
-}
-
-bool QuaZIODevicePrivate::seekInit() {
-  if (io->isTextModeEnabled() ||
-	  (!io->isSequential() && !io->seek(ioPosition))) {
-	setError("Dependent device seek failed.");
-	return false;
-  }
-
-  return true;
-}
-
-bool QuaZIODevicePrivate::check(int code) {
-  if (code < 0) {
-	setError(QLatin1String(zstream.msg));
-	return false;
-  }
-
-  return true;
-}
-
-bool QuaZIODevicePrivate::initWrite() {
-  atEnd = true;
-
-  if (!io->isWritable()) {
-	setError("Dependent device is not writable.");
-	return false;
-  }
-
-  zstream.next_out = zbuffer;
-  zstream.avail_out = sizeof(zbuffer);
-
-  return check(deflateInit(&zstream, Z_DEFAULT_COMPRESSION));
-}
-
-void QuaZIODevicePrivate::close() {
-  auto openMode = owner->openMode();
-
-  if ((openMode & QIODevice::ReadOnly) != 0) {
-	ioPosition -= zstream.avail_in;
-	seekInit();
-	check(inflateEnd(&zstream));
-  } else if ((openMode & QIODevice::WriteOnly) != 0) {
-	zstream.next_in = Z_NULL;
-	zstream.avail_in = 0;
-	if (seekInit()) {
-	  while (true) {
-		int result = deflate(&zstream, Z_FINISH);
-		if (!check(result))
-		  break;
-
-		if (result == Z_STREAM_END)
-		  break;
-
-		Q_ASSERT(zstream.avail_out == 0);
-
-		if (!flushBuffer())
-		  break;
-
-		zstream.next_out = zbuffer;
-		zstream.avail_out = sizeof(zbuffer);
-	  }
-	}
-
-	if (!hasError && zstream.avail_out < sizeof(zbuffer)) {
-	  flushBuffer(sizeof(zbuffer) - zstream.avail_out);
-	}
-	check(deflateEnd(&zstream));
-  }
-}
-
-void QuaZIODevicePrivate::setError(const QString &message) {
-  hasError = true;
-  owner->setErrorString(message);
-}
-
-/// \endcond
 
 QuaZIODevice::QuaZIODevice(QIODevice *io, QObject *parent)
-	: QIODevice(parent), d(new QuaZIODevicePrivate(this, io)) {
-  connect(io, &QIODevice::readyRead, this, &QuaZIODevice::readyRead);
-  connect(io, &QIODevice::aboutToClose, this, &QuaZIODevice::close);
+    : QuaZIODevice(parent)
+{
+    setIODevice(io);
 }
 
-QuaZIODevice::~QuaZIODevice() {
-  close();
-  delete d;
+QuaZIODevice::~QuaZIODevice()
+{
+    setIODevice(nullptr);
+    delete d;
 }
 
-QIODevice *QuaZIODevice::getIoDevice() const { return d->io; }
-
-bool QuaZIODevice::atEnd() const {
-  if (openMode() & ReadOnly)
-	return d->atEnd;
-
-  return true;
+QIODevice *QuaZIODevice::getIODevice() const
+{
+    return d->io;
 }
 
-bool QuaZIODevice::open(QIODevice::OpenMode mode) {
-  d->hasError = false;
-  if ((mode & QIODevice::ReadWrite) == QIODevice::ReadWrite) {
-	d->setError("QIODevice::ReadWrite is not supported for"
-				" QuaZIODevice");
-	return false;
-  }
-
-  if (!d->io->isOpen()) {
-	if (!d->io->open(mode & ~(Text | Unbuffered))) {
-	  d->setError("Dependent device for "
-				  " QuaZIODevice could not be opened.");
-	  return false;
-	}
-
-	if (0 != (mode & (Append | Truncate))) {
-	  d->ioStartPosition = d->io->pos();
-	}
-  }
-
-  if (d->io->isTextModeEnabled()) {
-	d->setError("Dependent device is not binary.");
-	return false;
-  }
-
-  if ((mode & QIODevice::ReadOnly) != 0) {
-	if (!d->initRead()) {
-	  return false;
-	}
-	mode |= Unbuffered;
-  }
-
-  if ((mode & QIODevice::WriteOnly) != 0) {
-	if (!d->initWrite()) {
-	  return false;
-	}
-  }
-
-  d->ioPosition = d->ioStartPosition;
-  setErrorString(QString());
-  return QIODevice::open(mode);
+bool QuaZIODevice::atEnd() const
+{
+    return bytesAvailable() == 0;
 }
 
-void QuaZIODevice::close() {
-  if (!isOpen())
-	return;
+bool QuaZIODevice::open(OpenMode mode)
+{
+    if (d->io == nullptr) {
+        d->setError("Dependent device is not set.");
+        return false;
+    }
 
-  d->close();
-  QString errorString;
-  if (d->hasError)
-	errorString = this->errorString();
-  QIODevice::close();
-  setErrorString(errorString);
+    if (mode & Append) {
+        d->setError("Append is not supported for zlib compressed device.");
+        return false;
+    }
+
+    if (mode & (WriteOnly | Truncate)) {
+        mode |= WriteOnly | Truncate;
+    }
+
+    if ((mode & ReadWrite) == ReadWrite) {
+        d->setError(
+            "Zlib device should be opened in read-only or write-only mode.");
+        return false;
+    }
+
+    mode |= Unbuffered;
+
+    if (isOpen()) {
+        qWarning("QuaZIODevice is already open");
+        Q_ASSERT(mode == openMode());
+        return false;
+    }
+
+    if (d->io->isTextModeEnabled()) {
+        d->setError("Dependent device is not binary.");
+        return false;
+    }
+
+    if (!d->io->isOpen()) {
+        if (!d->io->open(mode & ~(Text | Unbuffered))) {
+            d->setError("Dependent device could not be opened.");
+            return false;
+        }
+    }
+
+    setOpenMode(mode);
+    d->hasUncompressedSize = false;
+
+    if (mode & ReadOnly) {
+        if (!d->initRead()) {
+            setOpenMode(NotOpen);
+            return false;
+        }
+    }
+
+    if (mode & WriteOnly) {
+        if (!d->initWrite()) {
+            setOpenMode(NotOpen);
+            return false;
+        }
+    }
+
+    d->ioPosition = d->ioStartPosition;
+    d->hasError = false;
+    setErrorString(QString());
+    return QIODevice::open(mode);
 }
 
-qint64 QuaZIODevice::readData(char *data, qint64 maxSize) {
-  if (isReadable() && d->seekInternal(pos())) {
-	return d->readInternal(data, maxSize);
-  }
+void QuaZIODevice::close()
+{
+    if (!isOpen())
+        return;
 
-  return 0;
+    QString errorString;
+    if (d->hasError)
+        errorString = this->errorString();
+    auto savedOpenMode = openMode();
+    QIODevice::close();
+    setOpenMode(savedOpenMode);
+    if (isReadable()) {
+        d->endRead();
+    } else if (isWritable()) {
+        d->endWrite();
+    } else {
+        Q_UNREACHABLE();
+    }
+    setOpenMode(NotOpen);
+
+    if (!d->hasError && !errorString.isEmpty()) {
+        d->setError(errorString);
+    }
 }
 
-qint64 QuaZIODevice::writeData(const char *data, qint64 maxSize) {
-  return d->writeInternal(data, maxSize);
+void QuaZIODevice::setIODevice(QIODevice *device)
+{
+    auto io = d->io;
+    if (io == device)
+        return;
+
+    close();
+
+    if (io) {
+        disconnect(io, &QIODevice::readyRead, this, &QuaZIODevice::readyRead);
+        disconnect(io, &QIODevice::aboutToClose, this,
+            &QuaZIODevice::dependedDeviceWillClose);
+        disconnect(io, &QObject::destroyed, this,
+            &QuaZIODevice::dependentDeviceDestoyed);
+    }
+
+    d->io = device;
+
+    if (device) {
+        connect(device, &QIODevice::readyRead, this, &QuaZIODevice::readyRead);
+        connect(device, &QIODevice::aboutToClose, this,
+            &QuaZIODevice::dependedDeviceWillClose);
+        connect(device, &QObject::destroyed, this,
+            &QuaZIODevice::dependentDeviceDestoyed);
+        d->ioStartPosition = device->pos();
+    }
 }
 
-bool QuaZIODevice::isSequential() const {
-  if (openMode() & ReadOnly)
-	return d->io->isSequential();
+qint64 QuaZIODevice::readData(char *data, qint64 maxSize)
+{
+    if (isReadable() && d->seekInternal(pos())) {
+        return d->readInternal(data, maxSize);
+    }
 
-  return true;
+    return 0;
 }
 
-qint64 QuaZIODevice::bytesAvailable() const {
-  if (!d->atEnd && 0 != (openMode() & ReadOnly))
-	return 0xFFFFFFFF;
-
-  return 0;
+qint64 QuaZIODevice::writeData(const char *data, qint64 maxSize)
+{
+    return d->writeInternal(data, maxSize);
 }
 
-qint64 QuaZIODevice::size() const {
-  if (!isOpen())
-	return 0;
+void QuaZIODevice::dependedDeviceWillClose()
+{
+    if (!isOpen())
+        return;
 
-  return bytesAvailable();
+    close();
+    if (d->io->isWritable() && !d->hasError && d->io->bytesToWrite() != 0) {
+        d->setError("Unable to flush compressed data.");
+    }
 }
 
-bool QuaZIODevice::hasError() const { return d->hasError; }
+void QuaZIODevice::dependentDeviceDestoyed()
+{
+    Q_ASSERT(!isOpen());
+    d->io = nullptr;
+}
+
+bool QuaZIODevice::isSequential() const
+{
+    if (isReadable())
+        return d->io->isSequential();
+
+    return true;
+}
+
+qint64 QuaZIODevice::bytesAvailable() const
+{
+    if (!isOpen())
+        return 0;
+
+    if (d->hasError)
+        return 0;
+
+    if (isReadable()) {
+        return size() - pos();
+    }
+
+    return 0;
+}
+
+qint64 QuaZIODevice::size() const
+{
+    if (isWritable())
+        return qint64(d->zstream.total_in);
+
+    if (isReadable()) {
+        if (!d->hasUncompressedSize) {
+            auto io = d->io;
+            bool sequential = io->isSequential();
+            if (!sequential || !isTransactionStarted()) {
+                if (sequential) {
+                    d->owner->startTransaction();
+                }
+
+                d->skip(std::numeric_limits<qint64>::max());
+
+                if (sequential) {
+                    d->owner->rollbackTransaction();
+                }
+
+                if (hasError()) {
+                    return qint64(d->zstream.total_out);
+                }
+            }
+        }
+
+        return qint64(d->uncompressedSize);
+    }
+
+    return 0;
+}
+
+bool QuaZIODevice::hasError() const
+{
+    return d->hasError;
+}
+
+void QuaZIODevice::setCompressionLevel(int level)
+{
+    if (d->compressionLevel == level)
+        return;
+
+    close();
+    d->compressionLevel = level;
+}
+
+int QuaZIODevice::compressionLevel() const
+{
+    return d->compressionLevel;
+}

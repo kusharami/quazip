@@ -19,24 +19,24 @@ CONFIG(staticlib): DEFINES += QUAZIP_STATIC
 HEADERS += qztest.h \
 testjlcompress.h \
 testquachecksum32.h \
-testquagzipfile.h \
 testquaziodevice.h \
 testquazipdir.h \
 testquazipfile.h \
 testquazip.h \
     testquazipnewinfo.h \
-    testquazipfileinfo.h
+    testquazipfileinfo.h \
+    testquagzipdevice.h
 
 SOURCES += qztest.cpp \
 testjlcompress.cpp \
 testquachecksum32.cpp \
-testquagzipfile.cpp \
 testquaziodevice.cpp \
 testquazip.cpp \
 testquazipdir.cpp \
 testquazipfile.cpp \
     testquazipnewinfo.cpp \
-    testquazipfileinfo.cpp
+    testquazipfileinfo.cpp \
+    testquagzipdevice.cpp
 
 OBJECTS_DIR = .obj
 MOC_DIR = .moc

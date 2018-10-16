@@ -1,8 +1,7 @@
-#ifndef QUAZIP_TEST_QUAGZIPFILE_H
-#define QUAZIP_TEST_QUAGZIPFILE_H
+#pragma once
 
 /*
-Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP test suite.
 
@@ -27,12 +26,14 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QObject>
 
-class TestQuaGzipFile: public QObject {
+class TestQuaGzipDevice : public QObject {
     Q_OBJECT
-private slots:
-    void read();
-    void write();
-    void constructorDestructor();
-};
 
-#endif // QUAZIP_TEST_QUAGZIPFILE_H
+    struct Gzip;
+
+private slots:
+    void read_data();
+    void read();
+    void write_data();
+    void write();
+};

@@ -26,10 +26,8 @@ Original ZIP package is copyrighted by Gilles Vollant and contributors,
 see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
-#include <QIODevice>
 #include "quazip_global.h"
-
-#include <zlib.h>
+#include <QIODevice>
 
 class QuaZIODevicePrivate;
 
@@ -40,50 +38,71 @@ class QuaZIODevicePrivate;
   example.
   */
 class QUAZIP_EXPORT QuaZIODevice : public QIODevice {
-  Q_OBJECT
-  friend class QuaZIODevicePrivate;
+    Q_OBJECT
+    friend class QuaZIODevicePrivate;
 
- public:
-  /// Constructor.
-  /**
-  \param io The QIODevice to read/write.
-  \param parent The parent object, as per QObject logic.
-  */
-  QuaZIODevice(QIODevice *io, QObject *parent = NULL);
-  /// Destructor.
-  virtual ~QuaZIODevice() override;
-  /// Opens the device.
-  /**
-  \param mode Neither QIODevice::ReadWrite nor QIODevice::Append are
-  not supported.
-  */
-  virtual bool open(QIODevice::OpenMode mode) override;
-  /// Closes this device, but not the underlying one.
-  /**
-  The underlying QIODevice is not closed in case you want to write
-  something else to it.
-  */
-  virtual void close() override;
-  /// Returns the underlying device.
-  QIODevice *getIoDevice() const;
-  /// Returns true if the end of the compressed stream is reached.
-  virtual bool atEnd() const override;
-  /// Returns if device is sequential.
-  virtual bool isSequential() const override;
-  /// Returns the number of the bytes buffered.
-  virtual qint64 bytesAvailable() const override;
-  virtual qint64 size() const override;
+public:
+    /// Constructor.
+    explicit QuaZIODevice(QObject *parent = nullptr);
+    /// Constructor.
+    /**
+      \param io The QIODevice to read/write.
+      \param parent The parent object, as per QObject logic.
+      */
+    QuaZIODevice(QIODevice *io, QObject *parent = nullptr);
+    /// Destructor.
+    virtual ~QuaZIODevice() override;
+    /// Opens the device.
+    /**
+      \param mode Neither QIODevice::ReadWrite nor QIODevice::Append are
+      not supported.
+      */
+    virtual bool open(QIODevice::OpenMode mode) override;
+    /// Closes this device, but not the underlying one.
+    /**
+      The underlying QIODevice is not closed in case you want to write
+      something else to it.
+      */
+    virtual void close() override;
+    /// Sets dependent IO device. This device is closed.
+    void setIODevice(QIODevice *device);
+    /// Returns the underlying device.
+    QIODevice *getIODevice() const;
+    /// Returns true if the end of the compressed stream is reached.
+    virtual bool atEnd() const override;
+    /// Returns if device is sequential.
+    virtual bool isSequential() const override;
+    /// Returns the number of the bytes buffered.
+    virtual qint64 bytesAvailable() const override;
 
-  bool hasError() const;
+    /// Returns the size of bytes written for write-only mode.
+    /// Returns the size of uncompressed data for read-only mode. May be slow.
+    virtual qint64 size() const override;
 
- protected:
-  /// Implementation of QIODevice::readData().
-  virtual qint64 readData(char *data, qint64 maxSize) override;
-  /// Implementation of QIODevice::writeData().
-  virtual qint64 writeData(const char *data, qint64 maxSize) override;
+    /// Indicates if there was an error on last executed operation.
+    bool hasError() const;
 
- private:
-  QuaZIODevicePrivate *d;
+    /// Sets th compression level (Z_BEST_COMPRESSION etc.).
+    /// Device is closed.
+    void setCompressionLevel(int level);
+    /// Compression level
+    int compressionLevel() const;
+
+protected:
+    /// protected constructor for descendants
+    QuaZIODevice(QuaZIODevicePrivate *p, QObject *parent);
+
+    /// Implementation of QIODevice::readData().
+    virtual qint64 readData(char *data, qint64 maxSize) override;
+    /// Implementation of QIODevice::writeData().
+    virtual qint64 writeData(const char *data, qint64 maxSize) override;
+
+private:
+    void dependedDeviceWillClose();
+    void dependentDeviceDestoyed();
+
+protected:
+    QuaZIODevicePrivate *d;
 };
 
-#endif  // QUAZIP_QUAZIODEVICE_H
+#endif // QUAZIP_QUAZIODEVICE_H

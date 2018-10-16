@@ -3,6 +3,7 @@
 
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP test suite.
 
@@ -27,12 +28,16 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QObject>
 
-class TestQuaZIODevice: public QObject {
+class TestQuaZIODevice : public QObject {
     Q_OBJECT
 private slots:
     void read();
     void readMany();
+    void write_data();
     void write();
+
+private:
+    void initData();
 };
 
 #endif // QUAZIP_TEST_QUAZIODEVICE_H
