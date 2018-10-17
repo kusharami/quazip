@@ -1,3 +1,19 @@
+QuaZipAC changes
+
+* Current
+        * QuaZIODevice is reworked.
+          Supported seeking in any position of decompressed stream.
+          Supported setting compression level.
+        * QuaGzipFile is replaced with QuaGzipDevice:
+          Supported seeking in any position of decompressed stream.
+          Supported Gzip files compression/docompression to/from any device;
+          Supported setting/reading original file name, comment, 
+          modification time and extra fields in Gzip header.
+          QuaGzipDevice inherits QuaZIODevice and supports everything from it.
+        
+-------------------------------------------------------------------------------
+Original QuaZIP changes
+
 QuaZIP changes
 
 * 2018-06-13 0.7.6
