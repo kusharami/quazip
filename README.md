@@ -1,7 +1,7 @@
 QuaZipAC is a C++ library utilizing Qt Framework QIDevice API
 to compress or decompress ZIP, GZ files or simple zlib streams.
 
-The library is based on original [QuaZIP by Sergey A. Tachenov]](https://github.com/stachenov/quazip)
+The library is based on original [QuaZIP by Sergey A. Tachenov](https://github.com/stachenov/quazip)
 
 Required version of Qt Framework is 5.7.1 or later
 
