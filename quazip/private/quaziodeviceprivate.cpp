@@ -140,7 +140,7 @@ bool QuaZIODevicePrivate::finishReadTransaction(qint64 savedPosition)
     io->rollbackTransaction();
     auto skipCount = ioPosition - savedPosition;
     while (skipCount > 0) {
-        Bytef buf[4096];
+        Byte buf[4096];
         auto skipSize =
             readCompressedData(buf, std::min(skipCount, qint64(sizeof(buf))));
         if (skipSize <= 0) {
@@ -151,6 +151,18 @@ bool QuaZIODevicePrivate::finishReadTransaction(qint64 savedPosition)
     }
 
     return true;
+}
+
+void QuaZIODevicePrivate::setCompressionLevel(int level)
+{
+    if (level == compressionLevel)
+        return;
+
+    compressionLevel = level;
+
+    if (owner->isWritable()) {
+        check(deflateParams(&zstream, level, Z_DEFAULT_STRATEGY));
+    }
 }
 
 qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)

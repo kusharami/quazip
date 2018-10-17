@@ -54,7 +54,7 @@ public:
     bool hasUncompressedSize : 1;
     QByteArray seekBuffer;
     z_stream zstream;
-    Bytef zbuffer[QUAZIO_BUFFER_SIZE];
+    Byte zbuffer[QUAZIO_BUFFER_SIZE];
 
     QuaZIODevicePrivate(QuaZIODevice *owner);
     virtual ~QuaZIODevicePrivate();
@@ -78,6 +78,7 @@ public:
     void setError(const QString &message);
     qint64 readCompressedData(Bytef *zbuffer, size_t size);
     bool finishReadTransaction(qint64 savedPosition);
+    void setCompressionLevel(int level);
 
     static inline Q_DECL_CONSTEXPR SizeType maxUncompressedSize();
 };

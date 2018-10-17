@@ -147,7 +147,7 @@ void TestQuaGzipDevice::read()
     QVERIFY(gzDevice.atEnd());
     QVERIFY(gzDevice.headerIsProcessed());
     QCOMPARE(gzDevice.comment(), comment);
-    QCOMPARE(gzDevice.storedFileName(), fileName);
+    QCOMPARE(gzDevice.originalFileName(), fileName);
     gzDevice.close();
     QVERIFY(!gzDevice.hasError());
     QVERIFY(!gzDevice.isOpen());
@@ -217,7 +217,7 @@ void TestQuaGzipDevice::write()
 
     gzDevice.setCompressionLevel(compressionLevel);
     gzDevice.setIODevice(&fileGZ);
-    gzDevice.setStoredFileName(fileName);
+    gzDevice.setOriginalFileName(fileName);
     gzDevice.setComment(comment);
     gzDevice.setExtraFields(extra);
     gzDevice.setModificationTime(savedTime);
@@ -258,7 +258,7 @@ void TestQuaGzipDevice::write()
     expectedUncompressedData = isText ? fromNativeSeparatedText(data) : data;
     QCOMPARE(gzDevice.readAll(), expectedUncompressedData);
     QVERIFY(gzDevice.headerIsProcessed());
-    QCOMPARE(gzDevice.storedFileName(), fileName);
+    QCOMPARE(gzDevice.originalFileName(), fileName);
     QCOMPARE(gzDevice.comment(), comment);
     QCOMPARE(gzDevice.extraFields(), extra);
     QCOMPARE(gzDevice.modificationTime(), savedTime);
@@ -278,15 +278,15 @@ void TestQuaGzipDevice::write()
     gz_header gzHeader;
     memset(&gzHeader, 0, sizeof(gzHeader));
     gzHeader.os = 255;
-    Bytef temp_name[256];
+    Byte temp_name[256];
     gzHeader.name = temp_name;
     gzHeader.name_max = fileName.length();
     gzHeader.name[gzHeader.name_max] = 0;
-    Bytef temp_comment[256];
+    Byte temp_comment[256];
     gzHeader.comment = temp_comment;
     gzHeader.comm_max = comment.length();
     gzHeader.comment[gzHeader.comm_max] = 0;
-    Bytef temp_extra[256];
+    Byte temp_extra[256];
     gzHeader.extra = temp_extra;
     gzHeader.extra_max = sizeof(temp_extra);
 

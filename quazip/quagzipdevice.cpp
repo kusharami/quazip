@@ -36,7 +36,7 @@ enum
     COMMENT_MAX = 4096,
     EXTRA_MAX = 4096
 };
-
+/// @cond internal
 class QuaGzipDevicePrivate : public QuaZIODevicePrivate {
 public:
     QuaGzipDevicePrivate(QuaGzipDevice *owner);
@@ -51,11 +51,12 @@ public:
     bool gzSetHeader();
     void gzInitHeader();
 
-    char storedFileName[FILENAME_MAX_ + 1];
+    char originalFileName[FILENAME_MAX_ + 1];
     char comment[COMMENT_MAX + 1];
     char extraField[EXTRA_MAX];
     gz_header gzHeader;
 };
+/// @endcond
 
 QuaGzipDevice::QuaGzipDevice(QObject *parent)
     : QuaZIODevice(new QuaGzipDevicePrivate(this), parent)
@@ -88,12 +89,12 @@ bool QuaGzipDevice::headerIsProcessed() const
     return d()->gzHeader.done != 0;
 }
 
-QByteArray QuaGzipDevice::storedFileName() const
+QByteArray QuaGzipDevice::originalFileName() const
 {
-    return QByteArray(d()->storedFileName);
+    return QByteArray(d()->originalFileName);
 }
 
-void QuaGzipDevice::setStoredFileName(const QByteArray &fileName)
+void QuaGzipDevice::setOriginalFileName(const QByteArray &fileName)
 {
     int length = fileName.length();
     if (length > FILENAME_MAX_) {
@@ -102,8 +103,8 @@ void QuaGzipDevice::setStoredFileName(const QByteArray &fileName)
                           .arg(FILENAME_MAX_));
         return;
     }
-    memcpy(d()->storedFileName, fileName.data(), length);
-    d()->storedFileName[length] = 0;
+    memcpy(d()->originalFileName, fileName.data(), length);
+    d()->originalFileName[length] = 0;
 }
 
 QByteArray QuaGzipDevice::comment() const
@@ -214,11 +215,11 @@ QuaGzipDevicePrivate::QuaGzipDevicePrivate(QuaGzipDevice *owner)
     : QuaZIODevicePrivate(owner)
 {
     memset(&gzHeader, 0, sizeof(gzHeader));
-    storedFileName[0] = 0;
+    originalFileName[0] = 0;
     comment[0] = 0;
     gzHeader.extra = reinterpret_cast<Bytef *>(extraField);
     gzHeader.extra_max = EXTRA_MAX;
-    gzHeader.name = reinterpret_cast<Bytef *>(storedFileName);
+    gzHeader.name = reinterpret_cast<Bytef *>(originalFileName);
     gzHeader.name_max = FILENAME_MAX_;
     gzHeader.comment = reinterpret_cast<Bytef *>(comment);
     gzHeader.comm_max = COMMENT_MAX;
@@ -254,7 +255,7 @@ bool QuaGzipDevicePrivate::gzDeflateInit()
 bool QuaGzipDevicePrivate::gzReadHeader()
 {
     gzInitHeader();
-    storedFileName[FILENAME_MAX_] = 0;
+    originalFileName[FILENAME_MAX_] = 0;
     comment[COMMENT_MAX] = 0;
     return check(inflateGetHeader(&zstream, &gzHeader));
 }

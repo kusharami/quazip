@@ -273,11 +273,7 @@ bool QuaZIODevice::hasError() const
 
 void QuaZIODevice::setCompressionLevel(int level)
 {
-    if (d->compressionLevel == level)
-        return;
-
-    close();
-    d->compressionLevel = level;
+    d->setCompressionLevel(level);
 }
 
 int QuaZIODevice::compressionLevel() const

@@ -39,10 +39,15 @@ class QuaZIODevicePrivate;
   */
 class QUAZIP_EXPORT QuaZIODevice : public QIODevice {
     Q_OBJECT
+    /// @cond internal
     friend class QuaZIODevicePrivate;
+    /// @endcond
 
 public:
     /// Constructor.
+    /**
+      \param parent The parent object, as per QObject logic.
+    */
     explicit QuaZIODevice(QObject *parent = nullptr);
     /// Constructor.
     /**
@@ -65,6 +70,9 @@ public:
       */
     virtual void close() override;
     /// Sets dependent IO device. This device is closed.
+    /**
+      \param device The QIODevice to read/write.
+      */
     void setIODevice(QIODevice *device);
     /// Returns the underlying device.
     QIODevice *getIODevice() const;
@@ -75,15 +83,17 @@ public:
     /// Returns the number of the bytes buffered.
     virtual qint64 bytesAvailable() const override;
 
-    /// Returns the size of bytes written for write-only mode.
-    /// Returns the size of uncompressed data for read-only mode. May be slow.
+    /// Returns the size of bytes written in write mode.
+    /// Returns the size of uncompressed data in read mode. May be slow.
     virtual qint64 size() const override;
 
     /// Indicates if there was an error on last executed operation.
     bool hasError() const;
 
-    /// Sets th compression level (Z_BEST_COMPRESSION etc.).
-    /// Device is closed.
+    /// Set compression level
+    /**
+      \param level The compression level (Z_BEST_COMPRESSION etc.)
+    */
     void setCompressionLevel(int level);
     /// Compression level
     int compressionLevel() const;
@@ -102,7 +112,9 @@ private:
     void dependentDeviceDestoyed();
 
 protected:
+    /// @cond internal
     QuaZIODevicePrivate *d;
+    /// @endcond
 };
 
 #endif // QUAZIP_QUAZIODEVICE_H

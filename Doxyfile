@@ -646,6 +646,7 @@ EXCLUDE                = quazip/unzip.h \
                          quazip/zip.h \
                          quazip/ioapi.h \
                          quazip/minizip_crypt.h \
+                         quazip/private/ \
                          qztest/
 
 # The EXCLUDE_SYMLINKS tag can be used select whether or not files or

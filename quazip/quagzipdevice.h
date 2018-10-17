@@ -31,31 +31,74 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 class QuaGzipDevicePrivate;
 
+/// A class to compress/decompress Gzip file data.
+/**
+  This class can be used to compress any data in Gzip file format written to
+  QIODevice or decompress it back.
+  Compressing data sent over a QTcpSocket is a good example.
+  */
 class QUAZIP_EXPORT QuaGzipDevice : public QuaZIODevice {
     Q_OBJECT
 
 public:
+    /// @cond internal
     enum
     {
         GZIP_FLAG = 16
     };
+    /// @endcond
 
+    /// Constructor.
+    /**
+      \param parent The parent object, as per QObject logic.
+      */
     explicit QuaGzipDevice(QObject *parent = nullptr);
+    /// Constructor.
+    /**
+      \param io The QIODevice to read/write.
+      \param parent The parent object, as per QObject logic.
+      */
     explicit QuaGzipDevice(QIODevice *io, QObject *parent = nullptr);
     virtual ~QuaGzipDevice() override;
 
+    /// Returns maximum length for stored file name
     static int maxFileNameLength();
+    /// Returns maximum length for stored comment
     static int maxCommentLength();
 
+    /// Returns true if Gz header acquired to access
+    /// stored file name, comment, modification time and extra fields
+    /// Always true in write mode.
     bool headerIsProcessed() const;
 
-    QByteArray storedFileName() const;
-    void setStoredFileName(const QByteArray &fileName);
+    /// Stored original file name in a compressed device.
+    /// When reading, check headerIsProcessed() first.
+    QByteArray originalFileName() const;
+    /// Original file name to store in a compressed device
+    /**
+      \param fileName The file name in Latin1 encoding.
+        Generates error if longer than maxFileNameLength()
+     */
+    void setOriginalFileName(const QByteArray &fileName);
 
+    /// Stored comment in a compressed device.
+    /// When reading, check headerIsProcessed() first.
     QByteArray comment() const;
+    /// Comment to store in a compressed device
+    /**
+      \param text Commentary in Latin1 encoding.
+        Generates error if longer than maxCommentLength()
+     */
     void setComment(const QByteArray &text);
 
+    /// Stored modification time in a compressed device.
+    /// When reading, check headerIsProcessed() first.
     time_t modificationTime() const;
+    /// Modification time to store in a compressed device
+    /**
+      \param time Time stamp in UTC.
+        If zero, current time is set when opened for write.
+     */
     void setModificationTime(time_t time);
 
     struct ExtraFieldKey {
@@ -63,6 +106,7 @@ public:
 
         inline ExtraFieldKey();
         inline ExtraFieldKey(std::initializer_list<char> init);
+        inline ExtraFieldKey(const char *si);
         inline ExtraFieldKey(char si1, char si2);
         inline ExtraFieldKey(const ExtraFieldKey &other);
 
@@ -78,9 +122,17 @@ public:
         inline quint16 value() const;
     };
 
+    /// Maps field values with 2-characters key
     using ExtraFieldMap = QMap<ExtraFieldKey, QByteArray>;
 
+    /// Stored extra fields in a compressed device.
+    /// When reading, check headerIsProcessed() first.
     ExtraFieldMap extraFields() const;
+    /// Extra fields to store in a compressed device
+    /**
+      \param map Map of fields and values.
+        Generates error if extra fields is too big.
+     */
     void setExtraFields(const ExtraFieldMap &map);
 
 private:
@@ -95,9 +147,14 @@ QuaGzipDevice::ExtraFieldKey::ExtraFieldKey()
 
 QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(std::initializer_list<char> init)
 {
-    Q_ASSERT(init.size() == 2);
-    key[0] = *init.begin();
-    key[1] = *(init.begin() + 1);
+    key[0] = (init.size() > 0) ? *init.begin() : char(0);
+    key[1] = (init.size() > 1) ? *(init.begin() + 1) : char(0);
+}
+
+QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(const char *si)
+{
+    key[0] = si ? si[0] : char(0);
+    key[1] = (si[0] == 0) ? char(0) : si[1];
 }
 
 QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(char si1, char si2)
