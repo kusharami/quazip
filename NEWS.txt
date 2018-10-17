@@ -1,8 +1,22 @@
+QuaZipAC changes
+
+* Current
+        * QuaZIODevice is reworked.
+          Supported seeking in any position of decompressed stream.
+          Supported setting compression level.
+        * QuaGzipFile is replaced with QuaGzipDevice:
+          Supported seeking in any position of decompressed stream.
+          Supported Gzip files compression/docompression to/from any device;
+          Supported setting/reading original file name, comment, 
+          modification time and extra fields in Gzip header.
+          QuaGzipDevice inherits QuaZIODevice and supports everything from it.
+        
+-------------------------------------------------------------------------------
+Original QuaZIP changes
+
 QuaZIP changes
 
 * Current
-        * Worked around a Qt 4.6 bug (QTBUG-15421) screwing up hidden
-          files handling in JlCompress::compressDir()
         * Removed Q_FOREACH uses to avoid conflicts (SF patch #32)
 
 * 2017-02-05 0.7.4
