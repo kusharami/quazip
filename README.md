@@ -12,6 +12,7 @@ Want to report a bug or ask for a feature? Open an [issue](https://github.com/ku
 Copyright notice:
 
 Copyright (C) 2018 Alexandra Cherdantseva for QuaZipAC
+
 Copyright (C) 2005-2018 Sergey A. Tachenov for Original QuaZIP
 
 Distributed under LGPL, full details in the COPYING file.
