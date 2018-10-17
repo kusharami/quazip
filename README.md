@@ -1,18 +1,18 @@
-QuaZIP is the C++ wrapper for Gilles Vollant's ZIP/UNZIP package
-(AKA Minizip) using Trolltech's Qt library.
+QuaZipAC is a C++ library utilizing Qt Framework QIDevice API
+to compress or decompress ZIP, GZ files or simple zlib streams.
 
-If you need to write files to a ZIP archive or read files from one
-using QIODevice API, QuaZIP is exactly the kind of tool you need.
+The library is based on original [QuaZIP by Sergey A. Tachenov]](https://github.com/stachenov/quazip)
 
-See [the documentation](https://stachenov.github.io/quazip/) for details.
+Required version of Qt Framework is 5.7.1 or later
 
-Want to report a bug or ask for a feature? Open an [issue](https://github.com/stachenov/quazip/issues).
+See [the documentation](https://kusharami.github.io/quazip/) for details.
 
-Want to fix a bug or implement a new feature? See [CONTRIBUTING.md](CONTRIBUTING.md).
+Want to report a bug or ask for a feature? Open an [issue](https://github.com/kusharami/quazip/issues).
 
 Copyright notice:
 
-Copyright (C) 2005-2018 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva for QuaZipAC
+Copyright (C) 2005-2018 Sergey A. Tachenov for Original QuaZIP
 
 Distributed under LGPL, full details in the COPYING file.
 
