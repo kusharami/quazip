@@ -1,39 +1,35 @@
+QUAZIP_LIBNAME = QuaZipAC
+
 CONFIG(debug, debug|release) {
     CONFIG_DIR = Debug
-    macx {
-        QUAZIP_LIBNAME = quazip_debug
-    }
-    win32 {
-        QUAZIP_LIBNAME = quazipd
-        CONFIG_WINDIR = debug
-    }
+    win32:CONFIG_WINDIR = debug
 } else {
     CONFIG_DIR = Release
-    QUAZIP_LIBNAME = quazip
-    win32 {
-        CONFIG_WINDIR = release
-    }
+    win32:CONFIG_WINDIR = release
 }
 
 isEmpty(QUAZIP_LIBPATH) {
     QUAZIP_LIBPATH = $$OUT_PWD
 }
 
+QUAZIP_LIBPATH = $$QUAZIP_LIBPATH/$$CONFIG_WINDIR
+
 win32 {
     INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
+    PRE_TARGETDEPS += $$QUAZIP_LIBPATH/$$QUAZIP_LIBNAME.lib
 }
 
-unix {
-    LIBS += -lz
-}
-
-QUAZIP_LIBPATH = $$QUAZIP_LIBPATH/$$CONFIG_WINDIR
+unix:LIBS += -lz
 LIBS += -L$$QUAZIP_LIBPATH
 LIBS += -l$$QUAZIP_LIBNAME
 
-macx {
-    DYNAMIC_LIBS.files += \
-        $$QUAZIP_LIBPATH/$$join(QUAZIP_LIBNAME, , lib, .1.dylib)
+CONFIG(staticlib) {
+    DEFINES += QUAZIP_STATIC
+} else {
+    macx {
+        DYNAMIC_LIBS.files += \
+            $$QUAZIP_LIBPATH/$$join(QUAZIP_LIBNAME, , lib, .1.dylib)
+    }
 }
 
 INCLUDEPATH += $$PWD

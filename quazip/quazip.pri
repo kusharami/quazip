@@ -1,8 +1,8 @@
-INCLUDEPATH += $$PWD
-win32 {
-    INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
-}
+win32:INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
+unix:LIBS += -lz
+
 DEFINES += ZLIB_CONST
+
 DEPENDPATH += $$PWD
 HEADERS += \
         $$PWD/minizip_crypt.h \
