@@ -3,6 +3,7 @@
 
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -29,9 +30,6 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #include <QStringList>
 #include <QTextCodec>
 
-#include "zip.h"
-#include "unzip.h"
-
 #include "quazip_global.h"
 #include "quazipfileinfo.h"
 
@@ -41,7 +39,15 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #define UNZ_OPENERROR -1000
 #endif
 
+/// @cond internal
+extern "C" {
+struct zlib_filefunc_def_s;
+}
+
 class QuaZipPrivate;
+class QuaZipFile;
+class QuaZipFilePrivate;
+/// @endcond internal
 
 /// ZIP archive.
 /** \class QuaZip quazip.h <quazip/quazip.h>
@@ -81,18 +87,12 @@ class QuaZipPrivate;
  * detection using locale information. Does anyone know a good way to do
  * it?
  **/
-class QUAZIP_EXPORT QuaZip
-{
+class QUAZIP_EXPORT QuaZip {
+    /// @cond internal
     friend class QuaZipPrivate;
+    /// @endcond
 
-  public:
-    /// Useful constants.
-    enum Constants
-    {
-        MAX_FILE_NAME_LENGTH = 256 /**< Maximum file name length. Taken from
-                                 \c UNZ_MAXFILENAMEINZIP constant in
-                                 unzip.c. */
-    };
+public:
     /// Open mode of the ZIP file.
     enum Mode
     {
@@ -117,11 +117,52 @@ class QUAZIP_EXPORT QuaZip
      **/
     enum CaseSensitivity
     {
-        csDefault =
-            0, ///< Default for platform. Case sensitive for UNIX, not for Windows.
-        csSensitive = 1, ///< Case sensitive.
-        csInsensitive = 2 ///< Case insensitive.
+        /// Default for platform. Case sensitive for UNIX, not for Windows/MacOS.
+        csDefault = 0,
+        /// Case sensitive file names
+        csSensitive = 1,
+        /// Case insensitive file names
+        csInsensitive = 2
     };
+    /// Compatibility flags
+    enum CompatibilityFlag
+    {
+        /** When no system compatibility is set, fileNameCodec() and
+         * commentCodec() will be used to decode and encode file names
+         * and comments
+         * \note Other flags will override this one
+          */
+        CustomCompatibility = 0,
+        /** On Windows file names and comments will be stored in current
+         * OEM code page if it is not UTF-7 or UTF-8.
+         * In other cases and on other systems IBM 437 code page (if available)
+         * or IBM 850 code page will be used.
+         *
+         * File names will be stored in 8.3 mode
+         * (8 characters for name, 3 characters for extension)
+         */
+        DOS_Compatible = 0x01,
+        /** When non-ASCII characters used, file names and comments are stored
+         * in UTF-8 and EFS flag is set.
+         *
+         * If combined with DOS_Compatible, non-ASCII file names are encoded
+         * with UTF-8 and stored in Extra Field 0x7075 (Info-ZIP Unicode Path).
+         * Non-ASCII comments are stored in
+         * Extra Field 0x6375 (Info-ZIP Unicode Comment)
+         */
+        UnixCompatible = 0x02,
+        /** When non-ASCII characters used, file names and comments are stored
+         * in UTF-8 and EFS flag is set.
+         *
+         * If combined with DOS_Compatible, non-ASCII file names and
+         * comments are encoded in UTF-8 and stored in Extra Field 0x5A4C
+         */
+        WindowsCompatible = 0x04,
+        /// By default Unix and Windows compatibility is ON.
+        DefaultCompatibility = UnixCompatible | WindowsCompatible
+    };
+    Q_DECLARE_FLAGS(CompatibilityFlags, CompatibilityFlag)
+
     /// Returns the actual case sensitivity for the specified QuaZIP one.
     /**
       \param cs The value to convert.
@@ -131,14 +172,14 @@ class QUAZIP_EXPORT QuaZip
       */
     static Qt::CaseSensitivity convertCaseSensitivity(CaseSensitivity cs);
 
-  private:
+private:
     QuaZipPrivate *p;
     // not (and will not be) implemented
     QuaZip(const QuaZip &that);
     // not (and will not be) implemented
     QuaZip &operator=(const QuaZip &that);
 
-  public:
+public:
     /// Constructs QuaZip object.
     /** Call setName() before opening constructed object. */
     QuaZip();
@@ -153,10 +194,7 @@ class QUAZIP_EXPORT QuaZip
     /// Opens ZIP file.
     /**
      * Argument \a mode specifies open mode of the ZIP archive. See Mode
-     * for details. Note that there is zipOpen2() function in the
-     * ZIP/UNZIP API which accepts \a globalcomment argument, but it
-     * does not use it anywhere, so this open() function does not have this
-     * argument. See setComment() if you need to set global comment.
+     * for details.
      *
      * If the ZIP file is accessed via explicitly set QIODevice, then
      * this device is opened in the necessary mode. If the device was
@@ -171,33 +209,8 @@ class QUAZIP_EXPORT QuaZip
      * easier, quazip.h header defines additional error code \c
      * UNZ_ERROROPEN and getZipError() will return it if the open call
      * of the ZIP/UNZIP API returns \c NULL.
-     *
-     * Argument \a ioApi specifies IO function set for ZIP/UNZIP
-     * package to use. See unzip.h, zip.h and ioapi.h for details. Note
-     * that IO API for QuaZip is different from the original package.
-     * The file path argument was changed to be of type \c voidpf, and
-     * QuaZip passes a QIODevice pointer there. This QIODevice is either
-     * set explicitly via setIoDevice() or the QuaZip(QIODevice*)
-     * constructor, or it is created internally when opening the archive
-     * by its file name. The default API (qioapi.cpp) just delegates
-     * everything to the QIODevice API. Not only this allows to use a
-     * QIODevice instead of file name, but also has a nice side effect
-     * of raising the file size limit from 2G to 4G (in non-zip64 archives).
-     *
-     * \note If the zip64 support is needed, the ioApi argument \em must be NULL
-     * because due to the backwards compatibility issues it can be used to
-     * provide a 32-bit API only.
-     *
-     * \note If the \ref QuaZip::setAutoClose() "no-auto-close" feature is used,
-     * then the \a ioApi argument \em should be NULL because the old API
-     * doesn't support the 'fake close' operation, causing slight memory leaks
-     * and other possible troubles (like closing the output device in case
-     * when an error occurs during opening).
-     *
-     * In short: just forget about the \a ioApi argument and you'll be
-     * fine.
      **/
-    bool open(Mode mode, zlib_filefunc_def *ioApi = NULL);
+    bool open(Mode mode);
     /// Closes ZIP file.
     /** Call getZipError() to determine if the close was successful.
      *
@@ -209,24 +222,13 @@ class QUAZIP_EXPORT QuaZip
      * is set (which it is by default). Call setAutoClose() to clear the
      * auto-close flag if this behavior is undesirable.
      *
-     * Since Qt 5.1, the QSaveFile was introduced. It breaks the QIODevice API
-     * by making close() private and crashing the application if it is called
-     * from the base class where it is public. It is an excellent example
-     * of poor design that illustrates why you should never ever break
-     * an is-a relationship between the base class and a subclass. QuaZIP
-     * works around this bug by checking if the QIODevice is an instance
-     * of QSaveFile, using qobject_cast<>, and if it is, calls
-     * QSaveFile::commit() instead of close(). It is a really ugly hack,
-     * but at least it makes your programs work instead of crashing. Note that
-     * if the auto-close flag is cleared, then this is a non-issue, and
-     * commit() isn't called.
+     * \note When using QSaveFile you should call setAutoClose(false),
+     * because it will crash when close called.
       */
     void close();
     /// Sets the codec used to encode/decode file names inside archive.
-    /** This is necessary to access files in the ZIP archive created
-     * under Windows with non-latin characters in file names. For
-     * example, file names with cyrillic letters will be in \c IBM866
-     * encoding.
+    /** \note This codec is used only when
+     * compatibilityFlags() equals to CustomCompatibility.
      **/
     void setFileNameCodec(QTextCodec *fileNameCodec);
     /// Sets the codec used to encode/decode file names inside archive.
@@ -234,46 +236,64 @@ class QUAZIP_EXPORT QuaZip
      * Equivalent to calling setFileNameCodec(QTextCodec::codecForName(codecName));
      **/
     void setFileNameCodec(const char *fileNameCodecName);
-    /// Returns the codec used to encode/decode comments inside archive.
-    QTextCodec *getFileNameCodec() const;
+    /// Codec to be used to encode/decode comments inside archive when
+    /// compatibilityFlags() equals to CustomCompatibility.
+    /**
+     * \note On Windows This codec defaults to current OEM code page
+     * if it is not UTF-7 or UTF-8.
+     * In other cases and on other systems it defaults to IBM 437 code page
+     * (if available) or to IBM 850 code page.
+     */
+    QTextCodec *fileNameCodec() const;
     /// Sets the codec used to encode/decode comments inside archive.
-    /** This codec defaults to locale codec, which is probably ok.
-     **/
+    /** \note This codec is used only when
+     * compatibilityFlags() equals to CustomCompatibility.
+     *
+     * When writing a global comment with Non-ASCII characters it is encoded
+     * with UTF-8 and stored with BOM header
+     */
     void setCommentCodec(QTextCodec *commentCodec);
     /// Sets the codec used to encode/decode comments inside archive.
     /** \overload
      * Equivalent to calling setCommentCodec(QTextCodec::codecForName(codecName));
      **/
     void setCommentCodec(const char *commentCodecName);
-    /// Returns the codec used to encode/decode comments inside archive.
-    QTextCodec *getCommentCodec() const;
+    /// Codec to be used to encode/decode comments inside archive when
+    /// compatibilityFlags() equals to CustomCompatibility.
+    /**
+    * \note This codec defaults to current locale text codec
+    */
+    QTextCodec *commentCodec() const;
+
+    QTextCodec *passwordCodec() const;
+    void setPasswordCodec(QTextCodec *codec);
+    void setPasswordCodec(const char *codecName);
     /// Returns the name of the ZIP file.
     /** Returns null string if no ZIP file name has been set, for
      * example when the QuaZip instance is set up to use a QIODevice
      * instead.
-     * \sa setZipName(), setIoDevice(), getIoDevice()
+     * \sa setZipFilePath(), setIoDevice(), getIODevice()
      **/
-    QString getZipName() const;
+    QString zipFilePath() const;
     /// Sets the name of the ZIP file.
     /** Does nothing if the ZIP file is open.
      *
      * Does not reset error code returned by getZipError().
-     * \sa setIoDevice(), getIoDevice(), getZipName()
+     * \sa setIoDevice(), getIODevice(), zipFilePath()
      **/
-    void setZipName(const QString &zipName);
+    void setZipFilePath(const QString &zipName);
     /// Returns the device representing this ZIP file.
-    /** Returns null string if no device has been set explicitly, for
-     * example when opening a ZIP file by name.
-     * \sa setIoDevice(), getZipName(), setZipName()
+    /**
+     * \sa setIoDevice(), zipFilePath(), setZipFilePath()
      **/
-    QIODevice *getIoDevice() const;
+    QIODevice *getIODevice() const;
     /// Sets the device representing the ZIP file.
     /** Does nothing if the ZIP file is open.
      *
      * Does not reset error code returned by getZipError().
-     * \sa getIoDevice(), getZipName(), setZipName()
+     * \sa getIODevice(), zipFilePath(), setZipFilePath()
      **/
-    void setIoDevice(QIODevice *ioDevice);
+    void setIODevice(QIODevice *ioDevice);
     /// Returns the mode in which ZIP file was opened.
     Mode getMode() const;
     /// Returns \c true if ZIP file is open, \c false otherwise.
@@ -294,15 +314,20 @@ class QUAZIP_EXPORT QuaZip
      **/
     int getEntriesCount() const;
     /// Returns global comment in the ZIP file.
+    /// \note Comment is decoded with commentCodec() when there is no
+    /// UTF BOM Header present, otherwise UTF codec is used,
     QString getComment() const;
     /// Sets the global comment in the ZIP file.
     /** The comment will be written to the archive on close operation.
-     * QuaZip makes a distinction between a null QByteArray() comment
+     * QuaZip makes a distinction between a null QString() comment
      * and an empty &quot;&quot; comment in the QuaZip::mdAdd mode.
      * A null comment is the default and it means &quot;don't change
      * the comment&quot;. An empty comment removes the original comment.
      *
-     * \sa open()
+     * \note When there are non-ASCII characters, the comment is stored
+     * in UTF-8 encoding with BOM
+     *
+     * \sa open(), setCommentCodec()
      **/
     void setComment(const QString &comment);
     /// Sets the current file to the first file in the archive.
@@ -373,24 +398,8 @@ class QUAZIP_EXPORT QuaZip
      * In both cases getZipError() returns \c UNZ_OK since there
      * is no ZIP/UNZIP API call.
      *
-     * This overload doesn't support zip64, but will work OK on zip64 archives
-     * except that if one of the sizes (compressed or uncompressed) is greater
-     * than 0xFFFFFFFFu, it will be set to exactly 0xFFFFFFFFu.
-     *
-     * \sa getCurrentFileInfo(QuaZipFileInfo64* info)const
-     * \sa QuaZipFileInfo64::toQuaZipFileInfo(QuaZipFileInfo&)const
      **/
-    bool getCurrentFileInfo(QuaZipFileInfo *info) const;
-    /// Retrieves information about the current file.
-    /** \overload
-     *
-     * This function supports zip64. If the archive doesn't use zip64, it is
-     * completely equivalent to getCurrentFileInfo(QuaZipFileInfo* info)
-     * except for the argument type.
-     *
-     * \sa
-     **/
-    bool getCurrentFileInfo(QuaZipFileInfo64 *info) const;
+    bool getCurrentFileInfo(QuaZipFileInfo &info) const;
     /// Returns the current file name.
     /** Equivalent to calling getCurrentFileInfo() and then getting \c
      * name field of the QuaZipFileInfo structure, but faster and more
@@ -398,30 +407,7 @@ class QUAZIP_EXPORT QuaZip
      *
      * Should be used only in QuaZip::mdUnzip mode.
      **/
-    QString getCurrentFileName() const;
-    /// Returns \c unzFile handle.
-    /** You can use this handle to directly call UNZIP part of the
-     * ZIP/UNZIP package functions (see unzip.h).
-     *
-     * \warning When using the handle returned by this function, please
-     * keep in mind that QuaZip class is unable to detect any changes
-     * you make in the ZIP file state (e. g. changing current file, or
-     * closing the handle). So please do not do anything with this
-     * handle that is possible to do with the functions of this class.
-     * Or at least return the handle in the original state before
-     * calling some another function of this class (including implicit
-     * destructor calls and calls from the QuaZipFile objects that refer
-     * to this QuaZip instance!). So if you have changed the current
-     * file in the ZIP archive - then change it back or you may
-     * experience some strange behavior or even crashes.
-     **/
-    unzFile getUnzFile();
-    /// Returns \c zipFile handle.
-    /** You can use this handle to directly call ZIP part of the
-     * ZIP/UNZIP package functions (see zip.h). Warnings about the
-     * getUnzFile() function also apply to this function.
-     **/
-    zipFile getZipFile();
+    QString currentFilePath() const;
     /// Changes the data descriptor writing mode.
     /**
       According to the ZIP format specification, a file inside archive
@@ -469,25 +455,19 @@ class QUAZIP_EXPORT QuaZip
       \return A list of QuaZipFileInfo objects or an empty list if there
       was an error or if the archive is empty (call getZipError() to
       figure out which).
-
-      This function doesn't support zip64, but will still work with zip64
-      archives, converting results using QuaZipFileInfo64::toQuaZipFileInfo().
-      If all file sizes are below 4 GB, it will work just fine.
-
-      \sa getFileNameList()
-      \sa getFileInfoList64()
       */
     QList<QuaZipFileInfo> getFileInfoList() const;
-    /// Returns information list about all files inside the archive.
+
+    /// Compatibility flags for next files to be compressed.
+    /// \sa CompatibilityFlags
+    CompatibilityFlags compatibilityFlags() const;
+    /// Set compatibility flags for next files to be compressed.
     /**
-      \overload
+     * @param flags Compatibility flags combined together with logical OR.
+     * \sa CompatibilityFlags
+     */
+    void setCompatibilityFlags(CompatibilityFlags flags);
 
-      This function supports zip64.
-
-      \sa getFileNameList()
-      \sa getFileInfoList()
-      */
-    QList<QuaZipFileInfo64> getFileInfoList64() const;
     /// Enables the zip64 mode.
     /**
      * @param zip64 If \c true, the zip64 mode is enabled, disabled otherwise.
@@ -528,10 +508,13 @@ class QUAZIP_EXPORT QuaZip
       during the open() call if an error is encountered after the device
       is opened.
 
-      If the device was not set explicitly, but rather the setZipName() or
+      If the device was not set explicitly, but rather the setZipFilePath() or
       the appropriate constructor was used to set the ZIP file name instead,
       then the auto-close flag has no effect, and the internal device
       is closed nevertheless because there is no other way to close it.
+
+      \note For QSaveFile should be set to false,
+        otherwise will crash on close().
 
       @sa isAutoClose()
       @sa setIoDevice()
@@ -543,9 +526,9 @@ class QUAZIP_EXPORT QuaZip
      * won't affect the QuaZip instances already created at that moment.
      *
      * The codec specified here can be overriden by calling setFileNameCodec().
-     * If neither function is called, QTextCodec::codecForLocale() will be used
+     * If neither function is called, QuaZipTextCodec will be used
      * to decode or encode file names. Use this function with caution if
-     * the application uses other libraries that depend on QuaZIP. Those
+     * the application uses other libraries that depend on QuaZip. Those
      * libraries can either call this function by themselves, thus overriding
      * your setting or can rely on the default encoding, thus failing
      * mysteriously if you change it. For these reasons, it isn't recommended
@@ -554,7 +537,7 @@ class QUAZIP_EXPORT QuaZip
      * encoding.
      *
      * In most cases, using setFileNameCodec() instead is the right choice.
-     * However, if you depend on third-party code that uses QuaZIP, then the
+     * However, if you depend on third-party code that uses QuaZip, then the
      * reasons stated above can actually become a reason to use this function
      * in case the third-party code in question fails because it doesn't
      * understand the encoding you need and doesn't provide a way to specify it.
@@ -568,12 +551,44 @@ class QUAZIP_EXPORT QuaZip
      * @param codec The codec to use by default. If NULL, resets to default.
      */
     static void setDefaultFileNameCodec(QTextCodec *codec);
+    /// Sets the default comment codec to use.
+    /**
+     * The default codec is used by the constructors, so calling this function
+     * won't affect the QuaZip instances already created at that moment.
+     *
+     * The codec specified here can be overriden by calling setCommentCodec().
+     * If neither function is called, QTextCodec::codecForLocale() will be used
+     * to decode and encode comments.
+     */
+    static void setDefaultCommentCodec(QTextCodec *codec);
     /**
      * @overload
      * Equivalent to calling
-     * setDefltFileNameCodec(QTextCodec::codecForName(codecName)).
+     * setDefaultFileNameCodec(QTextCodec::codecForName(codecName)).
      */
     static void setDefaultFileNameCodec(const char *codecName);
+    /**
+     * @overload
+     * Equivalent to calling
+     * setDefaultCommentCodec(QTextCodec::codecForName(codecName)).
+     */
+    static void setDefaultCommentCodec(const char *codecName);
+
+    /// QuaZip constructor will set this flags instead of DefaultCompatibility.
+    /// \sa compatibilityFlags(), setDefaultFileNameCodec(), setDefaultCommentCodec()
+    static void setDefaultCompatibilityFlags(CompatibilityFlags flags);
+
+    QByteArray compatibleFilePath(const QString &filePath) const;
+    QByteArray compatibleComment(const QString &comment) const;
+
+    QuaZExtraField::Map updatedExtraFields(
+        const QuaZipFileInfo &fileInfo) const;
+
+private:
+    friend class QuaZipFile;
+    friend class QuaZipFilePrivate;
+    void *getUnzFile();
+    void *getZipFile();
 };
 
 #endif

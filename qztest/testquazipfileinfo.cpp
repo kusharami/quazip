@@ -96,7 +96,7 @@ void TestQuaZipFileInfo::getNTFSTime()
         QuaZip zip(zipName);
         QVERIFY(zip.open(QuaZip::mdUnzip));
         zip.goToFirstFile();
-        QuaZipFileInfo64 zipFileInfo;
+        QuaZipFileInfo zipFileInfo;
         QVERIFY(zip.getCurrentFileInfo(&zipFileInfo));
         zip.close();
         QCOMPARE(zipFileInfo.getNTFSmTime(), fileInfo.lastModified());

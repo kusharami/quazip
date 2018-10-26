@@ -90,7 +90,6 @@ void TestQuaGzipDevice::read()
         }
 
         comment.clear();
-        fileName.clear();
         ioDevice.reset(new QFile(gzFilePath));
     } else {
         auto buffer = new QBuffer;
@@ -146,8 +145,8 @@ void TestQuaGzipDevice::read()
     QCOMPARE(gzDevice.bytesAvailable(), 0);
     QVERIFY(gzDevice.atEnd());
     QVERIFY(gzDevice.headerIsProcessed());
-    QCOMPARE(gzDevice.comment(), comment);
-    QCOMPARE(gzDevice.originalFileName(), fileName);
+    QCOMPARE(gzDevice.comment(), QString::fromLatin1(comment));
+    QCOMPARE(gzDevice.originalFileName(), QString::fromLatin1(fileName));
     gzDevice.close();
     QVERIFY(!gzDevice.hasError());
     QVERIFY(!gzDevice.isOpen());
@@ -258,8 +257,8 @@ void TestQuaGzipDevice::write()
     expectedUncompressedData = isText ? fromNativeSeparatedText(data) : data;
     QCOMPARE(gzDevice.readAll(), expectedUncompressedData);
     QVERIFY(gzDevice.headerIsProcessed());
-    QCOMPARE(gzDevice.originalFileName(), fileName);
-    QCOMPARE(gzDevice.comment(), comment);
+    QCOMPARE(gzDevice.originalFileName(), QString::fromLatin1(fileName));
+    QCOMPARE(gzDevice.comment(), QString::fromLatin1(comment));
     QCOMPARE(gzDevice.extraFields(), extra);
     QCOMPARE(gzDevice.modificationTime(), savedTime);
 

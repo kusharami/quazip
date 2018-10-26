@@ -36,7 +36,7 @@ private slots:
     void bytesAvailable_data();
     void bytesAvailable();
     void getZip();
-    void setZipName();
+    void setZipFilePath();
     void getFileInfo();
     void setFileName();
     void constructorDestructor();

@@ -71,7 +71,21 @@ public:
     ///Value of the checksum calculated for the stream passed throw update().
     /** \return checksum
      */
-    virtual quint32 value() = 0;
+    inline quint32 value() const;
+    void setValue(quint32 value);
+
+private:
+    quint32 mValue;
 };
 
 #endif //QUACHECKSUM32_H
+
+quint32 QuaChecksum32::value() const
+{
+    return mValue;
+}
+
+void QuaChecksum32::setValue(quint32 value)
+{
+    mValue = value;
+}

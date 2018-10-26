@@ -380,6 +380,14 @@ extern int ZEXPORT unzOpenCurrentFile3 OF((unzFile file,
                                            int* level,
                                            int raw,
                                            const char* password));
+
+
+extern int ZEXPORT unzOpenCurrentFile4 OF((unzFile file,
+                                           int* method,
+                                           int* level,
+                                           int raw,
+                                           const unsigned long* keys));
+
 /*
   Same than unzOpenCurrentFile, but open for read raw the file (not uncompress)
     if raw==1

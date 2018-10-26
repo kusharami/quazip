@@ -29,150 +29,205 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <QDateTime>
 #include <QFile>
 
-#include "quazip_global.h"
-
-/// Information about a file inside archive.
-/**
- * \deprecated Use QuaZipFileInfo64 instead. Not only it supports large files,
- * but also more convenience methods as well.
- *
- * Call QuaZip::getCurrentFileInfo() or QuaZipFile::getFileInfo() to
- * fill this structure. */
-struct QUAZIP_EXPORT QuaZipFileInfo {
-  /// File name.
-  QString name;
-  /// Version created by.
-  quint16 versionCreated;
-  /// Version needed to extract.
-  quint16 versionNeeded;
-  /// General purpose flags.
-  quint16 flags;
-  /// Compression method.
-  quint16 method;
-  /// Last modification date and time.
-  QDateTime dateTime;
-  /// CRC.
-  quint32 crc;
-  /// Compressed file size.
-  quint32 compressedSize;
-  /// Uncompressed file size.
-  quint32 uncompressedSize;
-  /// Disk number start.
-  quint16 diskNumberStart;
-  /// Internal file attributes.
-  quint16 internalAttr;
-  /// External file attributes.
-  quint32 externalAttr;
-  /// Comment.
-  QString comment;
-  /// Extra field.
-  QByteArray extra;
-  /// Get the file permissions.
-  /**
-    Returns the high 16 bits of external attributes converted to
-    QFile::Permissions.
-    */
-  QFile::Permissions getPermissions() const;
-};
+#include "quazipkeysgenerator.h"
+#include "quazextrafield.h"
 
 /// Information about a file inside archive (with zip64 support).
 /** Call QuaZip::getCurrentFileInfo() or QuaZipFile::getFileInfo() to
  * fill this structure. */
-struct QUAZIP_EXPORT QuaZipFileInfo64 {
-  /// File name.
-  QString name;
-  /// Version created by.
-  quint16 versionCreated;
-  /// Version needed to extract.
-  quint16 versionNeeded;
-  /// General purpose flags.
-  quint16 flags;
-  /// Compression method.
-  quint16 method;
-  /// Last modification date and time.
-  /**
-   * This is the time stored in the standard ZIP header. This format only allows
-   * to store time with 2-second precision, so the seconds will always be even
-   * and the milliseconds will always be zero. If you need more precise
-   * date and time, you can try to call the getNTFSmTime() function or
-   * its siblings, provided that the archive itself contains these NTFS times.
-   */
-  QDateTime dateTime;
-  /// CRC.
-  quint32 crc;
-  /// Compressed file size.
-  quint64 compressedSize;
-  /// Uncompressed file size.
-  quint64 uncompressedSize;
-  /// Disk number start.
-  quint16 diskNumberStart;
-  /// Internal file attributes.
-  quint16 internalAttr;
-  /// External file attributes.
-  quint32 externalAttr;
-  /// Comment.
-  QString comment;
-  /// Extra field.
-  QByteArray extra;
-  /// Get the file permissions.
-  /**
-    Returns the high 16 bits of external attributes converted to
-    QFile::Permissions.
-    */
-  QFile::Permissions getPermissions() const;
-  /// Converts to QuaZipFileInfo
-  /**
-    If any of the fields are greater than 0xFFFFFFFFu, they are set to
-    0xFFFFFFFFu exactly, not just truncated. This function should be mainly used
-    for compatibility with the old code expecting QuaZipFileInfo, in the cases
-    when it's impossible or otherwise unadvisable (due to ABI compatibility
-    reasons, for example) to modify that old code to use QuaZipFileInfo64.
+class QUAZIP_EXPORT QuaZipFileInfo {
+public:
+    enum EntryType
+    {
+        File,
+        Directory,
+        SymLink
+    };
 
-    \return \c true if all fields converted correctly, \c false if an overflow
-    occured.
-    */
-  bool toQuaZipFileInfo(QuaZipFileInfo &info) const;
-  /// Returns the NTFS modification time
-  /**
-   * The getNTFS*Time() functions only work if there is an NTFS extra field
-   * present. Otherwise, they all return invalid null timestamps.
-   * @param fineTicks If not NULL, the fractional part of milliseconds returned
-   *                  there, measured in 100-nanosecond ticks. Will be set to
-   *                  zero if there is no NTFS extra field.
-   * @sa dateTime
-   * @sa getNTFSaTime()
-   * @sa getNTFScTime()
-   * @return The NTFS modification time, UTC
-   */
-  QDateTime getNTFSmTime(int *fineTicks = NULL) const;
-  /// Returns the NTFS access time
-  /**
-   * The getNTFS*Time() functions only work if there is an NTFS extra field
-   * present. Otherwise, they all return invalid null timestamps.
-   * @param fineTicks If not NULL, the fractional part of milliseconds returned
-   *                  there, measured in 100-nanosecond ticks. Will be set to
-   *                  zero if there is no NTFS extra field.
-   * @sa dateTime
-   * @sa getNTFSmTime()
-   * @sa getNTFScTime()
-   * @return The NTFS access time, UTC
-   */
-  QDateTime getNTFSaTime(int *fineTicks = NULL) const;
-  /// Returns the NTFS creation time
-  /**
-   * The getNTFS*Time() functions only work if there is an NTFS extra field
-   * present. Otherwise, they all return invalid null timestamps.
-   * @param fineTicks If not NULL, the fractional part of milliseconds returned
-   *                  there, measured in 100-nanosecond ticks. Will be set to
-   *                  zero if there is no NTFS extra field.
-   * @sa dateTime
-   * @sa getNTFSmTime()
-   * @sa getNTFSaTime()
-   * @return The NTFS creation time, UTC
-   */
-  QDateTime getNTFScTime(int *fineTicks = NULL) const;
-  /// Checks whether the file is encrypted.
-  bool isEncrypted() const {return (flags & 1) != 0;}
+    enum ZipOption : quint16
+    {
+        Encryption = 1,
+        CompressionFlag1 = 1 << 1,
+        CompressionFlag2 = 1 << 2,
+        CompressionFlags = CompressionFlag1 | CompressionFlag2,
+        NormalCompression = 0,
+        MaximumCompression = CompressionFlag1,
+        FastCompression = CompressionFlag2,
+        SuperFastCompression = CompressionFlags,
+        HasDataDescriptor = 1 << 3,
+        Patch = 1 << 5,
+        StrongEncryption = 1 << 6,
+        Unicode = 1 << 11,
+        LocalHeaderMasking = 1 << 13,
+        CompatibleOptions =
+            Encryption | CompressionFlags | HasDataDescriptor | Unicode
+    };
+    Q_DECLARE_FLAGS(ZipOptions, ZipOption)
+
+    enum Attribute : quint8
+    {
+        ReadOnly = 0x01,
+        Hidden = 0x02,
+        System = 0x04,
+        DirAttr = 0x10,
+        Archived = 0x20,
+        AllAttrs = ReadOnly | Hidden | System | DirAttr | Archived
+    };
+    Q_DECLARE_FLAGS(Attributes, Attribute)
+
+    enum ContentAttribute
+    {
+        Text = 0x01
+    };
+
+    enum ZipSystem : quint8
+    {
+        OS_MSDOS = 0,
+        OS_AMIGA = 1,
+        OS_OPENVMS = 2,
+        OS_UNIX = 3,
+        OS_VMCMS = 4,
+        OS_ATARI = 5,
+        OS_OS2HPFS = 6,
+        OS_MACINTOSH = 7,
+        OS_ZSYSTEM = 8,
+        OS_CPM = 9,
+        OS_TOPS20 = 10,
+        OS_WINDOWS_NTFS = 11,
+        OS_QDOS = 12,
+        OS_ACORN = 13,
+        OS_WINDOWS_VFAT = 14,
+        OS_MVS = 15,
+        OS_BEOS = 16,
+        OS_TANDEM = 17,
+        OS_THEOS = 18,
+        OS_MACOSX = 19
+    };
+
+    QuaZipFileInfo();
+    QuaZipFileInfo(const QuaZipFileInfo &other);
+    ~QuaZipFileInfo();
+
+    const QString &filePath() const;
+    void setFilePath(const QString &filePath);
+
+    const QString &comment() const;
+    void setComment(const QString &value);
+
+    EntryType entryType() const;
+    void setEntryType(EntryType value);
+
+    inline bool isDir() const;
+    inline bool isFile() const;
+    inline bool isSymLink() const;
+
+    QFile::Permissions permissions() const;
+    void setPermissions(QFile::Permissions value);
+
+    Attributes attributes() const;
+    void setAttributes(Attributes value);
+
+    qint64 uncompressedSize() const;
+    void setUncompressedSize(qint64 size);
+
+    qint64 compressedSize() const;
+    void setCompressedSize(qint64 size);
+
+    quint32 crc() const;
+    void setCrc(quint32 value);
+
+    quint16 compressionMethod() const;
+    void setCompressionMethod(quint16 method);
+
+    quint16 compressionStrategy() const;
+    void setCompressionStrategy(quint16 value);
+
+    int compressionLevel() const;
+    void setCompressionLevel(int level);
+
+    ZipOptions zipOptions() const;
+    void setZipOptions(ZipOptions options);
+
+    ZipSystem systemMadeBy() const;
+    void setSystemMadeBy(ZipSystem value);
+
+    quint8 zipVersionMadeBy() const;
+    void setZipVersionMadeBy(quint8 spec);
+
+    quint16 madeBy() const;
+    void setMadeBy(quint16 value);
+
+    quint16 zipVersionNeeded() const;
+    void setZipVersionNeeded(quint16 value);
+
+    quint16 internalAttributes();
+    void setInternalAttributes(quint16 value);
+
+    quint32 externalAttributes();
+    void setExternalAttributes(quint32 value);
+
+    int diskNumber() const;
+    void setDiskNumber(int value);
+
+    bool isRaw() const;
+    void setIsRaw(bool value);
+
+    bool isText() const;
+    void setIsText(bool value);
+
+    bool isEncrypted() const;
+    void setIsEncrypted(bool value);
+
+    const QDateTime &creationTime() const;
+    void setCreationTime(const QDateTime &time);
+
+    const QDateTime &modificationTime() const;
+    void setModificationTime(const QDateTime &time);
+
+    const QDateTime &lastAccessTime() const;
+    void setLastAccessTime(const QDateTime &time);
+
+    const QuaZipKeysGenerator::Keys &cryptKeys() const;
+    void setCryptKeys(const QuaZipKeysGenerator::Keys &keys);
+
+    /// The password will be erased from memory after
+    /// cryptHeader and cryptKeys generation
+    void setPassword(QByteArray *value);
+
+    const QuaZExtraField::Map &centralExtraFields() const;
+    void setCentralExtraFields(const QuaZExtraField::Map &map);
+
+    const QuaZExtraField::Map &localExtraFields() const;
+    void setLocalExtraFields(const QuaZExtraField::Map &map);
+
+    QuaZipFileInfo &operator=(const QuaZipFileInfo &other);
+
+    bool operator==(const QuaZipFileInfo &other) const;
+    inline bool operator!=(const QuaZipFileInfo &other) const;
+
+private:
+    struct Private;
+    QSharedDataPointer<Private> d;
 };
+
+bool QuaZipFileInfo::isDir() const
+{
+    return entryType() == Directory;
+}
+
+bool QuaZipFileInfo::isFile() const
+{
+    return entryType() == File;
+}
+
+bool QuaZipFileInfo::isSymLink() const
+{
+    return entryType() == SymLink;
+}
+
+bool QuaZipFileInfo::operator!=(const QuaZipFileInfo &other) const
+{
+    return !operator==(other);
+}
 
 #endif

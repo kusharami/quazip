@@ -33,6 +33,7 @@ QuaZIODevicePrivate::QuaZIODevicePrivate(QuaZIODevice *owner)
     , ioStartPosition(0)
     , ioPosition(0)
     , compressionLevel(Z_DEFAULT_COMPRESSION)
+    , strategy(Z_DEFAULT_STRATEGY)
     , uncompressedSize(0)
     , hasError(false)
     , atEnd(false)
@@ -102,11 +103,11 @@ bool QuaZIODevicePrivate::skip(qint64 skipCount)
 {
     int blockSize = QUAZIO_BUFFER_SIZE;
     if (hasUncompressedSize) {
-        QuaZIODeviceUtils::adjustBlockSize(blockSize, qint64(uncompressedSize));
+        QuaZUtils::adjustBlockSize(blockSize, qint64(uncompressedSize));
     }
 
     while (skipCount > 0) {
-        QuaZIODeviceUtils::adjustBlockSize(blockSize, skipCount);
+        QuaZUtils::adjustBlockSize(blockSize, skipCount);
         if (seekBuffer.size() < blockSize) {
             seekBuffer.resize(blockSize);
         }
@@ -161,7 +162,19 @@ void QuaZIODevicePrivate::setCompressionLevel(int level)
     compressionLevel = level;
 
     if (owner->isWritable()) {
-        check(deflateParams(&zstream, level, Z_DEFAULT_STRATEGY));
+        check(deflateParams(&zstream, compressionLevel, strategy));
+    }
+}
+
+void QuaZIODevicePrivate::setStrategy(int value)
+{
+    if (value == strategy)
+        return;
+
+    strategy = value;
+
+    if (owner->isWritable()) {
+        check(deflateParams(&zstream, compressionLevel, strategy));
     }
 }
 
@@ -189,7 +202,7 @@ qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
     zstream.next_out = reinterpret_cast<DataType>(data);
 
     qint64 count = maxlen;
-    auto blockSize = QuaZIODeviceUtils::maxBlockSize<BlockSize>();
+    auto blockSize = QuaZUtils::maxBlockSize<BlockSize>();
     bool run = true;
 
     bool transaction = !io->isTransactionStarted() && io->isSequential();
@@ -200,7 +213,7 @@ qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
     auto savedPosition = ioPosition;
 
     while (!hasError && run && count > 0) {
-        QuaZIODeviceUtils::adjustBlockSize(blockSize, count);
+        QuaZUtils::adjustBlockSize(blockSize, count);
 
         zstream.avail_out = blockSize;
 
@@ -290,12 +303,12 @@ qint64 QuaZIODevicePrivate::writeInternal(const char *data, qint64 maxlen)
     using BlockSize = decltype(zstream.avail_in);
 
     qint64 count = maxlen;
-    auto blockSize = QuaZIODeviceUtils::maxBlockSize<BlockSize>();
+    auto blockSize = QuaZUtils::maxBlockSize<BlockSize>();
 
     zstream.next_in = reinterpret_cast<DataType>(data);
 
     while (count > 0) {
-        QuaZIODeviceUtils::adjustBlockSize(blockSize, count);
+        QuaZUtils::adjustBlockSize(blockSize, count);
 
         zstream.avail_in = blockSize;
 
@@ -361,7 +374,8 @@ bool QuaZIODevicePrivate::doInflateReset()
 
 bool QuaZIODevicePrivate::doDeflateInit()
 {
-    return check(deflateInit(&zstream, compressionLevel));
+    return check(deflateInit2(&zstream, compressionLevel, Z_DEFLATED, MAX_WBITS,
+        MAX_MEM_LEVEL, strategy));
 }
 
 void QuaZIODevicePrivate::endRead()

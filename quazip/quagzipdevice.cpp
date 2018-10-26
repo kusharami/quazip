@@ -27,13 +27,19 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "private/quaziodeviceprivate.h"
 
 #include <QDateTime>
+#include <QFileDevice>
+#include <QFileInfo>
+#include <QTextCodec>
+#include <QBuffer>
 
 #include <memory>
 
+#undef FILENAME_MAX
+
 enum
 {
-    FILENAME_MAX_ = FILENAME_MAX,
-    COMMENT_MAX = 4096,
+    FILENAME_MAX = 255,
+    COMMENT_MAX = 4095,
     EXTRA_MAX = 4096
 };
 /// @cond internal
@@ -50,8 +56,11 @@ public:
     bool gzReadHeader();
     bool gzSetHeader();
     void gzInitHeader();
+    void restoreOriginalFileName();
 
-    char originalFileName[FILENAME_MAX_ + 1];
+    QTextCodec *fileNameCodec;
+    QTextCodec *commentCodec;
+    char originalFileName[FILENAME_MAX + 1];
     char comment[COMMENT_MAX + 1];
     char extraField[EXTRA_MAX];
     gz_header gzHeader;
@@ -76,7 +85,7 @@ QuaGzipDevice::~QuaGzipDevice()
 
 int QuaGzipDevice::maxFileNameLength()
 {
-    return FILENAME_MAX_;
+    return FILENAME_MAX;
 }
 
 int QuaGzipDevice::maxCommentLength()
@@ -89,32 +98,85 @@ bool QuaGzipDevice::headerIsProcessed() const
     return d()->gzHeader.done != 0;
 }
 
-QByteArray QuaGzipDevice::originalFileName() const
+QTextCodec *QuaGzipDevice::fileNameCodec() const
 {
-    return QByteArray(d()->originalFileName);
+    return d()->fileNameCodec;
 }
 
-void QuaGzipDevice::setOriginalFileName(const QByteArray &fileName)
+void QuaGzipDevice::setFileNameCodec(QTextCodec *codec)
 {
-    int length = fileName.length();
-    if (length > FILENAME_MAX_) {
-        d()->setError(QStringLiteral(
-            "Unable to set more than %1 bytes for stored file name.")
-                          .arg(FILENAME_MAX_));
+    Q_ASSERT(codec);
+    d()->fileNameCodec = codec;
+}
+
+void QuaGzipDevice::setFileNameCodec(const char *codecName)
+{
+    setFileNameCodec(QTextCodec::codecForName(codecName));
+}
+
+QTextCodec *QuaGzipDevice::commentCodec() const
+{
+    return d()->commentCodec;
+}
+
+void QuaGzipDevice::setCommentCodec(QTextCodec *codec)
+{
+    Q_ASSERT(codec);
+    d()->commentCodec = codec;
+}
+
+void QuaGzipDevice::setCommentCodec(const char *codecName)
+{
+    setCommentCodec(QTextCodec::codecForName(codecName));
+}
+
+void QuaGzipDevice::restoreOriginalFileName()
+{
+    d()->restoreOriginalFileName();
+}
+
+QString QuaGzipDevice::originalFileName() const
+{
+    if (headerIsProcessed()) {
+        d()->restoreOriginalFileName();
+    }
+
+    return d()->fileNameCodec->toUnicode(d()->originalFileName);
+}
+
+void QuaGzipDevice::setOriginalFileName(const QString &fileName)
+{
+    if (!d()->fileNameCodec->canEncode(fileName)) {
+        d()->setError(QStringLiteral("Unable to encode original file name"));
         return;
     }
-    memcpy(d()->originalFileName, fileName.data(), length);
+
+    QByteArray mbcsFileName = d()->fileNameCodec->fromUnicode(fileName);
+
+    int length = mbcsFileName.length();
+    if (length > FILENAME_MAX) {
+        d()->setError(QStringLiteral(
+            "Unable to set more than %1 bytes for original file name.")
+                          .arg(FILENAME_MAX));
+        return;
+    }
+    memcpy(d()->originalFileName, mbcsFileName.data(), length);
     d()->originalFileName[length] = 0;
 }
 
-QByteArray QuaGzipDevice::comment() const
+QString QuaGzipDevice::comment() const
 {
-    return QByteArray(d()->comment);
+    return d()->commentCodec->toUnicode(d()->comment);
 }
 
-void QuaGzipDevice::setComment(const QByteArray &text)
+void QuaGzipDevice::setComment(const QString &text)
 {
-    auto comment = text;
+    if (!d()->commentCodec->canEncode(text)) {
+        d()->setError(QStringLiteral("Unable to encode comment."));
+        return;
+    }
+
+    auto comment = d()->commentCodec->fromUnicode(text);
     comment.replace('\r', QByteArray());
     int length = comment.length();
     if (length > maxCommentLength()) {
@@ -137,72 +199,23 @@ void QuaGzipDevice::setModificationTime(time_t time)
     d()->gzHeader.time = uLong(time);
 }
 
-QuaGzipDevice::ExtraFieldMap QuaGzipDevice::extraFields() const
+QuaZExtraField::Map QuaGzipDevice::extraFields() const
 {
-    ExtraFieldMap result;
-
     auto &header = d()->gzHeader;
-
-    auto extra = header.extra;
-    auto count = header.extra_len;
-
-    while (count >= 4) {
-        ExtraFieldKey key(extra[0], extra[1]);
-        auto len = quint16(extra[2] | (extra[3] << 8));
-
-        count -= 4;
-        extra += 4;
-        if (count < len)
-            break;
-
-        result[key] = QByteArray(reinterpret_cast<const char *>(extra), len);
-
-        count -= len;
-        extra += len;
-    }
-
-    return result;
+    return QuaZExtraField::toMap(header.extra, header.extra_len);
 }
 
-void QuaGzipDevice::setExtraFields(const ExtraFieldMap &map)
+void QuaGzipDevice::setExtraFields(const QuaZExtraField::Map &map)
 {
     auto &header = d()->gzHeader;
-    auto extra = header.extra;
 
-    auto extraMax = header.extra_max;
-    header.extra_len = 0;
-
-    for (auto it = map.begin(); it != map.end(); ++it) {
-        auto &key = it.key();
-        auto &value = it.value();
-
-        int length = value.length();
-        int maxFieldLength = std::numeric_limits<quint16>::max();
-
-        if (length > maxFieldLength) {
-            d()->setError(QStringLiteral(
-                "Unable to set more than %1 bytes for extra field data.")
-                              .arg(maxFieldLength));
-            return;
-        }
-
-        if (header.extra_len + 4 + length > extraMax) {
-            d()->setError(QStringLiteral(
-                "Unable to set more than %1 bytes for extra field.")
-                              .arg(extraMax));
-            return;
-        }
-
-        extra[0] = key.key[0];
-        extra[1] = key.key[1];
-
-        extra[2] = quint8(length);
-        extra[3] = quint8(length >> 8);
-
-        memcpy(&extra[4], value.data(), length);
-
-        header.extra_len += 4 + length;
-        extra += 4 + length;
+    QuaZExtraField::ResultCode code;
+    auto bytes = QuaZExtraField::fromMap(map, &code, header.extra_max);
+    if (code == QuaZExtraField::OK) {
+        header.extra_len = bytes.length();
+        memcpy(header.extra, bytes.data(), bytes.length());
+    } else {
+        d()->setError(QuaZExtraField::errorString(code));
     }
 }
 
@@ -220,9 +233,12 @@ QuaGzipDevicePrivate::QuaGzipDevicePrivate(QuaGzipDevice *owner)
     gzHeader.extra = reinterpret_cast<Bytef *>(extraField);
     gzHeader.extra_max = EXTRA_MAX;
     gzHeader.name = reinterpret_cast<Bytef *>(originalFileName);
-    gzHeader.name_max = FILENAME_MAX_;
+    gzHeader.name_max = FILENAME_MAX;
     gzHeader.comment = reinterpret_cast<Bytef *>(comment);
     gzHeader.comm_max = COMMENT_MAX;
+
+    fileNameCodec = QTextCodec::codecForLocale();
+    commentCodec = fileNameCodec;
 }
 
 bool QuaGzipDevicePrivate::doInflateInit()
@@ -248,14 +264,13 @@ bool QuaGzipDevicePrivate::gzInflateInit()
 bool QuaGzipDevicePrivate::gzDeflateInit()
 {
     return check(deflateInit2(&zstream, compressionLevel, Z_DEFLATED,
-        MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL,
-        Z_DEFAULT_STRATEGY));
+        MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL, strategy));
 }
 
 bool QuaGzipDevicePrivate::gzReadHeader()
 {
     gzInitHeader();
-    originalFileName[FILENAME_MAX_] = 0;
+    originalFileName[FILENAME_MAX] = 0;
     comment[COMMENT_MAX] = 0;
     return check(inflateGetHeader(&zstream, &gzHeader));
 }
@@ -276,4 +291,38 @@ void QuaGzipDevicePrivate::gzInitHeader()
     gzHeader.hcrc = 0;
     gzHeader.done = 0;
     gzHeader.xflags = 0;
+    restoreOriginalFileName();
+}
+
+void QuaGzipDevicePrivate::restoreOriginalFileName()
+{
+    if (!io)
+        return;
+
+    if (0 != originalFileName[0])
+        return;
+
+    auto file = qobject_cast<QFileDevice *>(io);
+    if (!file)
+        return;
+
+    QFileInfo fileInfo(file->fileName());
+
+    if (!fileNameCodec->canEncode(fileInfo.fileName())) {
+        return;
+    }
+
+    auto fileName = fileNameCodec->fromUnicode(fileInfo.fileName());
+
+    static const char GZ[] = "gz";
+    if (0 ==
+        fileInfo.suffix().compare(QLatin1String(GZ), Qt::CaseInsensitive)) {
+        fileName.resize(fileName.length() - sizeof(GZ));
+    }
+
+    int length = fileName.length();
+    if (length <= FILENAME_MAX) {
+        memcpy(originalFileName, fileName.data(), length);
+        originalFileName[length] = 0;
+    }
 }

@@ -27,11 +27,9 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 
 #include <QIODevice>
 
-#include "quazip_global.h"
+#include "quazipfileinfo.h"
+#include "quazextrafield.h"
 #include "quazip.h"
-#include "quazipnewinfo.h"
-
-class QuaZipFilePrivate;
 
 /// A file inside ZIP archive.
 /** \class QuaZipFile quazipfile.h <quazip/quazipfile.h>
@@ -71,54 +69,52 @@ class QuaZipFilePrivate;
  * this class.
  *
  **/
-class QUAZIP_EXPORT QuaZipFile: public QIODevice {
-  friend class QuaZipFilePrivate;
-  Q_OBJECT
-  private:
+
+/// @cond internal
+class QuaZipFilePrivate;
+/// @endcond internal
+class QUAZIP_EXPORT QuaZipFile : public QIODevice {
+    Q_OBJECT
+
+private:
     QuaZipFilePrivate *p;
-    // these are not supported nor implemented
-    QuaZipFile(const QuaZipFile& that);
-    QuaZipFile& operator=(const QuaZipFile& that);
-  protected:
+    friend class QuaZipFilePrivate;
+
+protected:
     /// Implementation of the QIODevice::readData().
-    qint64 readData(char *data, qint64 maxSize);
+    virtual qint64 readData(char *data, qint64 maxSize) override;
     /// Implementation of the QIODevice::writeData().
-    qint64 writeData(const char *data, qint64 maxSize);
-  public:
+    virtual qint64 writeData(const char *data, qint64 maxSize) override;
+
+public:
     /// Constructs a QuaZipFile instance.
-    /** You should use setZipName() and setFileName() or setZip() before
+    /** You should use setZipFilePath() and setFileName() or setZip() before
      * trying to call open() on the constructed object.
      **/
     QuaZipFile();
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object.
      *
-     * You should use setZipName() and setFileName() or setZip() before
+     * You should use setZipFilePath() and setFileName() or setZip() before
      * trying to call open() on the constructed object.
      **/
     QuaZipFile(QObject *parent);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object and \a
-     * zipName specifies ZIP archive file name.
+     * zipFilePath specifies ZIP archive file path.
      *
      * You should use setFileName() before trying to call open() on the
      * constructed object.
-     *
-     * QuaZipFile constructed by this constructor can be used for read
-     * only access. Use QuaZipFile(QuaZip*,QObject*) for writing.
      **/
-    QuaZipFile(const QString& zipName, QObject *parent = NULL);
+    QuaZipFile(const QString &zipFilePath, QObject *parent = NULL);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object, \a
-     * zipName specifies ZIP archive file name and \a fileName and \a cs
-     * specify a name of the file to open inside archive.
+     * zipFilePath specifies ZIP archive file path and \a filePath and \a cs
+     * specify a path of the file to open inside archive.
      *
-     * QuaZipFile constructed by this constructor can be used for read
-     * only access. Use QuaZipFile(QuaZip*,QObject*) for writing.
-     *
-     * \sa QuaZip::setCurrentFile()
+     * \sa setFilePath(), QuaZip::setCurrentFile()
      **/
-    QuaZipFile(const QString& zipName, const QString& fileName,
+    QuaZipFile(const QString &zipFilePath, const QString &filePath,
         QuaZip::CaseSensitivity cs = QuaZip::csDefault, QObject *parent = NULL);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object.
@@ -174,8 +170,8 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
     /** Closes file if open, destructs internal QuaZip object (if it
      * exists and \em is internal, of course).
      **/
-    virtual ~QuaZipFile();
-    /// Returns the ZIP archive file name.
+    virtual ~QuaZipFile() override;
+    /// Returns the ZIP archive file path.
     /** If this object was created by passing QuaZip pointer to the
      * constructor, this function will return that QuaZip's file name
      * (or null string if that object does not have file name yet).
@@ -183,16 +179,49 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * Otherwise, returns associated ZIP archive file name or null
      * string if there are no name set yet.
      *
-     * \sa setZipName() getFileName()
+     * \sa setZipFilePath() getFileName()
      **/
-    QString getZipName() const;
+    QString zipFilePath() const;
+    /// Sets the ZIP archive file name.
+    /** Automatically creates internal QuaZip object and destroys
+     * previously created internal QuaZip object, if any.
+     *
+     * Will do nothing if this file is already open. You must close() it
+     * first.
+     **/
+    void setZipFilePath(const QString &zipFilePath);
     /// Returns a pointer to the associated QuaZip object.
     /** Returns \c NULL if there is no associated QuaZip or it is
      * internal (so you will not mess with it).
      **/
-    QuaZip *getZip() const;
-    /// Returns file name.
-    /** This function returns file name you passed to this object either
+    QuaZip *zip() const;
+    /// Binds to the existing QuaZip instance.
+    /** This function destroys internal QuaZip object, if any, and makes
+     * this QuaZipFile to use current file in the \a zip object for any
+     * further operations. See QuaZipFile(QuaZip*,QObject*) for the
+     * possible pitfalls.
+     *
+     * Will do nothing if the file is currently open. You must close()
+     * it first.
+     **/
+    void setZip(QuaZip *zip);
+
+    /// Returns file info stored or to be stored in the archive
+    /**
+     * \note If no filePath() was set this function does the same as calling
+     * QuaZip::getCurrentFileInfo() on the associated QuaZip object,
+     * but you can not call getCurrentFileInfo() if the associated
+     * QuaZip is internal (because you do not have access to it), while
+     * you still can call this function in that case.
+     **/
+    const QuaZipFileInfo &fileInfo() const;
+    /// Set file info to be stored in the archive
+    /// \note If you open the device for reading, this data will be overwritten
+    /// with information associated with the file in archive
+    void setFileInfo(const QuaZipFileInfo &info);
+
+    /// Returns file path that will be stored or searched in archive.
+    /** This function returns file pathed you passed to this object either
      * by using
      * QuaZipFile(const QString&,const QString&,QuaZip::CaseSensitivity,QObject*)
      * or by calling setFileName(). Real name of the file may differ in
@@ -202,10 +231,10 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * case when this QuaZipFile operates on the existing QuaZip object
      * (constructor QuaZipFile(QuaZip*,QObject*) or setZip() was used).
      *
-     * \sa getActualFileName
+     * \sa actualFilePath
      **/
-    QString getFileName() const;
-    /// Returns case sensitivity of the file name.
+    QString filePath() const;
+    /// Returns case sensitivity of the file path.
     /** This function returns case sensitivity argument you passed to
      * this object either by using
      * QuaZipFile(const QString&,const QString&,QuaZip::CaseSensitivity,QObject*)
@@ -217,8 +246,21 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      *
      * \sa getFileName
      **/
-    QuaZip::CaseSensitivity getCaseSensitivity() const;
-    /// Returns the actual file name in the archive.
+    /// Sets the file path.
+    /**
+     * \param filePath File path in Zip archive.
+     * If empty, then QuaZip::getCurrentFile() will be used
+     *
+     * \sa QuaZip::setCurrentFile()
+     **/
+    void setFilePath(const QString &filePath);
+
+    /// Case sensitivity of filePath to search in archive
+    QuaZip::CaseSensitivity caseSensitivity() const;
+    /// Changes case sensitivity to search a file in zip archive
+    /// \sa setFileName
+    void setCaseSensitivity(QuaZip::CaseSensitivity cs);
+    /// Returns the actual file path in the archive.
     /** This is \em not a ZIP archive file name, but a name of file inside
      * archive. It is not necessary the same name that you have passed
      * to the
@@ -227,7 +269,7 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * name inside archive, so it may differ in case if the file name
      * search was case-insensitive.
      *
-     * Equivalent to calling getCurrentFileName() on the associated
+     * Equivalent to calling currentFilePath() on the associated
      * QuaZip object. Returns null string if there is no associated
      * QuaZip object or if it does not have a current file yet. And this
      * is the case if you called setFileName() but did not open the
@@ -236,183 +278,138 @@ class QUAZIP_EXPORT QuaZipFile: public QIODevice {
      * QuaZipFile file("somezip.zip");
      * file.setFileName("somefile");
      * QString name=file.getName(); // name=="somefile"
-     * QString actual=file.getActualFileName(); // actual is null string
+     * QString actual=file.actualFilePath(); // actual is null string
      * file.open(QIODevice::ReadOnly);
-     * QString actual=file.getActualFileName(); // actual can be "SoMeFiLe" on Windows
+     * QString actual=file.actualFilePath(); // actual can be "SoMeFiLe" on Windows
      * \endcode
      *
-     * \sa getZipName(), getFileName(), QuaZip::CaseSensitivity
+     * \sa zipFilePath(), getFileName(), QuaZip::CaseSensitivity
      **/
-    QString getActualFileName() const;
-    /// Sets the ZIP archive file name.
-    /** Automatically creates internal QuaZip object and destroys
-     * previously created internal QuaZip object, if any.
-     *
-     * Will do nothing if this file is already open. You must close() it
-     * first.
-     **/
-    void setZipName(const QString& zipName);
-    /// Returns \c true if the file was opened in raw mode.
-    /** If the file is not open, the returned value is undefined.
-     *
-     * \sa open(OpenMode,int*,int*,bool,const char*)
-     **/
-    bool isRaw() const;
-    /// Binds to the existing QuaZip instance.
-    /** This function destroys internal QuaZip object, if any, and makes
-     * this QuaZipFile to use current file in the \a zip object for any
-     * further operations. See QuaZipFile(QuaZip*,QObject*) for the
-     * possible pitfalls.
-     *
-     * Will do nothing if the file is currently open. You must close()
-     * it first.
-     **/
-    void setZip(QuaZip *zip);
-    /// Sets the file name.
-    /** Will do nothing if at least one of the following conditions is
-     * met:
-     * - ZIP name has not been set yet (getZipName() returns null
-     *   string).
-     * - This QuaZipFile is associated with external QuaZip. In this
-     *   case you should call that QuaZip's setCurrentFile() function
-     *   instead!
-     * - File is already open so setting the name is meaningless.
-     *
-     * \sa QuaZip::setCurrentFile
-     **/
-    void setFileName(
-      const QString& fileName, QuaZip::CaseSensitivity cs = QuaZip::csDefault);
-    /// Opens a file for reading.
-    /** Returns \c true on success, \c false otherwise.
-     * Call getZipError() to get error code.
-     *
-     * \note Since ZIP/UNZIP API provides buffered reading only,
-     * QuaZipFile does not support unbuffered reading. So do not pass
-     * QIODevice::Unbuffered flag in \a mode, or open will fail.
-     **/
-    virtual bool open(OpenMode mode);
-    /// Opens a file for reading.
-    /** \overload
-     * Argument \a password specifies a password to decrypt the file. If
-     * it is NULL then this function behaves just like open(OpenMode).
-     **/
-    inline bool open(OpenMode mode, const char *password)
-    {return open(mode, NULL, NULL, false, password);}
+    QString actualFilePath() const;
 
-    /// Opens a file for reading.
-    /** \overload
-     * Argument \a password specifies a password to decrypt the file.
+    /// Opens a file for reading or writing.
+    /** Returns \c true on success, \c false otherwise.
+     * \param mode can be QIODevice::ReadOnly or QIODevice::WriteOnly.
+     * May be combined with QIODevice::Text. If you want to read text.
      *
-     * An integers pointed by \a method and \a level will receive codes
-     * of the compression method and level used. See unzip.h.
-     *
-     * If raw is \c true then no decompression is performed.
-     *
-     * \a method should not be \c NULL. \a level can be \c NULL if you
-     * don't want to know the compression level.
+     * \note fileInfo().isText() is set then QIODevice::Text is automatically on
+     * \note QIODevice::Unbuffered will be added to \a mode
+     * \note QIODevice::Truncate will be added if mode is QIODevice::WriteOnly
+     * Call getZipError() to get error code.
      **/
-    bool open(OpenMode mode, int *method, int *level, bool raw,
-        const char *password = NULL);
-    /// Opens a file for writing.
-    /** \a info argument specifies information about file. It should at
-     * least specify a correct file name. Also, it is a good idea to
-     * specify correct timestamp (by default, current time will be
-     * used). See QuaZipNewInfo.
-     *
-     * The \a password argument specifies the password for crypting. Pass NULL
-     * if you don't need any crypting. The \a crc argument was supposed
-     * to be used for crypting too, but then it turned out that it's
-     * false information, so you need to set it to 0 unless you want to
-     * use the raw mode (see below).
-     *
-     * Arguments \a method and \a level specify compression method and
-     * level. The only method supported is Z_DEFLATED, but you may also
-     * specify 0 for no compression. If all of the files in the archive
-     * use both method 0 and either level 0 is explicitly specified or
-     * data descriptor writing is disabled with
-     * QuaZip::setDataDescriptorWritingEnabled(), then the
-     * resulting archive is supposed to be compatible with the 1.0 ZIP
-     * format version, should you need that. Except for this, \a level
-     * has no other effects with method 0.
-     *
-     * If \a raw is \c true, no compression is performed. In this case,
-     * \a crc and uncompressedSize field of the \a info are required.
-     *
-     * Arguments \a windowBits, \a memLevel, \a strategy provide zlib
-     * algorithms tuning. See deflateInit2() in zlib.
-     **/
-    bool open(
-        OpenMode mode, const QuaZipNewInfo& info,
-        const char *password = NULL, quint32 crc = 0, int method = Z_DEFLATED,
-        int level = Z_DEFAULT_COMPRESSION, bool raw = false,
-        int windowBits = -MAX_WBITS, int memLevel = DEF_MEM_LEVEL,
-        int strategy = Z_DEFAULT_STRATEGY);
-    /// Returns \c true, but \ref quazipfile-sequential "beware"!
-    virtual bool isSequential() const;
-    /// Returns file size.
-    /** This function returns csize() if the file is open for reading in
-     * raw mode, usize() if it is open for reading in normal mode and
-     * pos() if it is open for writing.
-     *
-     * Returns -1 on error, call getZipError() to get error code.
-     *
-     * \note This function returns file size despite that
-     * \ref quazipfile-sequential "QuaZipFile is considered to be sequential device",
-     * for which size() should return bytesAvailable() instead. But its
-     * name would be very misguiding otherwise, so just keep in mind
-     * this inconsistence.
-     **/
-    virtual qint64 size() const;
-    /// Returns compressed file size.
-    /** Equivalent to calling getFileInfo() and then getting
-     * compressedSize field, but more convenient and faster.
-     *
-     * File must be open for reading before calling this function.
-     *
-     * Returns -1 on error, call getZipError() to get error code.
-     **/
-    qint64 csize() const;
-    /// Returns uncompressed file size.
-    /** Equivalent to calling getFileInfo() and then getting
-     * uncompressedSize field, but more convenient and faster. See
-     * getFileInfo() for a warning.
-     *
-     * File must be open for reading before calling this function.
-     *
-     * Returns -1 on error, call getZipError() to get error code.
-     **/
-    qint64 usize() const;
-    /// Gets information about current file.
-    /** This function does the same thing as calling
-     * QuaZip::getCurrentFileInfo() on the associated QuaZip object,
-     * but you can not call getCurrentFileInfo() if the associated
-     * QuaZip is internal (because you do not have access to it), while
-     * you still can call this function in that case.
-     *
-     * File must be open for reading before calling this function.
-     *
-     * \return \c false in the case of an error.
-     *
-     * This function doesn't support zip64, but will still work fine on zip64
-     * archives if file sizes are below 4 GB, otherwise the values will be set
-     * as if converted using QuaZipFileInfo64::toQuaZipFileInfo().
-     *
-     * \sa getFileInfo(QuaZipFileInfo64*)
-     **/
-    bool getFileInfo(QuaZipFileInfo *info);
-    /// Gets information about current file with zip64 support.
+    virtual bool open(OpenMode mode) override;
+
+    /// Set the password to use for file data encryption/decryption
     /**
-     * @overload
+     * \param password Password will be encoded with QuaZip::passwordCodec()
+     * It is removed from memory after this call for security reasons
      *
-     * \sa getFileInfo(QuaZipFileInfo*)
-     */
-    bool getFileInfo(QuaZipFileInfo64 *info);
+     * \note Nothing is changed when QuaZipFile is already open
+     * \sa open()
+     **/
+    void setPassword(QString *password);
+
+    /// If we want to read raw data from the file without decompression,
+    /// or to write already compressed data
+    bool isRaw() const;
+    /// Set if we want to read raw data from the file without decompression,
+    /// or to write already compressed data
+    /// \note Nothing is changed when QuaZipFile is already open
+    void setIsRaw(bool raw);
+
+    /// Compression level.
+    /// Default is Z_DEFAULT_COMPRESSION
+    int compressionLevel() const;
+    /// Set compression level
+    /**
+      \param value The compression level (Z_BEST_COMPRESSION etc.),
+    */
+    /// \note Nothing is changed when QuaZipFile is already open
+    void setCompressionLevel(int value);
+
+    /// Compression method.
+    /// Default is Z_DEFLATED
+    int compressionMethod() const;
+    /// Set compression method
+    /// \param value Only Z_NO_COMPRESSION and Z_DEFLATED is supported
+    /// \note Nothing is changed when QuaZipFile is already open
+    void setCompressionMethod(int value);
+
+    /// Compression strategy.
+    /// Default is Z_DEFAULT_STRATEGY
+    int compressionStrategy() const;
+    /// Set compression strategy
+    /**
+      \param value The compression strategy:
+        Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED
+    */
+    /// \note Nothing is changed when QuaZipFile is already open
+    void setCompressionStrategy(int value);
+
+    /// Returns \c true in write mode
+    /// Returns \c true in read mode when ZIP archive is sequential.
+    /// Returns \c false in read mode when ZIP archive is not sequential.
+    virtual bool isSequential() const override;
+    /// Returns true if the end of the compressed stream is reached.
+    virtual bool atEnd() const override;
+    /// Returns the number of the bytes buffered.
+    virtual qint64 bytesAvailable() const override;
+    /// Returns file size.
+    /** Returns uncompressed size if the file is open for reading.
+     * Returns number of uncompressed bytes written if it is open for writing.
+     * Returns compressed size if isRaw().
+     * Returns -1 on error, call getZipError() to get error code.
+     * \sa uncompressedSize(), compressedSize()
+     **/
+    virtual qint64 size() const override;
+    /// Returns compressed file size.
+    /**
+     * \note When open for reading returns compressed size stored in archive.
+     * \note When open for writing returns how much compressed bytes
+     * was written in archive so far
+     * Returns -1 on error, call getZipError() to get error code.
+     **/
+    qint64 compressedSize() const;
+    /// Returns uncompressed file size.
+    /**
+     * \note When open for reading returns uncompressed size stored in archive.
+     * \noteWhen open for writing returns how much original data
+     * was compressed so far
+     * Returns -1 on error, call getZipError() to get error code.
+     **/
+    qint64 uncompressedSize() const;
+
+    /// Returns the time when original file was created
+    QDateTime creationTime() const;
+    /// Set the time when original file was created
+    /// \note Will be overwritten when open for reading
+    void setCreationTime(const QDateTime &time);
+
+    /// Returns the last time when original file was modified
+    QDateTime modificationTime() const;
+    /// Set the last time when original file was modified
+    /// \note Will be overwritten when open for reading
+    void setModificationTime(const QDateTime &time);
+
+    /// Returns the last time when original file was accessed
+    QDateTime lastAccessTime() const;
+    /// Set the last time when original file was accessed
+    /// \note Will be overwritten when open for reading
+    void setLastAccessTime(const QDateTime &time);
+
     /// Closes the file.
     /** Call getZipError() to determine if the close was successful.
      **/
-    virtual void close();
+    virtual void close() override;
+
     /// Returns the error code returned by the last ZIP/UNZIP API call.
     int getZipError() const;
+
+    const QString &comment() const;
+    void setComment(const QString &comment);
+
+    const QuaZExtraField::Map &extraFields() const;
+    void setExtraFields(const QuaZExtraField::Map &map);
 };
 
 #endif

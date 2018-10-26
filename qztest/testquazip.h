@@ -42,7 +42,7 @@ private slots:
     void setFileNameCodec();
     void setDataDescriptorWritingEnabled();
     void testQIODeviceAPI();
-    void setZipName();
+    void setZipFilePath();
     void setIoDevice();
     void setCommentCodec();
     void setAutoClose();

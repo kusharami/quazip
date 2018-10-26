@@ -26,7 +26,8 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "quazip_global.h"
 
-class QuaZIODeviceUtils {
+class QString;
+class QuaZUtils {
 public:
     /// Returns max block size for zlib io operation
     template<typename T>
@@ -45,4 +46,6 @@ public:
             blockSize = T(count);
         }
     }
+
+    static bool isAscii(const QString &text);
 };

@@ -25,11 +25,13 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #pragma once
 
 #include "quaziodevice.h"
+#include "quazextrafield.h"
 
 #include <QMap>
 #include <ctime>
 
 class QuaGzipDevicePrivate;
+class QTextCodec;
 
 /// A class to compress/decompress Gzip file data.
 /**
@@ -67,29 +69,63 @@ public:
     static int maxCommentLength();
 
     /// Returns true if Gz header acquired to access
-    /// stored file name, comment, modification time and extra fields
+    /// stored file name, comment, modification time and extra fields.
     /// Always true in write mode.
     bool headerIsProcessed() const;
 
+    /// What codec is used to convert stored original file name.
+    /// Default is based on locale.
+    QTextCodec *fileNameCodec() const;
+    /// Set what codec is used to convert original file name.
+    /**
+      \param codec Unicode text conversion codec. Cannot be null.
+    */
+    void setFileNameCodec(QTextCodec *codec);
+    /// Set what codec is used to convert original file name.
+    /**
+      \param codecName Valid unicode text conversion codec name
+    */
+    void setFileNameCodec(const char *codecName);
+
+    /// What codec is used to convert stored comment.
+    /// Default is based on locale.
+    QTextCodec *commentCodec() const;
+    /// Set what codec is used to convert comment.
+    /**
+      \param codec Unicode text conversion codec. Cannot be null.
+    */
+    void setCommentCodec(QTextCodec *codec);
+    /// Set what codec is used to convert comment.
+    /**
+      \param codecName Valid unicode text conversion codec name
+    */
+    void setCommentCodec(const char *codecName);
+
+    /// Sets original file name provided by getIODevice() if it is QFileDevice.
+    /// Does nothing if original file name is already set.
+    void restoreOriginalFileName();
+
     /// Stored original file name in a compressed device.
     /// When reading, check headerIsProcessed() first.
-    QByteArray originalFileName() const;
+    QString originalFileName() const;
     /// Original file name to store in a compressed device
     /**
-      \param fileName The file name in Latin1 encoding.
-        Generates error if longer than maxFileNameLength()
+      \param fileName The original file name.
+        Converted to multibyte string with fileNameCodec().
+        Generates error if cannot be encoded or longer than maxFileNameLength().
      */
-    void setOriginalFileName(const QByteArray &fileName);
+    void setOriginalFileName(const QString &fileName);
 
     /// Stored comment in a compressed device.
     /// When reading, check headerIsProcessed() first.
-    QByteArray comment() const;
+    QString comment() const;
     /// Comment to store in a compressed device
     /**
-      \param text Commentary in Latin1 encoding.
-        Generates error if longer than maxCommentLength()
+      \param text Custom commentary text.
+        Converted to multibyte string with commentCodec().
+        Generates error if cannot be encoded or longer than maxCommentLength().
      */
-    void setComment(const QByteArray &text);
+    void setComment(const QString &text);
 
     /// Stored modification time in a compressed device.
     /// When reading, check headerIsProcessed() first.
@@ -101,112 +137,16 @@ public:
      */
     void setModificationTime(time_t time);
 
-    struct ExtraFieldKey {
-        char key[2];
-
-        inline ExtraFieldKey();
-        inline ExtraFieldKey(std::initializer_list<char> init);
-        inline ExtraFieldKey(const char *si);
-        inline ExtraFieldKey(char si1, char si2);
-        inline ExtraFieldKey(const ExtraFieldKey &other);
-
-        inline ExtraFieldKey &operator=(const ExtraFieldKey &other);
-
-        inline bool operator==(const ExtraFieldKey &other) const;
-        inline bool operator!=(const ExtraFieldKey &other) const;
-        inline bool operator<(const ExtraFieldKey &other) const;
-        inline bool operator>(const ExtraFieldKey &other) const;
-        inline bool operator<=(const ExtraFieldKey &other) const;
-        inline bool operator>=(const ExtraFieldKey &other) const;
-
-        inline quint16 value() const;
-    };
-
-    /// Maps field values with 2-characters key
-    using ExtraFieldMap = QMap<ExtraFieldKey, QByteArray>;
-
     /// Stored extra fields in a compressed device.
     /// When reading, check headerIsProcessed() first.
-    ExtraFieldMap extraFields() const;
+    QuaZExtraField::Map extraFields() const;
     /// Extra fields to store in a compressed device
     /**
       \param map Map of fields and values.
         Generates error if extra fields is too big.
      */
-    void setExtraFields(const ExtraFieldMap &map);
+    void setExtraFields(const QuaZExtraField::Map &map);
 
 private:
     inline QuaGzipDevicePrivate *d() const;
 };
-
-QuaGzipDevice::ExtraFieldKey::ExtraFieldKey()
-{
-    key[0] = 0;
-    key[1] = 0;
-}
-
-QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(std::initializer_list<char> init)
-{
-    key[0] = (init.size() > 0) ? *init.begin() : char(0);
-    key[1] = (init.size() > 1) ? *(init.begin() + 1) : char(0);
-}
-
-QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(const char *si)
-{
-    key[0] = si ? si[0] : char(0);
-    key[1] = (si[0] == 0) ? char(0) : si[1];
-}
-
-QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(char si1, char si2)
-{
-    key[0] = si1;
-    key[1] = si2;
-}
-
-QuaGzipDevice::ExtraFieldKey::ExtraFieldKey(const ExtraFieldKey &other)
-{
-    operator=(other);
-}
-
-QuaGzipDevice::ExtraFieldKey &QuaGzipDevice::ExtraFieldKey::operator=(
-    const ExtraFieldKey &other)
-{
-    key[0] = other.key[0];
-    key[1] = other.key[1];
-    return *this;
-}
-
-bool QuaGzipDevice::ExtraFieldKey::operator==(const ExtraFieldKey &other) const
-{
-    return value() == other.value();
-}
-
-bool QuaGzipDevice::ExtraFieldKey::operator!=(const ExtraFieldKey &other) const
-{
-    return !operator==(other);
-}
-
-bool QuaGzipDevice::ExtraFieldKey::operator<(const ExtraFieldKey &other) const
-{
-    return value() < other.value();
-}
-
-bool QuaGzipDevice::ExtraFieldKey::operator>(const ExtraFieldKey &other) const
-{
-    return value() > other.value();
-}
-
-bool QuaGzipDevice::ExtraFieldKey::operator<=(const ExtraFieldKey &other) const
-{
-    return value() <= other.value();
-}
-
-bool QuaGzipDevice::ExtraFieldKey::operator>=(const ExtraFieldKey &other) const
-{
-    return value() >= other.value();
-}
-
-quint16 QuaGzipDevice::ExtraFieldKey::value() const
-{
-    return quint16((key[1] << 8) | key[0]);
-}

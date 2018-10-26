@@ -33,6 +33,11 @@ QuaCrc32::QuaCrc32()
     reset();
 }
 
+QuaCrc32::QuaCrc32(quint32 value)
+{
+    setValue(value);
+}
+
 quint32 QuaCrc32::calculate(const QByteArray &data)
 {
     return crc32(
@@ -41,15 +46,10 @@ quint32 QuaCrc32::calculate(const QByteArray &data)
 
 void QuaCrc32::reset()
 {
-    checksum = crc32(0L, Z_NULL, 0);
+    setValue(crc32(0L, Z_NULL, 0));
 }
 
 void QuaCrc32::update(const QByteArray &buf)
 {
-    checksum = crc32(checksum, (const Bytef *) buf.data(), buf.size());
-}
-
-quint32 QuaCrc32::value()
-{
-    return checksum;
+    setValue(crc32(value(), (const Bytef *) buf.data(), buf.size()));
 }

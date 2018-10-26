@@ -25,7 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "quaziodevice.h"
 
-#include "quaziodevice_utils.h"
+#include "quazutils.h"
 #include "private/quaziodeviceprivate.h"
 
 QuaZIODevice::QuaZIODevice(QuaZIODevicePrivate *p, QObject *parent)
@@ -69,19 +69,8 @@ bool QuaZIODevice::open(OpenMode mode)
         return false;
     }
 
-    if (mode & Append) {
-        d->setError("Append is not supported for zlib compressed device.");
-        return false;
-    }
-
     if (mode & (WriteOnly | Truncate)) {
         mode |= WriteOnly | Truncate;
-    }
-
-    if ((mode & ReadWrite) == ReadWrite) {
-        d->setError(
-            "Zlib device should be opened in read-only or write-only mode.");
-        return false;
     }
 
     mode |= Unbuffered;
@@ -89,6 +78,17 @@ bool QuaZIODevice::open(OpenMode mode)
     if (isOpen()) {
         qWarning("QuaZIODevice is already open");
         Q_ASSERT(mode == openMode());
+        return false;
+    }
+
+    if (mode & Append) {
+        d->setError("Append is not supported for zlib compressed device.");
+        return false;
+    }
+
+    if ((mode & ReadWrite) == ReadWrite) {
+        d->setError(
+            "Zlib device should be opened in read-only or write-only mode.");
         return false;
     }
 
@@ -274,6 +274,16 @@ bool QuaZIODevice::hasError() const
 void QuaZIODevice::setCompressionLevel(int level)
 {
     d->setCompressionLevel(level);
+}
+
+int QuaZIODevice::compressionStrategy() const
+{
+    return d->strategy;
+}
+
+void QuaZIODevice::setCompressionStrategy(int value)
+{
+    d->setStrategy(value);
 }
 
 int QuaZIODevice::compressionLevel() const

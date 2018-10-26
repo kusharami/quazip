@@ -24,153 +24,1137 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "quazipfileinfo.h"
 
-static QFile::Permissions permissionsFromExternalAttr(quint32 externalAttr) {
-    quint32 uPerm = (externalAttr & 0xFFFF0000u) >> 16;
-    QFile::Permissions perm = 0;
-    if ((uPerm & 0400) != 0)
-        perm |= QFile::ReadOwner;
-    if ((uPerm & 0200) != 0)
-        perm |= QFile::WriteOwner;
-    if ((uPerm & 0100) != 0)
-        perm |= QFile::ExeOwner;
-    if ((uPerm & 0040) != 0)
-        perm |= QFile::ReadGroup;
-    if ((uPerm & 0020) != 0)
-        perm |= QFile::WriteGroup;
-    if ((uPerm & 0010) != 0)
-        perm |= QFile::ExeGroup;
-    if ((uPerm & 0004) != 0)
-        perm |= QFile::ReadOther;
-    if ((uPerm & 0002) != 0)
-        perm |= QFile::WriteOther;
-    if ((uPerm & 0001) != 0)
-        perm |= QFile::ExeOther;
-    return perm;
+#include <QDataStream>
+#include <QDir>
 
+#include <zlib.h>
+
+enum
+{
+    UNX_IFMT = 0170000,
+    UNX_IFREG = 0100000,
+    UNX_IFLNK = 0120000,
+    UNX_IFDIR = 0040000,
+    UNX_IALL = 00777,
+    UNX_IRUSR = 00400, /* Unix read permission: owner */
+    UNX_IWUSR = 00200, /* Unix write permission: owner */
+    UNX_IXUSR = 00100, /* Unix execute permission: owner */
+    UNX_IRGRP = 00040, /* Unix read permission: group */
+    UNX_IWGRP = 00020, /* Unix write permission: group */
+    UNX_IXGRP = 00010, /* Unix execute permission: group */
+    UNX_IROTH = 00004, /* Unix read permission: other */
+    UNX_IWOTH = 00002, /* Unix write permission: other */
+    UNX_IXOTH = 00001, /* Unix execute permission: other */
+
+    AMI_IFMT = 06000, /* Amiga file type mask */
+    AMI_IFDIR = 04000, /* Amiga directory */
+    AMI_IFREG = 02000, /* Amiga regular file */
+    AMI_IHIDDEN = 00200, /* to be supported in AmigaDOS 3.x */
+    AMI_ISCRIPT = 00100, /* executable script (text command file) */
+    AMI_IPURE = 00040, /* allow loading into resident memory */
+    AMI_IARCHIVE = 00020, /* not modified since bit was last set */
+    AMI_IREAD = 00010, /* can be opened for reading */
+    AMI_IWRITE = 00004, /* can be opened for writing */
+    AMI_IEXECUTE = 00002, /* executable image, a loadable runfile */
+    AMI_IDELETE = 00001, /* can be deleted */
+    AMI_IALL = AMI_IREAD | AMI_IWRITE | AMI_IEXECUTE | AMI_IDELETE,
+
+    THS_IFMT = 0xF000,
+    THS_IFDIR = 0x4000,
+    THS_IFREG = 0x8000,
+    THS_IMODF = 0x0800, /* modified */
+    THS_INHID = 0x0400, /* not hidden */
+    THS_IALL = 0x03FF,
+    THS_IEUSR = 0x0200, /* erase permission: owner */
+    THS_IRUSR = 0x0100, /* read permission: owner */
+    THS_IWUSR = 0x0080, /* write permission: owner */
+    THS_IXUSR = 0x0040, /* execute permission: owner */
+    THS_IROTH = 0x0004, /* read permission: other */
+    THS_IWOTH = 0x0002, /* write permission: other */
+    THS_IXOTH = 0x0001, /* execute permission: other */
+
+    RAW_FLAG = 1 << 0,
+};
+
+struct QuaZipFileInfo::Private : public QSharedData {
+    quint32 crc;
+    quint32 externalAttributes;
+    quint16 internalAttributes;
+    quint16 flags;
+    quint8 zipVersionMadeBy;
+    ZipSystem zipSystem;
+    ZipOptions zipOptions;
+    quint16 compressionMethod;
+    quint16 compressionStrategy;
+    quint16 zipVersionNeeded;
+    int diskNumber;
+    qint64 uncompressedSize;
+    qint64 compressedSize;
+    QDateTime createTime;
+    QDateTime modifyTime;
+    QDateTime accessTime;
+    QString filePath;
+    QString comment;
+    QuaZExtraField::Map centralExtraFields;
+    QuaZExtraField::Map localExtraFields;
+    QuaZipKeysGenerator::Keys cryptKeys;
+
+    Private();
+    Private(const Private &other);
+
+    bool equals(const Private &other) const;
+    static inline bool isSymlinkHost(int host);
+};
+
+QuaZipFileInfo::QuaZipFileInfo()
+    : d(new Private)
+{
 }
 
-QFile::Permissions QuaZipFileInfo::getPermissions() const
+QuaZipFileInfo::QuaZipFileInfo(const QuaZipFileInfo &other)
 {
-    return permissionsFromExternalAttr(externalAttr);
+    operator=(other);
 }
 
-QFile::Permissions QuaZipFileInfo64::getPermissions() const
+QuaZipFileInfo::~QuaZipFileInfo()
 {
-    return permissionsFromExternalAttr(externalAttr);
+    // here is private data destroyed
 }
 
-bool QuaZipFileInfo64::toQuaZipFileInfo(QuaZipFileInfo &info) const
+QuaZipFileInfo::EntryType QuaZipFileInfo::entryType() const
 {
-    bool noOverflow = true;
-    info.name = name;
-    info.versionCreated = versionCreated;
-    info.versionNeeded = versionNeeded;
-    info.flags = flags;
-    info.method = method;
-    info.dateTime = dateTime;
-    info.crc = crc;
-    if (compressedSize > 0xFFFFFFFFu) {
-        info.compressedSize = 0xFFFFFFFFu;
-        noOverflow = false;
-    } else {
-        info.compressedSize = compressedSize;
+    if (d->filePath.endsWith('/'))
+        return Directory;
+
+    int uAttr = int(d->externalAttributes) >> 16;
+
+    switch (d->zipSystem) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+        if (uAttr & QuaZipFileInfo::DirAttr)
+            return QuaZipFileInfo::Directory;
+        break;
+
+    case OS_AMIGA:
+        if (AMI_IFDIR == (uAttr & AMI_IFMT)) {
+            return QuaZipFileInfo::Directory;
+        }
+        break;
+
+    case OS_THEOS:
+        if (THS_IFDIR == (uAttr & THS_IFMT)) {
+            return QuaZipFileInfo::Directory;
+        }
+        break;
+
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_MACOSX:
+    case OS_UNIX:
+        switch (uAttr & UNX_IFMT) {
+        case UNX_IFDIR:
+            return Directory;
+
+        case UNX_IFLNK:
+            if (Private::isSymlinkHost(d->zipSystem))
+                return SymLink;
+            break;
+        }
+        break;
     }
-    if (uncompressedSize > 0xFFFFFFFFu) {
-        info.uncompressedSize = 0xFFFFFFFFu;
-        noOverflow = false;
-    } else {
-        info.uncompressedSize = uncompressedSize;
-    }
-    info.diskNumberStart = diskNumberStart;
-    info.internalAttr = internalAttr;
-    info.externalAttr = externalAttr;
-    info.comment = comment;
-    info.extra = extra;
-    return noOverflow;
+
+    return File;
 }
 
-static QDateTime getNTFSTime(const QByteArray &extra, int position,
-                             int *fineTicks)
+void QuaZipFileInfo::setEntryType(EntryType value)
 {
-    QDateTime dateTime;
-    for (int i = 0; i <= extra.size() - 4; ) {
-        unsigned type = static_cast<unsigned>(static_cast<unsigned char>(
-                                                  extra.at(i)))
-                | (static_cast<unsigned>(static_cast<unsigned char>(
-                                                  extra.at(i + 1))) << 8);
-        i += 2;
-        unsigned length = static_cast<unsigned>(static_cast<unsigned char>(
-                                                  extra.at(i)))
-                | (static_cast<unsigned>(static_cast<unsigned char>(
-                                                  extra.at(i + 1))) << 8);
-        i += 2;
-        if (type == QUAZIP_EXTRA_NTFS_MAGIC && length >= 32) {
-            i += 4; // reserved
-            while (i <= extra.size() - 4) {
-                unsigned tag = static_cast<unsigned>(
-                            static_cast<unsigned char>(extra.at(i)))
-                        | (static_cast<unsigned>(
-                               static_cast<unsigned char>(extra.at(i + 1)))
-                           << 8);
-                i += 2;
-                int tagsize = static_cast<unsigned>(
-                            static_cast<unsigned char>(extra.at(i)))
-                        | (static_cast<unsigned>(
-                               static_cast<unsigned char>(extra.at(i + 1)))
-                           << 8);
-                i += 2;
-                if (tag == QUAZIP_EXTRA_NTFS_TIME_MAGIC
-                        && tagsize >= position + 8) {
-                    i += position;
-                    quint64 mtime = static_cast<quint64>(
-                                static_cast<unsigned char>(extra.at(i)))
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 1))) << 8)
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 2))) << 16)
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 3))) << 24)
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 4))) << 32)
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 5))) << 40)
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 6))) << 48)
-                        | (static_cast<quint64>(static_cast<unsigned char>(
-                                                 extra.at(i + 7))) << 56);
-                    // the NTFS time is measured from 1601 for whatever reason
-                    QDateTime base(QDate(1601, 1, 1), QTime(0, 0), Qt::UTC);
-                    dateTime = base.addMSecs(mtime / 10000);
-                    if (fineTicks != NULL) {
-                        *fineTicks = static_cast<int>(mtime % 10000);
-                    }
-                    i += tagsize - position;
-                } else {
-                    i += tagsize;
-                }
+    if (entryType() == value)
+        return;
 
+    int uAttr = int(d->externalAttributes) >> 16;
+
+    switch (value) {
+    case File:
+        d->externalAttributes &= ~DirAttr;
+        switch (d->zipSystem) {
+        case OS_VMCMS:
+        case OS_ACORN:
+        case OS_MSDOS:
+        case OS_WINDOWS_NTFS:
+        case OS_WINDOWS_VFAT:
+        case OS_OS2HPFS:
+        case OS_MVS:
+            break;
+
+        case OS_QDOS:
+        case OS_OPENVMS:
+        case OS_ZSYSTEM:
+        case OS_CPM:
+        case OS_TANDEM:
+        case OS_ATARI:
+        case OS_BEOS:
+        case OS_TOPS20:
+        case OS_MACINTOSH:
+        case OS_UNIX:
+        case OS_MACOSX:
+            uAttr &= ~UNX_IFMT;
+            uAttr |= UNX_IFREG;
+            break;
+
+        case OS_AMIGA:
+            uAttr &= ~AMI_IFMT;
+            uAttr |= AMI_IFREG;
+            break;
+
+        case OS_THEOS:
+            uAttr &= ~THS_IFMT;
+            uAttr |= THS_IFREG;
+            break;
+        }
+        break;
+
+    case Directory:
+        d->externalAttributes |= DirAttr;
+        switch (d->zipSystem) {
+        case OS_MSDOS:
+        case OS_WINDOWS_NTFS:
+        case OS_WINDOWS_VFAT:
+        case OS_OS2HPFS:
+        case OS_MVS:
+        case OS_VMCMS:
+        case OS_ACORN:
+            break;
+
+        case OS_QDOS:
+        case OS_OPENVMS:
+        case OS_ZSYSTEM:
+        case OS_CPM:
+        case OS_TANDEM:
+        case OS_ATARI:
+        case OS_BEOS:
+        case OS_TOPS20:
+        case OS_MACINTOSH:
+        case OS_UNIX:
+        case OS_MACOSX:
+            uAttr &= ~UNX_IFMT;
+            uAttr |= UNX_IFDIR;
+            break;
+
+        case OS_AMIGA:
+            uAttr &= ~AMI_IFMT;
+            uAttr |= AMI_IFDIR;
+            break;
+
+        case OS_THEOS:
+            uAttr &= ~THS_IFMT;
+            uAttr |= THS_IFDIR;
+            break;
+        }
+        break;
+
+    case SymLink: {
+        auto perm = permissions();
+        d->zipSystem = OS_UNIX;
+        setPermissions(perm);
+        uAttr = d->externalAttributes >> 16;
+
+        d->externalAttributes &= ~DirAttr;
+
+        uAttr &= UNX_IFMT;
+        uAttr |= UNX_IFLNK;
+        break;
+    }
+    }
+
+    d->externalAttributes &= 0xFFFF;
+    d->externalAttributes |= uAttr << 16;
+}
+
+const QString &QuaZipFileInfo::filePath() const
+{
+    return d->filePath;
+}
+
+void QuaZipFileInfo::setFilePath(const QString &filePath)
+{
+    auto normalizedFilePath = QDir::cleanPath(filePath);
+    if (normalizedFilePath.startsWith('/')) {
+        normalizedFilePath = normalizedFilePath.mid(1);
+    }
+
+    if (filePath == normalizedFilePath)
+        return;
+
+    d->filePath = normalizedFilePath;
+
+    auto attr = attributes();
+    attr.setFlag(DirAttr, normalizedFilePath.endsWith('/'));
+    setAttributes(attr);
+}
+
+const QDateTime &QuaZipFileInfo::creationTime() const
+{
+    return d->createTime;
+}
+
+void QuaZipFileInfo::setCreationTime(const QDateTime &time)
+{
+    if (creationTime() == time)
+        return;
+
+    d->createTime = time;
+}
+
+const QDateTime &QuaZipFileInfo::modificationTime() const
+{
+    return d->modifyTime;
+}
+
+void QuaZipFileInfo::setModificationTime(const QDateTime &time)
+{
+    if (modificationTime() == time)
+        return;
+
+    d->modifyTime = time;
+}
+
+const QDateTime &QuaZipFileInfo::lastAccessTime() const
+{
+    return d->accessTime;
+}
+
+void QuaZipFileInfo::setLastAccessTime(const QDateTime &time)
+{
+    if (lastAccessTime() == time)
+        return;
+
+    d->accessTime = time;
+}
+
+qint64 QuaZipFileInfo::uncompressedSize() const
+{
+    return d->uncompressedSize;
+}
+
+void QuaZipFileInfo::setUncompressedSize(qint64 size)
+{
+    if (uncompressedSize() == size)
+        return;
+
+    d->uncompressedSize = size;
+}
+
+qint64 QuaZipFileInfo::compressedSize() const
+{
+    return d->compressedSize;
+}
+
+void QuaZipFileInfo::setCompressedSize(qint64 size)
+{
+    if (compressedSize() == size)
+        return;
+
+    d->compressedSize = size;
+}
+
+quint32 QuaZipFileInfo::crc() const
+{
+    return d->crc;
+}
+
+void QuaZipFileInfo::setCrc(quint32 value)
+{
+    if (crc() == value)
+        return;
+
+    d->crc = value;
+}
+
+const QString &QuaZipFileInfo::comment() const
+{
+    return d->comment;
+}
+
+void QuaZipFileInfo::setComment(const QString &value)
+{
+    d->comment = value;
+}
+
+void QuaZipFileInfo::setPassword(QByteArray *value)
+{
+    if (value == nullptr || value->isNull()) {
+        d->zipOptions &= ~Encryption;
+        return;
+    }
+
+    QuaZipKeysGenerator keyGen;
+    keyGen.addPassword(*value);
+    setCryptKeys(keyGen.keys());
+}
+
+quint16 QuaZipFileInfo::madeBy() const
+{
+    return quint16((quint8(d->zipSystem) << 8) | d->zipVersionMadeBy);
+}
+
+void QuaZipFileInfo::setMadeBy(quint16 value)
+{
+    if (madeBy() == value)
+        return;
+
+    d->zipVersionMadeBy = quint8(value);
+    d->zipSystem = ZipSystem(value >> 8);
+}
+
+quint16 QuaZipFileInfo::zipVersionNeeded() const
+{
+    return d->zipVersionNeeded;
+}
+
+void QuaZipFileInfo::setZipVersionNeeded(quint16 value)
+{
+    if (zipVersionNeeded() == value)
+        return;
+
+    d->zipVersionNeeded = value;
+}
+
+QuaZipFileInfo::ZipSystem QuaZipFileInfo::systemMadeBy() const
+{
+    return d->zipSystem;
+}
+
+void QuaZipFileInfo::setSystemMadeBy(ZipSystem value)
+{
+    if (systemMadeBy() == value)
+        return;
+
+    d->zipSystem = value;
+}
+
+quint8 QuaZipFileInfo::zipVersionMadeBy() const
+{
+    return d->zipVersionMadeBy;
+}
+
+void QuaZipFileInfo::setZipVersionMadeBy(quint8 spec)
+{
+    if (zipVersionMadeBy() == spec)
+        return;
+
+    d->zipVersionMadeBy = spec;
+}
+
+quint16 QuaZipFileInfo::internalAttributes()
+{
+    return d->internalAttributes;
+}
+
+void QuaZipFileInfo::setInternalAttributes(quint16 value)
+{
+    if (internalAttributes() == value)
+        return;
+
+    d->internalAttributes = value;
+}
+
+quint32 QuaZipFileInfo::externalAttributes()
+{
+    return d->externalAttributes;
+}
+
+void QuaZipFileInfo::setExternalAttributes(quint32 value)
+{
+    if (externalAttributes() == value)
+        return;
+
+    d->externalAttributes = value;
+
+    if (attributes() & DirAttr) {
+        if (!d->filePath.isEmpty() && !d->filePath.endsWith('/'))
+            d->filePath += '/';
+    }
+}
+
+bool QuaZipFileInfo::isEncrypted() const
+{
+    return d->zipOptions.testFlag(Encryption);
+}
+
+void QuaZipFileInfo::setIsEncrypted(bool value)
+{
+    if (isEncrypted() == value)
+        return;
+
+    d->zipOptions.setFlag(Encryption, value);
+}
+
+const QuaZipKeysGenerator::Keys &QuaZipFileInfo::cryptKeys() const
+{
+    return d->cryptKeys;
+}
+
+void QuaZipFileInfo::setCryptKeys(const QuaZipKeysGenerator::Keys &keys)
+{
+    memcpy(d->cryptKeys, keys, sizeof(QuaZipKeysGenerator::Keys));
+    d->zipOptions |= Encryption;
+}
+
+quint16 QuaZipFileInfo::compressionMethod() const
+{
+    return d->compressionMethod;
+}
+
+void QuaZipFileInfo::setCompressionMethod(quint16 method)
+{
+    if (compressionMethod() == method)
+        return;
+
+    d->compressionMethod = method;
+}
+
+quint16 QuaZipFileInfo::compressionStrategy() const
+{
+    return d->compressionStrategy;
+}
+
+void QuaZipFileInfo::setCompressionStrategy(quint16 value)
+{
+    if (compressionStrategy() == value)
+        return;
+
+    d->compressionStrategy = value;
+}
+
+int QuaZipFileInfo::compressionLevel() const
+{
+    switch (d->compressionMethod) {
+    case Z_DEFLATED:
+        switch (d->zipOptions & CompressionFlags) {
+        case NormalCompression:
+            return Z_DEFAULT_COMPRESSION;
+
+        case MaximumCompression:
+            return Z_BEST_COMPRESSION;
+
+        case FastCompression:
+            return Z_BEST_SPEED + 2;
+
+        case SuperFastCompression:
+            return Z_BEST_SPEED;
+        }
+        break;
+
+    case Z_NO_COMPRESSION:
+        return Z_NO_COMPRESSION;
+    }
+
+    return Z_DEFAULT_COMPRESSION;
+}
+
+void QuaZipFileInfo::setCompressionLevel(int level)
+{
+    if (compressionLevel() == level)
+        return;
+
+    d->zipOptions &= ~CompressionFlags;
+    switch (level) {
+    case Z_NO_COMPRESSION:
+        d->compressionMethod = Z_NO_COMPRESSION;
+        break;
+
+    case Z_BEST_SPEED:
+        d->compressionMethod = Z_DEFLATED;
+        d->zipOptions |= SuperFastCompression;
+        break;
+
+    case Z_BEST_COMPRESSION:
+        d->compressionMethod = Z_DEFLATED;
+        d->zipOptions |= MaximumCompression;
+        break;
+
+    default:
+        d->compressionMethod = Z_DEFLATED;
+        if (level >= Z_BEST_COMPRESSION) {
+            d->zipOptions |= MaximumCompression;
+        } else if (level > 0 && level < 5) {
+            d->zipOptions |= FastCompression;
+        }
+        break;
+    }
+}
+
+QuaZipFileInfo::ZipOptions QuaZipFileInfo::zipOptions() const
+{
+    return d->zipOptions;
+}
+
+void QuaZipFileInfo::setZipOptions(ZipOptions options)
+{
+    if (zipOptions() == options)
+        return;
+
+    d->zipOptions = options;
+}
+
+bool QuaZipFileInfo::isRaw() const
+{
+    switch (d->compressionMethod) {
+    case Z_DEFLATED:
+    case Z_NO_COMPRESSION:
+        return d->flags & RAW_FLAG;
+    }
+
+    return true;
+}
+
+void QuaZipFileInfo::setIsRaw(bool value)
+{
+    if (isRaw() == value)
+        return;
+
+    if (value)
+        d->flags |= RAW_FLAG;
+    else
+        d->flags &= ~RAW_FLAG;
+}
+
+bool QuaZipFileInfo::isText() const
+{
+    return 0 != (d->internalAttributes & Text);
+}
+
+void QuaZipFileInfo::setIsText(bool value)
+{
+    if (isText() == value)
+        return;
+
+    if (value)
+        d->internalAttributes |= Text;
+    else
+        d->internalAttributes &= ~Text;
+}
+
+const QuaZExtraField::Map &QuaZipFileInfo::centralExtraFields() const
+{
+    return d->centralExtraFields;
+}
+
+void QuaZipFileInfo::setCentralExtraFields(const QuaZExtraField::Map &map)
+{
+    d->centralExtraFields = map;
+}
+
+const QuaZExtraField::Map &QuaZipFileInfo::localExtraFields() const
+{
+    return d->localExtraFields;
+}
+
+void QuaZipFileInfo::setLocalExtraFields(const QuaZExtraField::Map &map)
+{
+    d->localExtraFields = map;
+}
+
+QFile::Permissions QuaZipFileInfo::permissions() const
+{
+    QFile::Permissions permissions;
+    int uAttr = int(d->externalAttributes) >> 16;
+
+    switch (d->zipSystem) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+        permissions = QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup |
+            QFile::ReadOther;
+        if (0 == (d->externalAttributes & QuaZipFileInfo::ReadOnly)) {
+            permissions |= QFile::WriteOwner | QFile::WriteUser;
+        }
+        break;
+
+    case OS_AMIGA:
+        if (uAttr & (AMI_IREAD))
+            permissions |= QFile::ReadUser | QFile::ReadOwner |
+                QFile::ReadOther | QFile::ReadGroup;
+
+        if (uAttr & (AMI_IWRITE | AMI_IDELETE))
+            permissions |= QFile::WriteUser | QFile::WriteOwner;
+
+        if (uAttr & AMI_IEXECUTE)
+            permissions |= QFile::ExeUser | QFile::ExeOwner;
+
+        break;
+
+    case OS_THEOS:
+        if (uAttr & (THS_IRUSR))
+            permissions |=
+                QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup;
+
+        if (uAttr & (THS_IEUSR | THS_IWUSR))
+            permissions |= QFile::WriteUser | QFile::WriteOwner;
+
+        if (uAttr & THS_IXUSR)
+            permissions |= QFile::ExeUser | QFile::ExeOwner;
+
+        if (uAttr & THS_IROTH)
+            permissions |= QFile::ReadOther;
+
+        if (uAttr & THS_IWOTH)
+            permissions |= QFile::WriteOther;
+
+        if (uAttr & THS_IXOTH)
+            permissions |= QFile::ExeOther;
+
+        break;
+
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_MACOSX:
+    case OS_UNIX:
+        if (uAttr & UNX_IRUSR)
+            permissions |= QFile::ReadUser | QFile::ReadOwner;
+
+        if (uAttr & UNX_IWUSR)
+            permissions |= QFile::WriteUser | QFile::WriteOwner;
+
+        if (uAttr & UNX_IXUSR)
+            permissions |= QFile::ExeUser | QFile::ExeOwner;
+
+        if (uAttr & UNX_IRGRP)
+            permissions |= QFile::ReadGroup;
+
+        if (uAttr & UNX_IWGRP)
+            permissions |= QFile::WriteGroup;
+
+        if (uAttr & UNX_IXGRP)
+            permissions |= QFile::ExeGroup;
+
+        if (uAttr & UNX_IROTH)
+            permissions |= QFile::ReadOther;
+
+        if (uAttr & UNX_IWOTH)
+            permissions |= QFile::WriteOther;
+
+        if (uAttr & UNX_IXOTH)
+            permissions |= QFile::ExeOther;
+
+        break;
+    }
+
+    return permissions;
+}
+
+void QuaZipFileInfo::setPermissions(QFile::Permissions value)
+{
+    if (permissions() == value)
+        return;
+
+    int uAttr = int(d->externalAttributes) >> 16;
+
+    switch (d->zipSystem) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN: {
+        auto testPerm = value;
+        if (testPerm & (QFile::ReadUser | QFile::ReadOwner)) {
+            testPerm.setFlag(QFile::ReadOwner, false);
+            testPerm.setFlag(QFile::ReadUser, true);
+        }
+
+        if (testPerm & (QFile::WriteUser | QFile::WriteOwner)) {
+            testPerm.setFlag(QFile::WriteOwner, false);
+            testPerm.setFlag(QFile::WriteUser, true);
+        }
+
+        Q_CONSTEXPR auto allRead =
+            QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
+        Q_CONSTEXPR auto allWrite = QFile::WriteUser;
+
+        if (testPerm == allRead || testPerm == (allRead | allWrite)) {
+            if (testPerm & allWrite) {
+                d->externalAttributes &= ~ReadOnly;
+            } else {
+                d->externalAttributes |= ReadOnly;
+            }
+            break;
+        } else {
+            uAttr &= ~UNX_IFMT;
+            switch (entryType()) {
+            case Directory:
+                uAttr |= UNX_IFDIR;
+                break;
+
+            case File:
+                uAttr |= UNX_IFREG;
+                break;
+
+            case SymLink:
+                uAttr |= UNX_IFLNK;
+                break;
+            }
+            d->zipSystem = OS_UNIX;
+        }
+        Q_FALLTHROUGH();
+    }
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_MACOSX:
+    case OS_UNIX:
+        uAttr &= ~UNX_IALL;
+        if (value & (QFile::ReadUser | QFile::ReadOwner))
+            uAttr |= UNX_IRUSR;
+
+        if (value & (QFile::WriteUser | QFile::WriteOwner))
+            uAttr |= UNX_IWUSR;
+
+        if (value & (QFile::ExeUser | QFile::ExeOwner))
+            uAttr |= UNX_IXUSR;
+
+        if (value & QFile::ReadGroup)
+            uAttr |= UNX_IRGRP;
+
+        if (value & QFile::WriteGroup)
+            uAttr |= UNX_IWGRP;
+
+        if (value & QFile::ExeGroup)
+            uAttr |= UNX_IXGRP;
+
+        if (value & QFile::ReadOther)
+            uAttr |= UNX_IROTH;
+
+        if (value & QFile::WriteOther)
+            uAttr |= UNX_IWOTH;
+
+        if (value & QFile::ExeOther)
+            uAttr |= UNX_IXOTH;
+
+        break;
+
+    case OS_AMIGA:
+        uAttr &= ~AMI_IALL;
+        if (value & (QFile::ReadUser | QFile::ReadOwner))
+            uAttr |= AMI_IREAD;
+
+        if (value & (QFile::WriteUser | QFile::WriteOwner))
+            uAttr |= AMI_IWRITE | AMI_IDELETE;
+
+        if (value & (QFile::ExeOwner | QFile::ExeUser))
+            uAttr |= AMI_IEXECUTE;
+
+        break;
+
+    case OS_THEOS:
+        uAttr &= ~THS_IALL;
+        if (value & (QFile::ReadUser | QFile::ReadOwner))
+            uAttr |= THS_IRUSR;
+
+        if (value & (QFile::WriteUser | QFile::WriteOwner))
+            uAttr |= THS_IWUSR | THS_IEUSR;
+
+        if (value & (QFile::ExeUser | QFile::ExeOwner))
+            uAttr |= THS_IXUSR;
+
+        if (value & QFile::ReadOther)
+            uAttr |= THS_IROTH;
+
+        if (value & QFile::WriteOther)
+            uAttr |= THS_IWOTH;
+
+        break;
+    }
+
+    d->externalAttributes &= 0xFFFF;
+    d->externalAttributes |= uAttr << 16;
+}
+
+QuaZipFileInfo::Attributes QuaZipFileInfo::attributes() const
+{
+    int uAttr = int(d->externalAttributes) >> 16;
+    auto result = Attributes(uAttr & 0xFF);
+
+    switch (d->zipSystem) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+        break;
+
+    case OS_AMIGA:
+        result.setFlag(DirAttr, AMI_IFDIR == (uAttr & AMI_IFMT));
+        result.setFlag(Hidden, uAttr & AMI_IHIDDEN);
+        result.setFlag(Archived, uAttr & AMI_IARCHIVE);
+        break;
+
+    case OS_THEOS:
+        result.setFlag(DirAttr, THS_IFDIR == (uAttr & THS_IFMT));
+        result.setFlag(Hidden, !(uAttr & THS_INHID));
+        result.setFlag(Archived, !(uAttr & THS_IMODF));
+        break;
+
+    case OS_MACOSX:
+    case OS_UNIX:
+        result.setFlag(
+            Hidden, QFileInfo(d->filePath).fileName().startsWith('.'));
+        Q_FALLTHROUGH();
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+        result.setFlag(DirAttr, UNX_IFDIR == (uAttr & UNX_IFMT));
+        result |= Archived;
+        break;
+    }
+
+    if (d->filePath.endsWith('/'))
+        result |= DirAttr;
+
+    result.setFlag(ReadOnly,
+        !(permissions() &
+            (QFile::WriteGroup | QFile::WriteOwner | QFile::WriteUser |
+                QFile::WriteOther)));
+
+    return result;
+}
+
+void QuaZipFileInfo::setAttributes(Attributes value)
+{
+    value &= AllAttrs;
+    if (attributes() == value)
+        return;
+
+    auto tempFilePath = d->filePath;
+    if (tempFilePath.endsWith('/'))
+        tempFilePath.resize(tempFilePath.length() - 1);
+
+    quint16 uAttr = int(d->externalAttributes) >> 16;
+
+    switch (d->zipSystem) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+        break;
+
+    case OS_AMIGA:
+        uAttr &= ~AMI_IFMT;
+        if (value & DirAttr)
+            uAttr |= AMI_IFDIR;
+        else
+            uAttr |= AMI_IFREG;
+
+        if (value & Archived)
+            uAttr |= AMI_IARCHIVE;
+        else
+            uAttr &= ~AMI_IARCHIVE;
+
+        if (value & Hidden)
+            uAttr |= AMI_IHIDDEN;
+        else
+            uAttr &= ~AMI_IHIDDEN;
+        break;
+
+    case OS_THEOS:
+        uAttr &= ~THS_IFMT;
+        if (value & DirAttr)
+            uAttr |= THS_IFDIR;
+        else
+            uAttr |= THS_IFREG;
+
+        if (value & Archived)
+            uAttr &= ~THS_IMODF;
+        else
+            uAttr |= THS_IMODF;
+
+        if (value & Hidden)
+            uAttr &= ~THS_INHID;
+        else
+            uAttr |= THS_INHID;
+
+        break;
+
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_MACOSX:
+    case OS_UNIX: {
+        bool wasSymLink = UNX_IFLNK == (uAttr & UNX_IFMT);
+        uAttr &= ~UNX_IFMT;
+
+        if (tempFilePath.isEmpty())
+            break;
+
+        QFileInfo fileInfo(tempFilePath);
+        if (value & DirAttr) {
+            uAttr |= UNX_IFDIR;
+        } else {
+            uAttr |= wasSymLink ? UNX_IFLNK : UNX_IFREG;
+        }
+
+        auto fileName = fileInfo.fileName();
+        if (value & Hidden) {
+            if (!fileName.startsWith('.')) {
+                fileInfo.setFile(fileInfo.dir().filePath('.' + fileName));
             }
         } else {
-            i += length;
+            if (fileName.startsWith('.')) {
+                fileInfo.setFile(fileInfo.dir().filePath(fileName.mid(1)));
+            }
         }
+
+        tempFilePath = fileInfo.filePath();
+        break;
     }
-    if (fineTicks != NULL && dateTime.isNull()) {
-        *fineTicks = 0;
     }
-    return dateTime;
+
+    if (!tempFilePath.isEmpty() && 0 != (value & DirAttr)) {
+        tempFilePath += '/';
+    }
+    d->filePath = tempFilePath;
+    d->externalAttributes &= (0xFFFF | ~AllAttrs);
+    d->externalAttributes |= value | (uAttr << 16);
 }
 
-QDateTime QuaZipFileInfo64::getNTFSmTime(int *fineTicks) const
+int QuaZipFileInfo::diskNumber() const
 {
-    return getNTFSTime(extra, 0, fineTicks);
+    return d->diskNumber;
 }
 
-QDateTime QuaZipFileInfo64::getNTFSaTime(int *fineTicks) const
+void QuaZipFileInfo::setDiskNumber(int value)
 {
-    return getNTFSTime(extra, 8, fineTicks);
+    d->diskNumber = value;
 }
 
-QDateTime QuaZipFileInfo64::getNTFScTime(int *fineTicks) const
+QuaZipFileInfo &QuaZipFileInfo::operator=(const QuaZipFileInfo &other)
 {
-    return getNTFSTime(extra, 16, fineTicks);
+    d = other.d;
+    return *this;
+}
+
+bool QuaZipFileInfo::operator==(const QuaZipFileInfo &other) const
+{
+    return d == other.d || d->equals(*other.d.data());
+}
+
+QuaZipFileInfo::Private::Private()
+    : crc(0)
+    , externalAttributes(Archived)
+    , internalAttributes(0)
+    , flags(0)
+    , zipVersionMadeBy(10)
+    , zipSystem(OS_MSDOS)
+    , zipOptions(NormalCompression)
+    , compressionMethod(Z_DEFLATED)
+    , compressionStrategy(Z_DEFAULT_STRATEGY)
+    , zipVersionNeeded(10)
+    , diskNumber(0)
+    , uncompressedSize(-1)
+    , compressedSize(-1)
+{
+    memset(cryptKeys, 0, sizeof(cryptKeys));
+}
+
+QuaZipFileInfo::Private::Private(const Private &other)
+    : crc(other.crc) //0
+    , externalAttributes(other.externalAttributes) //1
+    , internalAttributes(other.internalAttributes) //2
+    , flags(other.flags) //3
+    , zipVersionMadeBy(other.zipVersionMadeBy) //4
+    , zipSystem(other.zipSystem) //5
+    , zipOptions(other.zipOptions) //6
+    , compressionMethod(other.compressionMethod) //7
+    , compressionStrategy(other.compressionStrategy) //8
+    , zipVersionNeeded(other.zipVersionNeeded) //19
+    , diskNumber(other.diskNumber) //9
+    , uncompressedSize(other.uncompressedSize) //10
+    , compressedSize(other.compressedSize) //11
+    , createTime(other.createTime) //12
+    , modifyTime(other.modifyTime) //13
+    , accessTime(other.accessTime) //14
+    , filePath(other.filePath) //15
+    , comment(other.comment) //16
+    , centralExtraFields(other.centralExtraFields) //18
+    , localExtraFields(other.localExtraFields) //21
+{
+    memcpy(cryptKeys, other.cryptKeys, sizeof(cryptKeys)); //20
+}
+
+bool QuaZipFileInfo::Private::equals(const Private &other) const
+{
+    return zipSystem == other.zipSystem && //0
+        zipVersionMadeBy == other.zipVersionMadeBy && //1
+        internalAttributes == other.internalAttributes && //2
+        flags == other.flags && //3
+        zipVersionNeeded == other.zipVersionNeeded && //19
+        zipOptions == other.zipOptions && //4
+        compressionMethod == other.compressionMethod && //5
+        compressionStrategy == other.compressionStrategy && //6
+        externalAttributes == other.externalAttributes && //7
+        crc == other.crc && //8
+        diskNumber == other.diskNumber && //9
+        uncompressedSize == other.uncompressedSize && //10
+        compressedSize == other.compressedSize && //11
+        0 == memcmp(cryptKeys, other.cryptKeys, sizeof(cryptKeys)) && //20
+        createTime == other.createTime && //12
+        modifyTime == other.modifyTime && //13
+        accessTime == other.accessTime && //14
+        filePath == other.filePath && //15
+        comment == other.comment && //17
+        centralExtraFields == other.centralExtraFields &&
+        localExtraFields == other.localExtraFields; //21
+}
+
+bool QuaZipFileInfo::Private::isSymlinkHost(int host)
+{
+    return host == OS_UNIX || host == OS_ATARI || host == OS_OPENVMS ||
+        host == OS_BEOS || host == OS_MACOSX;
 }

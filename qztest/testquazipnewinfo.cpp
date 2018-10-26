@@ -63,7 +63,7 @@ void TestQuaZipNewInfo::setFileNTFSTimes()
         QuaZip zip(zipName);
         QVERIFY(zip.open(QuaZip::mdUnzip));
         zip.goToFirstFile();
-        QuaZipFileInfo64 fileInfo;
+        QuaZipFileInfo fileInfo;
         QVERIFY(zip.getCurrentFileInfo(&fileInfo));
         zip.close();
         QByteArray &extra = fileInfo.extra;

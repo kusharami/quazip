@@ -25,7 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #pragma once
 
-#include "quaziodevice_utils.h"
+#include "quazutils.h"
 
 #include <QByteArray>
 #include <zlib.h>
@@ -48,6 +48,7 @@ public:
     qint64 ioStartPosition;
     qint64 ioPosition;
     int compressionLevel;
+    int strategy;
     SizeType uncompressedSize;
     bool hasError : 1;
     bool atEnd : 1;
@@ -79,6 +80,7 @@ public:
     qint64 readCompressedData(Bytef *zbuffer, size_t size);
     bool finishReadTransaction(qint64 savedPosition);
     void setCompressionLevel(int level);
+    void setStrategy(int value);
 
     static inline Q_DECL_CONSTEXPR SizeType maxUncompressedSize();
 };
@@ -86,5 +88,5 @@ public:
 QuaZIODevicePrivate::SizeType Q_DECL_CONSTEXPR
 QuaZIODevicePrivate::maxUncompressedSize()
 {
-    return QuaZIODeviceUtils::maxBlockSize<SizeType>();
+    return QuaZUtils::maxBlockSize<SizeType>();
 }
