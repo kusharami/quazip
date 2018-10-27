@@ -149,7 +149,6 @@ typedef struct
 
     ZPOS64_T offset_local_extrafield;/* offset of the local extra field */
     uInt  size_local_extrafield;/* size of the local extra field */
-    ZPOS64_T pos_local_extrafield;   /* position in the local extra field in read*/
     ZPOS64_T total_out_64;
 
     uLong crc32;                /* crc32 of all data uncompressed */
@@ -1541,7 +1540,6 @@ static int unzOpenCurrentFile34 (unzFile file,
     pfile_in_zip_read_info->raw=raw;
     pfile_in_zip_read_info->offset_local_extrafield = offset_local_extrafield;
     pfile_in_zip_read_info->size_local_extrafield = size_local_extrafield;
-    pfile_in_zip_read_info->pos_local_extrafield=0;
     pfile_in_zip_read_info->stream_initialised=0;
 
 
@@ -1983,7 +1981,7 @@ extern int ZEXPORT unzGetLocalExtrafield (unzFile file, voidp buf, unsigned len)
     unz64_s* s;
     file_in_zip64_read_info_s* pfile_in_zip_read_info;
     uInt read_now;
-    ZPOS64_T size_to_read;
+    uInt size_to_read;
 
     if (file==NULL)
         return UNZ_PARAMERROR;
@@ -1993,24 +1991,22 @@ extern int ZEXPORT unzGetLocalExtrafield (unzFile file, voidp buf, unsigned len)
     if (pfile_in_zip_read_info==NULL)
         return UNZ_PARAMERROR;
 
-    size_to_read = (pfile_in_zip_read_info->size_local_extrafield -
-                pfile_in_zip_read_info->pos_local_extrafield);
+    size_to_read = pfile_in_zip_read_info->size_local_extrafield;
 
     if (buf==NULL)
         return (int)size_to_read;
 
     if (len>size_to_read)
-        read_now = (uInt)size_to_read;
+        read_now = size_to_read;
     else
-        read_now = (uInt)len ;
+        read_now = len ;
 
     if (read_now==0)
         return 0;
 
     if (ZSEEK64(pfile_in_zip_read_info->z_filefunc,
               pfile_in_zip_read_info->filestream,
-              pfile_in_zip_read_info->offset_local_extrafield +
-              pfile_in_zip_read_info->pos_local_extrafield,
+              pfile_in_zip_read_info->offset_local_extrafield,
               ZLIB_FILEFUNC_SEEK_SET)!=0)
         return UNZ_ERRNO;
 

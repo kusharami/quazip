@@ -581,8 +581,7 @@ public:
     QByteArray compatibleFilePath(const QString &filePath) const;
     QByteArray compatibleComment(const QString &comment) const;
 
-    QuaZExtraField::Map updatedExtraFields(
-        const QuaZipFileInfo &fileInfo) const;
+    void updateExtraFields(QuaZipFileInfo &fileInfo) const;
 
 private:
     friend class QuaZipFile;

@@ -129,7 +129,7 @@ QuaZExtraField::ResultCode QuaZExtraField::fromMap(
             return ERR_BUFFER_SIZE_LIMIT;
         }
 
-        stream << key.id();
+        stream << key;
         stream << quint16(fieldDataLength);
         stream.writeRawData(fieldData.data(), fieldDataLength);
     }

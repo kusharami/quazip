@@ -163,8 +163,8 @@ public:
     quint16 internalAttributes();
     void setInternalAttributes(quint16 value);
 
-    quint32 externalAttributes();
-    void setExternalAttributes(quint32 value);
+    qint32 externalAttributes();
+    void setExternalAttributes(qint32 value);
 
     int diskNumber() const;
     void setDiskNumber(int value);

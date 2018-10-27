@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QMap>
+#include <QHash>
 #include <QByteArray>
 
 #include "quazip_global.h"
@@ -53,7 +53,7 @@ struct QUAZIP_EXPORT QuaZExtraField {
     };
 
     /// Maps Extra Field data by 2-characters key
-    using Map = QMap<QuaZExtraField::Key, QByteArray>;
+    using Map = QHash<quint16, QByteArray>;
 
     /// Converts Extra Field data to QuaZExtraField::Map
     /**

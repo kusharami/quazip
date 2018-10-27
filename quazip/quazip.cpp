@@ -41,6 +41,7 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 /// @cond internal
 enum
 {
+    ZIP64_HEADER = 0x0001,
     NTFS_HEADER = 0x000A,
     NTFS_FILE_TIME_TAG = 0x0001,
     UNIX_HEADER = 0x000D,
@@ -140,26 +141,32 @@ private:
     };
 
     static QDateTime decodeNTFSTime(const QByteArray &extra, TimeOf timeOf);
-    static QDateTime decodeUnixTimeEx(const QByteArray &extra, TimeOf timeOf);
-    static QDateTime decodeInfoZipUnixTime(
-        const QByteArray &extra, TimeOf timeOf);
+    static QDateTime decodeUnixTime(
+        const QByteArray &localExtra, TimeOf timeOf);
+    static QDateTime decodeUnixTimeEx(const QByteArray &centralExtra,
+        const QByteArray &localExtra, TimeOf timeOf);
+    static QDateTime decodeInfoZipUnixTime(const QByteArray &centralExtra,
+        const QByteArray &localExtra, TimeOf timeOf);
 
     static QDateTime zInfoToDateTime(const unz_file_info64 &info);
 
-    static QDateTime decodeCreationTime(
-        const unz_file_info64 &info, const QuaZExtraField::Map &extra);
+    static QDateTime decodeCreationTime(const unz_file_info64 &info,
+        const QuaZExtraField::Map &centralExtra,
+        const QuaZExtraField::Map &localExtra);
 
-    static QDateTime decodeModificationTime(
-        const unz_file_info64 &info, const QuaZExtraField::Map &extra);
+    static QDateTime decodeModificationTime(const unz_file_info64 &info,
+        const QuaZExtraField::Map &centralExtra,
+        const QuaZExtraField::Map &localExtra);
 
-    static QDateTime decodeLastAccessTime(
-        const unz_file_info64 &info, const QuaZExtraField::Map &extra);
+    static QDateTime decodeLastAccessTime(const unz_file_info64 &info,
+        const QuaZExtraField::Map &centralExtra,
+        const QuaZExtraField::Map &localExtra);
 
     QString decodeZipText(const QByteArray &text, uLong flags,
-        const QuaZExtraField::Map &extra, ZipTextType textType);
+        const QuaZExtraField::Map &centralExtra, ZipTextType textType);
 
-    static QString getInfoZipUnicodeText(
-        quint16 headerId, const QuaZExtraField::Map &extra);
+    static QString getInfoZipUnicodeText(quint16 headerId,
+        const QuaZExtraField::Map &extra, const QByteArray &legacyText);
 
     QuaZipTextCodec *winZipTextCodec();
 
@@ -299,62 +306,69 @@ bool QuaZipPrivate::goToFirstUnmappedFile()
     return hasCurrentFile_f;
 }
 
-QDateTime QuaZipPrivate::decodeCreationTime(
-    const unz_file_info64 &info, const QuaZExtraField::Map &extra)
+QDateTime QuaZipPrivate::decodeCreationTime(const unz_file_info64 &info,
+    const QuaZExtraField::Map &centralExtra,
+    const QuaZExtraField::Map &localExtra)
 {
     QDateTime result;
     {
-        auto it = extra.find(NTFS_HEADER);
-        if (it == extra.end()) {
+        auto it = localExtra.find(NTFS_HEADER);
+        if (it == localExtra.end()) {
             result = decodeNTFSTime(it.value(), TimeOfCreation);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
-        if (it != extra.end()) {
-            result = decodeUnixTimeEx(it.value(), TimeOfCreation);
+        auto it = localExtra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        auto cit = centralExtra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        if (it != localExtra.end() && cit != centralExtra.end()) {
+            result = decodeUnixTimeEx(cit.value(), it.value(), TimeOfCreation);
             if (!result.isNull())
                 return result;
         }
     }
 
-    return zInfoToDateTime(info);
+    return decodeModificationTime(info, centralExtra, localExtra);
 }
 
-QDateTime QuaZipPrivate::decodeModificationTime(
-    const unz_file_info64 &info, const QuaZExtraField::Map &extra)
+QDateTime QuaZipPrivate::decodeModificationTime(const unz_file_info64 &info,
+    const QuaZExtraField::Map &centralExtra,
+    const QuaZExtraField::Map &localExtra)
 {
     QDateTime result;
     {
-        auto it = extra.find(NTFS_HEADER);
-        if (it == extra.end()) {
+        auto it = localExtra.find(NTFS_HEADER);
+        if (it == localExtra.end()) {
             result = decodeNTFSTime(it.value(), TimeOfModification);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
-        if (it != extra.end()) {
-            result = decodeUnixTimeEx(it.value(), TimeOfModification);
+        auto it = localExtra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        auto cit = centralExtra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        if (it != localExtra.end() && cit != centralExtra.end()) {
+            result =
+                decodeUnixTimeEx(cit.value(), it.value(), TimeOfModification);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(UNIX_HEADER);
-        if (it != extra.end()) {
-            result = decodeInfoZipUnixTime(it.value(), TimeOfModification);
+        auto it = localExtra.find(UNIX_HEADER);
+        if (it != localExtra.end()) {
+            result = decodeUnixTime(it.value(), TimeOfModification);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(INFO_ZIP_UNIX_HEADER);
-        if (it != extra.end()) {
-            result = decodeInfoZipUnixTime(it.value(), TimeOfModification);
+        auto it = localExtra.find(INFO_ZIP_UNIX_HEADER);
+        auto cit = centralExtra.find(INFO_ZIP_UNIX_HEADER);
+        if (it != localExtra.end() && cit != centralExtra.end()) {
+            result = decodeInfoZipUnixTime(
+                cit.value(), it.value(), TimeOfModification);
             if (!result.isNull())
                 return result;
         }
@@ -363,38 +377,42 @@ QDateTime QuaZipPrivate::decodeModificationTime(
     return zInfoToDateTime(info);
 }
 
-QDateTime QuaZipPrivate::decodeLastAccessTime(
-    const unz_file_info64 &info, const QuaZExtraField::Map &extra)
+QDateTime QuaZipPrivate::decodeLastAccessTime(const unz_file_info64 &info,
+    const QuaZExtraField::Map &centralExtra,
+    const QuaZExtraField::Map &localExtra)
 {
     QDateTime result;
     {
-        auto it = extra.find(NTFS_HEADER);
-        if (it == extra.end()) {
+        auto it = localExtra.find(NTFS_HEADER);
+        if (it == localExtra.end()) {
             result = decodeNTFSTime(it.value(), TimeOfAccess);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
-        if (it != extra.end()) {
-            result = decodeUnixTimeEx(it.value(), TimeOfAccess);
+        auto it = localExtra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        auto cit = centralExtra.find(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        if (it != localExtra.end() && cit != centralExtra.end()) {
+            result = decodeUnixTimeEx(cit.value(), it.value(), TimeOfAccess);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(UNIX_HEADER);
-        if (it != extra.end()) {
-            result = decodeInfoZipUnixTime(it.value(), TimeOfAccess);
+        auto it = localExtra.find(UNIX_HEADER);
+        if (it != localExtra.end()) {
+            result = decodeUnixTime(it.value(), TimeOfAccess);
             if (!result.isNull())
                 return result;
         }
     }
     {
-        auto it = extra.find(INFO_ZIP_UNIX_HEADER);
-        if (it != extra.end()) {
-            result = decodeInfoZipUnixTime(it.value(), TimeOfAccess);
+        auto it = localExtra.find(INFO_ZIP_UNIX_HEADER);
+        auto cit = centralExtra.find(INFO_ZIP_UNIX_HEADER);
+        if (it != localExtra.end() && cit != centralExtra.end()) {
+            result =
+                decodeInfoZipUnixTime(cit.value(), it.value(), TimeOfAccess);
             if (!result.isNull())
                 return result;
         }
@@ -445,65 +463,21 @@ QDateTime QuaZipPrivate::decodeNTFSTime(const QByteArray &extra, TimeOf timeOf)
     return QDateTime();
 }
 
-QDateTime QuaZipPrivate::decodeUnixTimeEx(
-    const QByteArray &extra, TimeOf timeOf)
+QDateTime QuaZipPrivate::decodeUnixTime(
+    const QByteArray &localExtra, QuaZipPrivate::TimeOf timeOf)
 {
-    QDataStream fieldReader(extra);
-    fieldReader.setByteOrder(QDataStream::LittleEndian);
-
-    quint8 flags;
-    fieldReader >> flags;
-
-    if (!(flags &
-            (UNIX_MOD_TIME_FLAG | UNIX_ACC_TIME_FLAG | UNIX_CRT_TIME_FLAG))) {
-        return QDateTime();
-    }
-
-    qint32 time = 0;
-
-    if (flags & UNIX_MOD_TIME_FLAG) {
-        qint32 modTime;
-        fieldReader >> modTime;
-        if (timeOf == TimeOfModification)
-            time = modTime;
-    }
-
-    if (flags & UNIX_ACC_TIME_FLAG) {
-        qint32 accTime;
-        fieldReader >> accTime;
-        if (timeOf == TimeOfAccess)
-            time = accTime;
-    }
-
-    if (flags & UNIX_CRT_TIME_FLAG) {
-        qint32 crtTime;
-        fieldReader >> crtTime;
-        if (timeOf == TimeOfCreation)
-            time = crtTime;
-    }
-
-    if (fieldReader.status() == QDataStream::Ok) {
-        return QDateTime::fromSecsSinceEpoch(time, Qt::UTC);
-    }
-
-    return QDateTime();
-}
-
-QDateTime QuaZipPrivate::decodeInfoZipUnixTime(
-    const QByteArray &extra, TimeOf timeOf)
-{
-    QDataStream fieldReader(extra);
-    fieldReader.setByteOrder(QDataStream::LittleEndian);
+    QDataStream localReader(localExtra);
+    localReader.setByteOrder(QDataStream::LittleEndian);
 
     qint32 accTime;
-    fieldReader >> accTime;
+    localReader >> accTime;
     qint32 modTime;
-    fieldReader >> modTime;
+    localReader >> modTime;
 
-    if (fieldReader.status() != QDataStream::Ok)
+    if (localReader.status() != QDataStream::Ok)
         return QDateTime();
 
-    qint32 time = 0;
+    qint64 time = 0;
 
     switch (timeOf) {
     case TimeOfAccess:
@@ -518,7 +492,127 @@ QDateTime QuaZipPrivate::decodeInfoZipUnixTime(
         return QDateTime();
     }
 
-    return QDateTime::fromSecsSinceEpoch(time, Qt::UTC);
+    return QDateTime::fromMSecsSinceEpoch(time * 1000, Qt::UTC);
+}
+
+QDateTime QuaZipPrivate::decodeUnixTimeEx(
+    const QByteArray &centralExtra, const QByteArray &localExtra, TimeOf timeOf)
+{
+    QDataStream centralReader(centralExtra);
+    centralReader.setByteOrder(QDataStream::LittleEndian);
+    QDataStream localReader(localExtra);
+    localReader.setByteOrder(QDataStream::LittleEndian);
+
+    quint8 centralFlags;
+    centralReader >> centralFlags;
+
+    quint8 localFlags;
+    localReader >> localFlags;
+
+    do {
+        if (centralReader.status() != QDataStream::Ok ||
+            localReader.status() != QDataStream::Ok) {
+            break;
+        }
+
+        if (!(localFlags &
+                (UNIX_MOD_TIME_FLAG | UNIX_ACC_TIME_FLAG |
+                    UNIX_CRT_TIME_FLAG))) {
+            break;
+        }
+
+        qint64 time = 0;
+
+        if (localFlags & UNIX_MOD_TIME_FLAG) {
+            if (0 == (centralFlags & UNIX_MOD_TIME_FLAG))
+                break;
+
+            qint32 centralModTime;
+            centralReader >> centralModTime;
+            qint32 modTime;
+            localReader >> modTime;
+            if (centralModTime != modTime ||
+                localReader.status() != QDataStream::Ok ||
+                centralReader.status() != QDataStream::Ok) {
+                break;
+            }
+
+            if (timeOf == TimeOfModification)
+                time = modTime;
+        }
+
+        if (localFlags & UNIX_ACC_TIME_FLAG) {
+            if (0 == (centralFlags & UNIX_ACC_TIME_FLAG))
+                break;
+
+            qint32 accTime;
+            localReader >> accTime;
+            if (localReader.status() != QDataStream::Ok)
+                break;
+            if (timeOf == TimeOfAccess)
+                time = accTime;
+        }
+
+        if (localFlags & UNIX_CRT_TIME_FLAG) {
+            if (0 == (centralFlags & UNIX_CRT_TIME_FLAG))
+                break;
+
+            qint32 crtTime;
+            localReader >> crtTime;
+            if (localReader.status() != QDataStream::Ok)
+                break;
+            if (timeOf == TimeOfCreation)
+                time = crtTime;
+        }
+
+        if (localReader.status() == QDataStream::Ok) {
+            return QDateTime::fromMSecsSinceEpoch(time * 1000, Qt::UTC);
+        }
+    } while (false);
+
+    return QDateTime();
+}
+
+QDateTime QuaZipPrivate::decodeInfoZipUnixTime(
+    const QByteArray &centralExtra, const QByteArray &localExtra, TimeOf timeOf)
+{
+    QDataStream centralReader(centralExtra);
+    centralReader.setByteOrder(QDataStream::LittleEndian);
+    QDataStream localReader(localExtra);
+    localReader.setByteOrder(QDataStream::LittleEndian);
+
+    qint32 locAccTime;
+    localReader >> locAccTime;
+    qint32 locModTime;
+    localReader >> locModTime;
+
+    qint32 accTime;
+    centralReader >> accTime;
+    qint32 modTime;
+    centralReader >> modTime;
+
+    if (accTime != locAccTime || modTime != locModTime ||
+        centralReader.status() != QDataStream::Ok ||
+        localReader.status() != QDataStream::Ok) {
+        return QDateTime();
+    }
+
+    qint64 time = 0;
+
+    switch (timeOf) {
+    case TimeOfAccess:
+        time = accTime;
+        break;
+
+    case TimeOfModification:
+        time = modTime;
+        break;
+
+    default:
+        return QDateTime();
+    }
+
+    return QDateTime::fromMSecsSinceEpoch(time * 1000, Qt::UTC);
 }
 
 QDateTime QuaZipPrivate::zInfoToDateTime(const unz_file_info64 &info)
@@ -531,7 +625,7 @@ QDateTime QuaZipPrivate::zInfoToDateTime(const unz_file_info64 &info)
 }
 
 QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
-    const QuaZExtraField::Map &extra, ZipTextType textType)
+    const QuaZExtraField::Map &centralExtra, ZipTextType textType)
 {
     Q_ASSERT(flags);
     bool isUtf8 = 0 != (flags & QuaZipFileInfo::Unicode);
@@ -542,9 +636,10 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
     QString result;
     switch (textType) {
     case ZIP_FILENAME:
-        result = getInfoZipUnicodeText(INFO_ZIP_UNICODE_PATH_HEADER, extra);
+        result = getInfoZipUnicodeText(
+            INFO_ZIP_UNICODE_PATH_HEADER, centralExtra, text);
         if (result.isEmpty()) {
-            result = getWinZipUnicodeFileName(extra, text);
+            result = getWinZipUnicodeFileName(centralExtra, text);
         }
         if (result.isEmpty()) {
             if (compatibility == QuaZip::CustomCompatibility) {
@@ -555,9 +650,10 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
         break;
 
     case ZIP_COMMENT:
-        result = getInfoZipUnicodeText(INFO_ZIP_UNICODE_COMMENT_HEADER, extra);
+        result = getInfoZipUnicodeText(
+            INFO_ZIP_UNICODE_COMMENT_HEADER, centralExtra, text);
         if (result.isEmpty()) {
-            result = getWinZipUnicodeComment(extra, text);
+            result = getWinZipUnicodeComment(centralExtra, text);
         }
         if (result.isEmpty()) {
             if (compatibility == QuaZip::CustomCompatibility) {
@@ -576,8 +672,8 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
     return result;
 }
 
-QString QuaZipPrivate::getInfoZipUnicodeText(
-    quint16 headerId, const QuaZExtraField::Map &extra)
+QString QuaZipPrivate::getInfoZipUnicodeText(quint16 headerId,
+    const QuaZExtraField::Map &extra, const QByteArray &legacyText)
 {
     auto it = extra.find(headerId);
     if (it == extra.end()) {
@@ -600,15 +696,19 @@ QString QuaZipPrivate::getInfoZipUnicodeText(
     fieldReader >> textCRC32;
     size -= sizeof(textCRC32);
 
-    QByteArray utf8;
-    utf8.resize(size);
-    fieldReader.readRawData(utf8.data(), utf8.length());
     QuaCrc32 crc(0);
-    crc.update(utf8);
-    if (crc.value() == textCRC32) {
-        return QString();
-    }
+    crc.update(legacyText);
 
+    if (crc.value() != textCRC32)
+        return QString();
+
+    QByteArray utf8;
+    if (size > 0) {
+        utf8.resize(size);
+        fieldReader.readRawData(utf8.data(), utf8.length());
+    } else {
+        utf8 = legacyText;
+    }
     return QString::fromUtf8(utf8);
 }
 
@@ -643,6 +743,9 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
     fieldReader >> flags;
     size -= sizeof(flags);
 
+    if (fieldReader.status() != QDataStream::Ok)
+        return QString();
+
     int fileNameLength = size;
     quint32 commentCodePage;
     if (flags & WINZIP_COMMENT_CODEPAGE_FLAG) {
@@ -654,7 +757,7 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
         fieldReader >> fileNameCodePage;
         if (fieldReader.status() != QDataStream::Ok)
             return QString();
-        size -= sizeof(fileNameCodePage);
+        fileNameLength -= sizeof(fileNameCodePage);
     }
 
     auto codec = winZipTextCodec();
@@ -694,6 +797,9 @@ QString QuaZipPrivate::getWinZipUnicodeComment(
     quint8 flags;
     fieldReader >> flags;
     size -= sizeof(flags);
+
+    if (fieldReader.status() != QDataStream::Ok)
+        return QString();
 
     int fileNameLength = size;
     quint32 commentCodePage;
@@ -1052,30 +1158,55 @@ bool QuaZip::getCurrentFileInfo(QuaZipFileInfo &info) const
         return false;
     }
     unz_file_info64 info_z;
-    QByteArray fileName;
-    QByteArray extra;
-    QByteArray comment;
     if (!isOpen() || !hasCurrentFile())
         return false;
     if ((p->zipError = unzGetCurrentFileInfo64(
-             p->unzFile_f, &info_z, NULL, 0, NULL, 0, NULL, 0)) != UNZ_OK)
+             p->unzFile_f, &info_z, NULL, 0, NULL, 0, NULL, 0)) != UNZ_OK) {
         return false;
-    fileName.resize(info_z.size_filename);
-    extra.resize(info_z.size_file_extra);
-    comment.resize(info_z.size_file_comment);
+    }
+    QByteArray fileName(info_z.size_filename, Qt::Uninitialized);
+    QByteArray centralExtra(info_z.size_file_extra, Qt::Uninitialized);
+    QByteArray comment(info_z.size_file_comment, Qt::Uninitialized);
     if ((p->zipError = unzGetCurrentFileInfo64(p->unzFile_f, NULL,
-             fileName.data(), fileName.size(), extra.data(), extra.size(),
-             comment.data(), comment.size())) != UNZ_OK)
+             fileName.data(), fileName.size(), centralExtra.data(),
+             centralExtra.size(), comment.data(), comment.size())) != UNZ_OK) {
+        return false;
+    }
+
+    if ((p->zipError = unzOpenCurrentFile(p->unzFile_f))) {
+        return false;
+    }
+
+    int localExtraSize = unzGetLocalExtrafield(p->unzFile_f, NULL, 0);
+    if (localExtraSize < 0) {
+        p->zipError = localExtraSize;
+        return false;
+    }
+
+    QByteArray localExtra(localExtraSize, Qt::Uninitialized);
+    p->zipError =
+        unzGetLocalExtrafield(p->unzFile_f, localExtra.data(), localExtraSize);
+    if (p->zipError != localExtraSize) {
+        if (p->zipError >= 0)
+            p->zipError = UNZ_ERRNO;
+        return false;
+    }
+
+    if ((p->zipError = unzCloseCurrentFile(p->unzFile_f)))
         return false;
 
-    auto extraMap = QuaZExtraField::toMap(extra);
+    auto centralExtraMap = QuaZExtraField::toMap(centralExtra);
+    centralExtraMap.remove(ZIP64_HEADER);
+    auto localExtraMap = QuaZExtraField::toMap(localExtra);
+    localExtraMap.remove(ZIP64_HEADER);
 
     info.setZipOptions(QuaZipFileInfo::ZipOptions(info_z.flag));
-    info.setCentralExtraFields(extraMap);
+    info.setCentralExtraFields(centralExtraMap);
+    info.setLocalExtraFields(localExtraMap);
     info.setFilePath(p->decodeZipText(
-        fileName, info_z.flag, extraMap, QuaZipPrivate::ZIP_FILENAME));
+        fileName, info_z.flag, centralExtraMap, QuaZipPrivate::ZIP_FILENAME));
     info.setComment(p->decodeZipText(
-        comment, info_z.flag, extraMap, QuaZipPrivate::ZIP_COMMENT));
+        comment, info_z.flag, centralExtraMap, QuaZipPrivate::ZIP_COMMENT));
     info.setCompressedSize(info_z.compressed_size);
     info.setUncompressedSize(info_z.uncompressed_size);
     info.setMadeBy(quint16(info_z.version));
@@ -1085,9 +1216,12 @@ bool QuaZip::getCurrentFileInfo(QuaZipFileInfo &info) const
     info.setDiskNumber(int(info_z.disk_num_start));
     info.setCrc(info_z.crc);
     info.setCompressionMethod(quint16(info_z.compression_method));
-    info.setCreationTime(p->decodeCreationTime(info_z, extraMap));
-    info.setModificationTime(p->decodeModificationTime(info_z, extraMap));
-    info.setLastAccessTime(p->decodeLastAccessTime(info_z, extraMap));
+    info.setCreationTime(
+        p->decodeCreationTime(info_z, centralExtraMap, localExtraMap));
+    info.setModificationTime(
+        p->decodeModificationTime(info_z, centralExtraMap, localExtraMap));
+    info.setLastAccessTime(
+        p->decodeLastAccessTime(info_z, centralExtraMap, localExtraMap));
 
     // Add to directory map
     p->addCurrentFileToDirectoryMap(info.filePath());
@@ -1322,9 +1456,8 @@ Qt::CaseSensitivity QuaZip::convertCaseSensitivity(QuaZip::CaseSensitivity cs)
 #else
         return Qt::CaseSensitive;
 #endif
-    } else {
-        return cs == csSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
     }
+    return cs == csSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
 }
 
 void QuaZip::setDefaultFileNameCodec(QTextCodec *codec)
@@ -1386,42 +1519,39 @@ QByteArray QuaZip::compatibleComment(const QString &comment) const
     return comment.toUtf8();
 }
 
-QuaZExtraField::Map QuaZip::updatedExtraFields(
-    const QuaZipFileInfo &fileInfo) const
+void QuaZip::updateExtraFields(QuaZipFileInfo &fileInfo) const
 {
-    auto extra = fileInfo.centralExtraFields();
+    auto localExtra = fileInfo.localExtraFields();
+    auto centralExtra = fileInfo.centralExtraFields();
 
     int compatibility = p->compatibility;
     if (compatibility == DOS_Compatible) {
-        extra.remove(UNIX_HEADER);
-        extra.remove(UNIX_EXTENDED_TIMESTAMP_HEADER);
-        extra.remove(INFO_ZIP_UNIX_HEADER);
-        extra.remove(NTFS_HEADER);
-        extra.remove(INFO_ZIP_UNICODE_PATH_HEADER);
-        extra.remove(INFO_ZIP_UNICODE_COMMENT_HEADER);
-        extra.remove(WINZIP_EXTRA_FIELD_HEADER);
+        centralExtra.remove(UNIX_HEADER);
+        centralExtra.remove(UNIX_EXTENDED_TIMESTAMP_HEADER);
+        centralExtra.remove(INFO_ZIP_UNIX_HEADER);
+        centralExtra.remove(NTFS_HEADER);
+        centralExtra.remove(INFO_ZIP_UNICODE_PATH_HEADER);
+        centralExtra.remove(INFO_ZIP_UNICODE_COMMENT_HEADER);
+        centralExtra.remove(WINZIP_EXTRA_FIELD_HEADER);
     } else {
         if (fileInfo.zipOptions() & QuaZipFileInfo::Unicode) {
-            extra.remove(INFO_ZIP_UNICODE_PATH_HEADER);
-            extra.remove(INFO_ZIP_UNICODE_COMMENT_HEADER);
-            extra.remove(WINZIP_EXTRA_FIELD_HEADER);
+            centralExtra.remove(INFO_ZIP_UNICODE_PATH_HEADER);
+            centralExtra.remove(INFO_ZIP_UNICODE_COMMENT_HEADER);
+            centralExtra.remove(WINZIP_EXTRA_FIELD_HEADER);
         } else {
-            extra.insert(UNIX_EXTENDED_TIMESTAMP_HEADER);
-            extra.insert(INFO_ZIP_UNICODE_PATH_HEADER,
-                QuaZipPrivate::makeInfoZipUnicodePath(fileInfo.filePath()));
-            extra.insert(INFO_ZIP_UNICODE_COMMENT_HEADER,
-                QuaZipPrivate::makeInfoZipUnicodeComment(fileInfo.comment()));
-            if (compatibility & WindowsCompatible) {
-                extra.insert(WINZIP_EXTRA_FIELD_HEADER,
-                    QuaZipPrivate::makeWinZipUnicodeHeader(
-                        fileInfo.filePath()));
-                extra.insert(NTFS_HEADER, fileInfo.creationTime(),
-                    fileInfo.modificationTime(), fileInfo.lastAccessTime());
-            }
+            //            extra.insert(UNIX_EXTENDED_TIMESTAMP_HEADER);
+            //            extra.insert(INFO_ZIP_UNICODE_PATH_HEADER,
+            //                QuaZipPrivate::makeInfoZipUnicodePath(fileInfo.filePath()));
+            //            extra.insert(INFO_ZIP_UNICODE_COMMENT_HEADER,
+            //                QuaZipPrivate::makeInfoZipUnicodeComment(fileInfo.comment()));
+            //            if (compatibility & WindowsCompatible) {
+            //                extra.insert(WINZIP_EXTRA_FIELD_HEADER,
+            //                    QuaZipPrivate::makeWinZipUnicodeHeader(
+            //                        fileInfo.filePath()));
+            //                extra.insert(NTFS_HEADER, fileInfo.creationTime(),
+            //                    fileInfo.modificationTime(), fileInfo.lastAccessTime());
         }
     }
-
-    return extra;
 }
 
 void QuaZip::setZip64Enabled(bool zip64)
