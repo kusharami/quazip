@@ -1,15 +1,15 @@
-#ifndef TESTQUAZIPFILEINFO_H
-#define TESTQUAZIPFILEINFO_H
+#pragma once
 
 #include <QObject>
 
-class TestQuaZipFileInfo : public QObject
-{
+class TestQuaZipFileInfo : public QObject {
     Q_OBJECT
 public:
-    explicit TestQuaZipFileInfo(QObject *parent = 0);
+    explicit TestQuaZipFileInfo(QObject *parent = nullptr);
 private slots:
-    void getNTFSTime();
+    void testFromFile();
+    void testFromDir();
+    void testFromLink();
+    void testFromZipFile_data();
+    void testFromZipFile();
 };
-
-#endif // TESTQUAZIPFILEINFO_H

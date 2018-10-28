@@ -25,26 +25,32 @@ Original ZIP package is copyrighted by Gilles Vollant and contributors,
 see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
-#include <QIODevice>
-#include <QString>
 #include <QStringList>
-#include <QTextCodec>
 
-extern bool createTestFiles(const QStringList &fileNames,
-                            int size = -1,
-                            const QString &dir = "tmp");
-extern void removeTestFiles(const QStringList &fileNames, const QString
-        &dir = "tmp");
-extern bool createTestArchive(const QString &zipName, 
-                              const QStringList &fileNames, 
-                              const QString &dir = "tmp");
+class QIODevice;
+class QTextCodec;
+class QTemporaryDir;
+
+#define QADD_COLUMN(type, name) QTest::addColumn<type>(#name);
+
+extern QString tempZipPath(const QTemporaryDir &tempDir, int num = 0);
+
+extern bool createTestFiles(
+    const QStringList &fileNames, int size = -1, const QString &dir = "tmp");
+extern void removeTestFiles(
+    const QStringList &fileNames, const QString &dir = "tmp");
 extern bool createTestArchive(const QString &zipName,
-                              const QStringList &fileNames,
-                              QTextCodec *codec,
-                              const QString &dir = "tmp");
-extern bool createTestArchive(QIODevice *ioDevice,
-                              const QStringList &fileNames,
-                              QTextCodec *codec,
-                              const QString &dir = "tmp");
+    const QStringList &fileNames, const QString &dir = "tmp");
+extern bool createTestArchive(const QString &zipName,
+    const QStringList &fileNames, QTextCodec *codec,
+    const QString &dir = "tmp");
+extern bool createTestArchive(const QString &zipName,
+    const QStringList &fileNames, QTextCodec *codec, const QString &password,
+    const QString &dir = "tmp");
+
+extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
+    QTextCodec *codec, const QString &dir = "tmp");
+extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
+    QTextCodec *codec, const QString &password, const QString &dir = "tmp");
 
 #endif // QUAZIP_TEST_QZTEST_H
