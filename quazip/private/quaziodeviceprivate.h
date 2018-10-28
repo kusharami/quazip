@@ -79,7 +79,7 @@ public:
     void endWrite();
     void setError(const QString &message);
     qint64 readCompressedData(Bytef *zbuffer, size_t size);
-    bool finishReadTransaction(qint64 savedPosition);
+    void finishReadTransaction(qint64 savedPosition);
     void setCompressionLevel(int level);
     void setStrategy(int value);
 
