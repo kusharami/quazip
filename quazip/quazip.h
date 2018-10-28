@@ -42,6 +42,7 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 /// @cond internal
 extern "C" {
 struct zlib_filefunc_def_s;
+struct zip_fileinfo_s;
 }
 
 class QuaZipPrivate;
@@ -127,7 +128,7 @@ public:
     /// Compatibility flags
     enum CompatibilityFlag
     {
-        /** When no system compatibility is set, fileNameCodec() and
+        /** When no system compatibility is set, filePathCodec() and
          * commentCodec() will be used to decode and encode file names
          * and comments
          * \note Other flags will override this one
@@ -230,12 +231,12 @@ public:
     /** \note This codec is used only when
      * compatibilityFlags() equals to CustomCompatibility.
      **/
-    void setFileNameCodec(QTextCodec *fileNameCodec);
+    void setFilePathCodec(QTextCodec *filePathCodec);
     /// Sets the codec used to encode/decode file names inside archive.
     /** \overload
-     * Equivalent to calling setFileNameCodec(QTextCodec::codecForName(codecName));
+     * Equivalent to calling setFilePathCodec(QTextCodec::codecForName(codecName));
      **/
-    void setFileNameCodec(const char *fileNameCodecName);
+    void setFilePathCodec(const char *filePathCodecName);
     /// Codec to be used to encode/decode comments inside archive when
     /// compatibilityFlags() equals to CustomCompatibility.
     /**
@@ -244,7 +245,7 @@ public:
      * In other cases and on other systems it defaults to IBM 437 code page
      * (if available) or to IBM 850 code page.
      */
-    QTextCodec *fileNameCodec() const;
+    QTextCodec *filePathCodec() const;
     /// Sets the codec used to encode/decode comments inside archive.
     /** \note This codec is used only when
      * compatibilityFlags() equals to CustomCompatibility.
@@ -377,7 +378,7 @@ public:
      *
      * Should be used only in QuaZip::mdUnzip mode.
      *
-     * \sa setFileNameCodec(), CaseSensitivity
+     * \sa setFilePathCodec(), CaseSensitivity
      **/
     bool setCurrentFile(
         const QString &fileName, CaseSensitivity cs = csDefault);
@@ -525,7 +526,7 @@ public:
      * The default codec is used by the constructors, so calling this function
      * won't affect the QuaZip instances already created at that moment.
      *
-     * The codec specified here can be overriden by calling setFileNameCodec().
+     * The codec specified here can be overriden by calling setFilePathCodec().
      * If neither function is called, QuaZipTextCodec will be used
      * to decode or encode file names. Use this function with caution if
      * the application uses other libraries that depend on QuaZip. Those
@@ -536,7 +537,7 @@ public:
      * Instead, ask your library users to call it in case they need specific
      * encoding.
      *
-     * In most cases, using setFileNameCodec() instead is the right choice.
+     * In most cases, using setFilePathCodec() instead is the right choice.
      * However, if you depend on third-party code that uses QuaZip, then the
      * reasons stated above can actually become a reason to use this function
      * in case the third-party code in question fails because it doesn't
@@ -544,13 +545,13 @@ public:
      * This applies to the JlCompress class as well, as it was contributed and
      * doesn't support explicit encoding parameters.
      *
-     * In short: use setFileNameCodec() when you can, resort to
-     * setDefaultFileNameCodec() when you don't have access to the QuaZip
+     * In short: use setFilePathCodec() when you can, resort to
+     * setDefaultFilePathCodec() when you don't have access to the QuaZip
      * instance.
      *
      * @param codec The codec to use by default. If NULL, resets to default.
      */
-    static void setDefaultFileNameCodec(QTextCodec *codec);
+    static void setDefaultFilePathCodec(QTextCodec *codec);
     /// Sets the default comment codec to use.
     /**
      * The default codec is used by the constructors, so calling this function
@@ -564,9 +565,9 @@ public:
     /**
      * @overload
      * Equivalent to calling
-     * setDefaultFileNameCodec(QTextCodec::codecForName(codecName)).
+     * setDefaultFilePathCodec(QTextCodec::codecForName(codecName)).
      */
-    static void setDefaultFileNameCodec(const char *codecName);
+    static void setDefaultFilePathCodec(const char *codecName);
     /**
      * @overload
      * Equivalent to calling
@@ -575,19 +576,16 @@ public:
     static void setDefaultCommentCodec(const char *codecName);
 
     /// QuaZip constructor will set this flags instead of DefaultCompatibility.
-    /// \sa compatibilityFlags(), setDefaultFileNameCodec(), setDefaultCommentCodec()
+    /// \sa compatibilityFlags(), setDefaultFilePathCodec(), setDefaultCommentCodec()
     static void setDefaultCompatibilityFlags(CompatibilityFlags flags);
-
-    QByteArray compatibleFilePath(const QString &filePath) const;
-    QByteArray compatibleComment(const QString &comment) const;
-
-    void updateExtraFields(QuaZipFileInfo &fileInfo) const;
 
 private:
     friend class QuaZipFile;
     friend class QuaZipFilePrivate;
-    void *getUnzFile();
-    void *getZipFile();
+    void fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
+        QByteArray &compatibleFilePath, QByteArray &compatibleComment) const;
+    void *getUnzFile() const;
+    void *getZipFile() const;
 };
 
 #endif

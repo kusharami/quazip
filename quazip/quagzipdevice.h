@@ -111,7 +111,7 @@ public:
     /// Original file name to store in a compressed device
     /**
       \param fileName The original file name.
-        Converted to multibyte string with fileNameCodec().
+        Converted to multibyte string with filePathCodec().
         Generates error if cannot be encoded or longer than maxFileNameLength().
      */
     void setOriginalFileName(const QString &fileName);

@@ -167,7 +167,7 @@ void TestQuaZip::add()
     curDir.remove(zipName);
 }
 
-void TestQuaZip::setFileNameCodec_data()
+void TestQuaZip::setFilePathCodec_data()
 {
     QTest::addColumn<QString>("zipName");
     QTest::addColumn<QStringList>("fileNames");
@@ -177,7 +177,7 @@ void TestQuaZip::setFileNameCodec_data()
                              << QByteArray("IBM866");
 }
 
-void TestQuaZip::setFileNameCodec()
+void TestQuaZip::setFilePathCodec()
 {
     QFETCH(QString, zipName);
     QFETCH(QStringList, fileNames);
@@ -201,7 +201,7 @@ void TestQuaZip::setFileNameCodec()
     qSort(fileList);
     QVERIFY(fileList[0] != fileNames[0]);
     testZip.close();
-    testZip.setFileNameCodec(encoding);
+    testZip.setFilePathCodec(encoding);
     QVERIFY(testZip.open(QuaZip::mdUnzip));
     fileList = testZip.getFileNameList();
     qSort(fileList);

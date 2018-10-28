@@ -166,6 +166,9 @@ public:
     qint32 externalAttributes();
     void setExternalAttributes(qint32 value);
 
+	const QString &symLinkTarget() const;
+	void setSymLinkTarget(const QString &filePath);
+
     int diskNumber() const;
     void setDiskNumber(int value);
 

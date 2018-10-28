@@ -107,7 +107,7 @@ typedef struct tm_zip_s
     uInt tm_year;           /* years - [1980..2044] */
 } tm_zip;
 
-typedef struct
+typedef struct zip_fileinfo_s
 {
     tm_zip      tmz_date;      /* date in understandable format           */
     uLong       dosDate;       /* if dos_date == 0, tmu_date is used      */
@@ -218,22 +218,17 @@ extern int ZEXPORT zipOpenNewFileInZipKeys OF((zipFile file,
 extern int ZEXPORT zipWriteInFileInZip OF((zipFile file,
                        const void* buf,
                        unsigned len));
+
+extern ZPOS64_T ZEXPORT zipTotalCompressedBytes OF((zipFile file));
 /*
   Write data in the zipfile
 */
 
-extern int ZEXPORT zipCloseFileInZip OF((zipFile file));
 /*
   Close the current file in the zipfile
 */
+extern int ZEXPORT zipCloseFileInZip OF((zipFile file));
 
-extern int ZEXPORT zipCloseFileInZipRaw OF((zipFile file,
-                                            uLong uncompressed_size,
-                                            uLong crc32));
-
-extern int ZEXPORT zipCloseFileInZipRaw64 OF((zipFile file,
-                                            ZPOS64_T uncompressed_size,
-                                            uLong crc32));
 
 /*
   Close the current file in the zipfile, for file opened with

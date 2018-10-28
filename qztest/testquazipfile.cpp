@@ -42,7 +42,7 @@ void TestQuaZipFile::zipUnzip_data()
 {
     QTest::addColumn<QString>("zipName");
     QTest::addColumn<QStringList>("fileNames");
-    QTest::addColumn<QByteArray>("fileNameCodec");
+    QTest::addColumn<QByteArray>("filePathCodec");
     QTest::addColumn<QByteArray>("password");
     QTest::addColumn<bool>("zip64");
     QTest::addColumn<int>("size");
@@ -71,7 +71,7 @@ void TestQuaZipFile::zipUnzip()
 {
     QFETCH(QString, zipName);
     QFETCH(QStringList, fileNames);
-    QFETCH(QByteArray, fileNameCodec);
+    QFETCH(QByteArray, filePathCodec);
     QFETCH(QByteArray, password);
     QFETCH(bool, zip64);
     QFETCH(int, size);
@@ -86,8 +86,8 @@ void TestQuaZipFile::zipUnzip()
     }
     QuaZip testZip(&testFile);
     testZip.setZip64Enabled(zip64);
-    if (!fileNameCodec.isEmpty())
-        testZip.setFileNameCodec(fileNameCodec);
+    if (!filePathCodec.isEmpty())
+        testZip.setFilePathCodec(filePathCodec);
     QVERIFY(testZip.open(QuaZip::mdCreate));
     QString comment = "Test comment";
     testZip.setComment(comment);
@@ -122,8 +122,8 @@ void TestQuaZipFile::zipUnzip()
     QCOMPARE(testZip.getZipError(), ZIP_OK);
     // now test unzip
     QuaZip testUnzip(&testFile);
-    if (!fileNameCodec.isEmpty())
-        testUnzip.setFileNameCodec(fileNameCodec);
+    if (!filePathCodec.isEmpty())
+        testUnzip.setFilePathCodec(filePathCodec);
     QVERIFY(testUnzip.open(QuaZip::mdUnzip));
     QCOMPARE(testUnzip.getComment(), comment);
     QVERIFY(testUnzip.goToFirstFile());

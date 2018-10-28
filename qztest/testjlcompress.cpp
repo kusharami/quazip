@@ -210,7 +210,7 @@ void TestJlCompress::extractFile()
                            QTextCodec::codecForName(encoding))) {
         QFAIL("Can't create test archive");
     }
-    QuaZip::setDefaultFileNameCodec(encoding);
+    QuaZip::setDefaultFilePathCodec(encoding);
     QVERIFY(!JlCompress::extractFile(zipName, fileToExtract,
                 "jlext/jlfile/" + destName).isEmpty());
     QFileInfo destInfo("jlext/jlfile/" + destName), srcInfo("tmp/" +

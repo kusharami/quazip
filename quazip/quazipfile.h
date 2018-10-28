@@ -408,8 +408,11 @@ public:
     const QString &comment() const;
     void setComment(const QString &comment);
 
-    const QuaZExtraField::Map &extraFields() const;
-    void setExtraFields(const QuaZExtraField::Map &map);
+    const QuaZExtraField::Map &centralExtraFields() const;
+    void setCentralExtraFields(const QuaZExtraField::Map &map);
+
+    const QuaZExtraField::Map &localExtraFields() const;
+    void setLocalExtraFields(const QuaZExtraField::Map &map);
 };
 
 #endif

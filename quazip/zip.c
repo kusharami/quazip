@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "zlib.h"
+#include <zlib.h>
 #if (ZLIB_VERNUM < 0x1270)
 typedef uLongf z_crc_t;
 #endif
@@ -1090,6 +1090,17 @@ extern int ZEXPORT zipOpenNewFileInZipKeys(zipFile file,
                        const zip_fileinfo* zipfi,
                        const unsigned long *keys);
 
+extern ZPOS64_T ZEXPORT zipTotalCompressedBytes(zipFile file)
+{
+    if (file==NULL)
+        return 0;
+
+    zip64_internal* zi;
+    zi = (zip64_internal*)file;
+
+    return zi->ci.totalCompressedData;
+}
+
 static int  zipOpenNewFileInZipInternal(zipFile file,
                                         const zip_fileinfo* zipfi,
                                         const char* password,
@@ -1414,8 +1425,10 @@ extern int ZEXPORT zipWriteInFileInZip (zipFile file,const void* buf,unsigned in
     if (zi->in_opened_file_inzip == 0)
         return ZIP_PARAMERROR;
 
-    if (!zi->ci.raw)
-        zi->ci.crc32 = crc32(zi->ci.crc32,buf,(uInt)len);
+    if (!zi->ci.raw){
+        const Bytef*charBuf = (const Bytef*)buf;
+        zi->ci.crc32 = crc32(zi->ci.crc32,charBuf,len);
+    }
 
 
 #ifdef HAVE_BZIP2
@@ -1505,12 +1518,7 @@ extern int ZEXPORT zipWriteInFileInZip (zipFile file,const void* buf,unsigned in
     return err;
 }
 
-extern int ZEXPORT zipCloseFileInZipRaw (zipFile file, uLong uncompressed_size, uLong crc32)
-{
-    return zipCloseFileInZipRaw64 (file, uncompressed_size, crc32);
-}
-
-extern int ZEXPORT zipCloseFileInZipRaw64 (zipFile file, ZPOS64_T uncompressed_size, uLong crc32)
+extern int ZEXPORT zipCloseFileInZip (zipFile file)
 {
     zip64_internal* zi;
     ZPOS64_T compressed_size;
@@ -1596,8 +1604,8 @@ extern int ZEXPORT zipCloseFileInZipRaw64 (zipFile file, ZPOS64_T uncompressed_s
     }
 #endif
 
-    crc32 = (uLong)zi->ci.crc32;
-    uncompressed_size = zi->ci.totalUncompressedData;
+    uLong crc32 = (uLong)zi->ci.crc32;
+    ZPOS64_T uncompressed_size = zi->ci.totalUncompressedData;
 
     compressed_size = zi->ci.totalCompressedData;
 
@@ -1762,11 +1770,6 @@ extern int ZEXPORT zipCloseFileInZipRaw64 (zipFile file, ZPOS64_T uncompressed_s
     zi->in_opened_file_inzip = 0;
 
     return err;
-}
-
-extern int ZEXPORT zipCloseFileInZip (zipFile file)
-{
-    return zipCloseFileInZipRaw (file,0,0);
 }
 
 int Write_Zip64EndOfCentralDirectoryLocator(zip64_internal* zi, ZPOS64_T zip64eocd_pos_inzip)

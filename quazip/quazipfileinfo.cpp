@@ -95,9 +95,10 @@ struct QuaZipFileInfo::Private : public QSharedData {
     QDateTime accessTime;
     QString filePath;
     QString comment;
+	QString symLinkTarget;
     QuaZExtraField::Map centralExtraFields;
     QuaZExtraField::Map localExtraFields;
-    QuaZipKeysGenerator::Keys cryptKeys;
+	QuaZipKeysGenerator::Keys cryptKeys;
 
     Private();
     Private(const Private &other);
@@ -484,7 +485,21 @@ void QuaZipFileInfo::setExternalAttributes(qint32 value)
         return;
 
     d->externalAttributes = value;
-    d->adjustFilePath(d.constData()->attributes() & DirAttr);
+	d->adjustFilePath(d.constData()->attributes() & DirAttr);
+}
+
+const QString &QuaZipFileInfo::symLinkTarget() const
+{
+	return d->symLinkTarget;
+}
+
+void QuaZipFileInfo::setSymLinkTarget(const QString &filePath)
+{
+	if (entryType() == SymLink && symLinkTarget() == filePath)
+		return;
+
+	d->symLinkTarget = filePath;
+	setEntryType(SymLink);
 }
 
 bool QuaZipFileInfo::isEncrypted() const
@@ -1132,6 +1147,7 @@ QuaZipFileInfo::Private::Private(const Private &other)
     , accessTime(other.accessTime) //15
     , filePath(other.filePath) //16
     , comment(other.comment) //17
+	, symLinkTarget(other.symLinkTarget) //21
     , centralExtraFields(other.centralExtraFields) //18
     , localExtraFields(other.localExtraFields) //19
 {
@@ -1169,6 +1185,7 @@ bool QuaZipFileInfo::Private::equals(const Private &other) const
         modifyTime == other.modifyTime && //15
         accessTime == other.accessTime && //16
         filePath == other.filePath && //17
+		symLinkTarget == other.symLinkTarget && //21
         comment == other.comment && //18
         centralExtraFields == other.centralExtraFields && //19
         localExtraFields == other.localExtraFields; //20

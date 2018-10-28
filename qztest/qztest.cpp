@@ -85,7 +85,7 @@ bool createTestArchive(QuaZip &zip, const QString &zipName,
     const QStringList &fileNames, QTextCodec *codec, const QString &dir)
 {
     if (codec != NULL) {
-        zip.setFileNameCodec(codec);
+        zip.setFilePathCodec(codec);
     }
     if (!zip.open(QuaZip::mdCreate)) {
         qWarning("Couldn't open %s", zipName.toUtf8().constData());

@@ -70,6 +70,7 @@ private:
       supplying an existing QuaZip instance.
       */
     bool internal;
+    bool fetchFileInfo;
     /// The last error.
     int zipError;
     /// Resets \ref zipError.
@@ -93,6 +94,7 @@ private:
     /// The destructor.
     ~QuaZipFilePrivate();
 
+    bool initFileInfo();
     bool initRead();
     bool initWrite();
 };
@@ -146,14 +148,7 @@ QuaZip *QuaZipFile::zip() const
 
 QString QuaZipFile::actualFilePath() const
 {
-    p->setZipError(UNZ_OK);
-    if (p->zip == nullptr || isWritable())
-        return p->fileInfo.filePath();
-
-    QString name = p->zip->currentFilePath();
-    if (name.isNull())
-        p->setZipError(p->zip->getZipError());
-    return name;
+    return fileInfo().filePath();
 }
 
 void QuaZipFile::setZipFilePath(const QString &zipFilePath)
@@ -188,73 +183,26 @@ void QuaZipFile::setZip(QuaZip *zip)
 void QuaZipFile::setFilePath(const QString &filePath)
 {
     if (p->zip == NULL) {
-        qWarning("QuaZipFile::setFileName(): call setZipFilePath() first");
+        qWarning("QuaZipFile::setFilePath(): call setZipFilePath() first");
         return;
     }
     if (!p->internal) {
-        qWarning("QuaZipFile::setFileName(): should not be used when not using "
+        qWarning("QuaZipFile::setFilePath(): should not be used when not using "
                  "internal QuaZip");
         return;
     }
     if (isOpen()) {
-        qWarning("QuaZipFile::setFileName(): can not set file name for already "
+        qWarning("QuaZipFile::setFilePath(): can not set file name for already "
                  "opened file");
         return;
     }
 
+    if (p->useFilePath == filePath)
+        return;
+
+    p->fetchFileInfo = true;
     p->fileInfo.setFilePath(filePath);
     p->useFilePath = p->fileInfo.filePath();
-}
-
-void QuaZipFilePrivate::clearZipError()
-{
-    setZipError(UNZ_OK);
-}
-
-void QuaZipFilePrivate::setZipError(int zipError)
-{
-    this->zipError = zipError;
-    if (zipError == UNZ_OK)
-        q->setErrorString(QString());
-    else
-        q->setErrorString(QString("ZIP/UNZIP API error %1").arg(zipError));
-}
-
-QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q)
-    : QuaZipFilePrivate(q, nullptr)
-{
-}
-
-QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, const QString &zipFilePath)
-    : QuaZipFilePrivate(q, zipFilePath, QString(), QuaZip::csDefault)
-{
-}
-
-QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, const QString &zipFilePath,
-    const QString &filePath, QuaZip::CaseSensitivity cs)
-    : QuaZipFilePrivate(q, new QuaZip(zipFilePath))
-{
-    internal = true;
-    fileInfo.setFilePath(filePath);
-    useFilePath = fileInfo.filePath();
-    caseSensitivity = cs;
-}
-
-QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, QuaZip *zip)
-    : q(q)
-    , zip(zip)
-    , caseSensitivity(QuaZip::csDefault)
-    , writePos(0)
-    , uncompressedSize(0)
-    , internal(false)
-    , zipError(UNZ_OK)
-{
-}
-
-QuaZipFilePrivate::~QuaZipFilePrivate()
-{
-    if (internal)
-        delete zip;
 }
 
 bool QuaZipFile::open(OpenMode mode)
@@ -305,6 +253,11 @@ bool QuaZipFile::open(OpenMode mode)
 
 void QuaZipFile::setPassword(QString *password)
 {
+    if (isOpen()) {
+        qWarning("QuaZipFile::setPassword d");
+        return;
+    }
+
     if (!password || password->isNull()) {
         p->fileInfo.setIsEncrypted(false);
         return;
@@ -313,193 +266,6 @@ void QuaZipFile::setPassword(QString *password)
     QuaZipKeysGenerator keyGen(p->zip ? p->zip->passwordCodec() : nullptr);
     keyGen.addPassword(*password);
     p->fileInfo.setCryptKeys(keyGen.keys());
-}
-
-bool QuaZipFilePrivate::initRead()
-{
-    if (zip == nullptr) {
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("Zip archive is not set.");
-        return false;
-    }
-
-    if (internal) {
-        Q_ASSERT(!zip->isOpen());
-        if (!zip->open(QuaZip::mdUnzip)) {
-            setZipError(zip->getZipError());
-            return false;
-        }
-    }
-
-    if (zip->getMode() != QuaZip::mdUnzip) {
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("Zip archive is not opened for reading.");
-        return false;
-    }
-
-    if (!useFilePath.isEmpty()) {
-        if (!zip->setCurrentFile(useFilePath, caseSensitivity)) {
-            setZipError(zip->getZipError());
-            return false;
-        }
-    }
-
-    if (!zip->hasCurrentFile()) {
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("File to read from Zip archive is not found.");
-        return false;
-    }
-
-    setZipError(unzOpenCurrentFile4(zip->getUnzFile(), NULL, NULL,
-        (int) fileInfo.isRaw(), fileInfo.cryptKeys()));
-    return zipError == UNZ_OK;
-}
-
-bool QuaZipFilePrivate::initWrite()
-{
-    if (internal) {
-        qWarning("QuaZipFile::open(): write mode is incompatible with "
-                 "internal QuaZip approach");
-        return false;
-    }
-
-    if (zip == NULL) {
-        qWarning("QuaZipFile::open(): zip is NULL");
-        return false;
-    }
-
-    switch (zip->getMode()) {
-    case QuaZip::mdCreate:
-    case QuaZip::mdAppend:
-    case QuaZip::mdAdd: {
-        auto zipOptions = fileInfo.zipOptions();
-        if (!fileInfo.isRaw() &&
-            (0 != (zipOptions & ~QuaZipFileInfo::CompatibleOptions))) {
-            q->setErrorString("Some incompatible options used to compress ZIP");
-            return false;
-        }
-
-        auto modTime = fileInfo.modificationTime();
-        if (modTime.isNull()) {
-            modTime = QDateTime::currentDateTimeUtc();
-            fileInfo.setModificationTime(modTime);
-        }
-
-        auto accTime = fileInfo.lastAccessTime();
-        if (accTime.isNull()) {
-            accTime = QDateTime::currentDateTimeUtc();
-            fileInfo.setLastAccessTime(accTime);
-        }
-
-        auto createTime = fileInfo.creationTime();
-        if (createTime.isNull()) {
-            createTime = QDateTime::currentDateTimeUtc();
-            fileInfo.setCreationTime(createTime);
-        }
-
-        zipOptions.setFlag(QuaZipFileInfo::HasDataDescriptor,
-            zip->isDataDescriptorWritingEnabled());
-
-        if (zip->isDataDescriptorWritingEnabled()) {
-            zipSetFlags(zip->getZipFile(), ZIP_WRITE_DATA_DESCRIPTOR);
-        } else
-            zipClearFlags(zip->getZipFile(), ZIP_WRITE_DATA_DESCRIPTOR);
-
-        QByteArray extraLocal;
-        QByteArray extraCentralDir;
-
-        auto compatibility = zip->compatibilityFlags();
-        fileInfo.setZipVersionMadeBy(45);
-        auto attr = fileInfo.attributes();
-        auto perm = fileInfo.permissions();
-
-        bool isUnicodeFilePath = !QuaZUtils::isAscii(fileInfo.filePath());
-        bool isUnicodeComment = !QuaZUtils::isAscii(fileInfo.comment());
-
-        if (compatibility &
-            (QuaZip::UnixCompatible | QuaZip::WindowsCompatible)) {
-            if (compatibility & QuaZip::UnixCompatible) {
-                fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_UNIX);
-            } else {
-                fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_WINDOWS_NTFS);
-            }
-            zipOptions.setFlag(QuaZipFileInfo::Unicode,
-                !(compatibility & QuaZip::DOS_Compatible) &&
-                    (isUnicodeFilePath || isUnicodeComment));
-        } else {
-            switch (int(compatibility)) {
-            case QuaZip::DOS_Compatible:
-                fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_MSDOS);
-                zipOptions &= ~QuaZipFileInfo::Unicode;
-                break;
-
-            case QuaZip::CustomCompatibility: {
-                bool usedUnicodeFilePathCodec =
-                    zip->fileNameCodec()->mibEnum() ==
-                    QuaZipTextCodec::IANA_UTF8;
-                bool usedUnicodeCommentCodec = zip->commentCodec()->mibEnum() ==
-                    QuaZipTextCodec::IANA_UTF8;
-
-                zipOptions.setFlag(QuaZipFileInfo::Unicode,
-                    usedUnicodeCommentCodec && usedUnicodeFilePathCodec &&
-                        (isUnicodeComment || isUnicodeFilePath));
-                break;
-            }
-            }
-        }
-
-        fileInfo.setZipOptions(zipOptions);
-        fileInfo.setAttributes(attr);
-        fileInfo.setPermissions(perm);
-
-        auto extraFields = fileInfo.centralExtraFields();
-        zip->updateExtraFields(extraFields, fileInfo);
-        fileInfo.setCentralExtraFields(extraFields);
-
-        zip_fileinfo info_z;
-        info_z.tmz_date.tm_year = modTime.date().year();
-        info_z.tmz_date.tm_mon = modTime.date().month() - 1;
-        info_z.tmz_date.tm_mday = modTime.date().day();
-        info_z.tmz_date.tm_hour = modTime.time().hour();
-        info_z.tmz_date.tm_min = modTime.time().minute();
-        info_z.tmz_date.tm_sec = modTime.time().second();
-        info_z.dosDate = 0;
-        info_z.internal_fa = fileInfo.internalAttributes();
-        info_z.external_fa = fileInfo.externalAttributes();
-        auto compatibleFilePath = zip->compatibleFilePath(fileInfo.filePath());
-        info_z.filename = compatibleFilePath.data();
-        auto compatibleComment = zip->compatibleComment(fileInfo.comment());
-        info_z.comment = compatibleComment.data();
-        info_z.level = fileInfo.compressionLevel();
-        info_z.raw = fileInfo.isRaw();
-        info_z.crc = fileInfo.crc();
-        info_z.flag = fileInfo.zipOptions();
-        info_z.memLevel = MAX_MEM_LEVEL;
-        info_z.windowBits = -MAX_WBITS;
-        info_z.method = fileInfo.compressionMethod();
-        info_z.uncompressed_size = fileInfo.uncompressedSize();
-        info_z.versionMadeBy = fileInfo.madeBy();
-        info_z.zip64 = zip->isZip64Enabled();
-        info_z.strategy = fileInfo.compressionStrategy();
-
-        setZipError(zipOpenNewFileInZipKeys(
-            zip->getZipFile(), &info_z, fileInfo.cryptKeys()));
-
-        if (zipError == UNZ_OK) {
-            writePos = 0;
-            return true;
-        }
-        break;
-    }
-
-    case QuaZip::mdUnzip:
-    case QuaZip::mdNotOpen:
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("ZIP file is not writable");
-        break;
-    }
-
-    return false;
 }
 
 bool QuaZipFile::isSequential() const
@@ -533,7 +299,7 @@ qint64 QuaZipFile::bytesAvailable() const
 qint64 QuaZipFile::size() const
 {
     if (isReadable())
-        return p->raw ? compressedSize() : uncompressedSize();
+        return isRaw() ? compressedSize() : uncompressedSize();
 
     if (isWritable()) {
         return p->writePos;
@@ -545,37 +311,29 @@ qint64 QuaZipFile::size() const
 
 qint64 QuaZipFile::compressedSize() const
 {
-    unz_file_info64 info_z;
-    p->setZipError(UNZ_OK);
-    if (p->zip == NULL || p->zip->getMode() != QuaZip::mdUnzip)
-        return -1;
-    p->setZipError(unzGetCurrentFileInfo64(
-        p->zip->getUnzFile(), &info_z, NULL, 0, NULL, 0, NULL, 0));
-    if (p->zipError != UNZ_OK)
-        return -1;
-    return info_z.compressed_size;
+    if (isWritable()) {
+        return qint64(zipTotalCompressedBytes(p->zip->getZipFile()));
+    }
+
+    return fileInfo().compressedSize();
 }
 
 qint64 QuaZipFile::uncompressedSize() const
 {
-    unz_file_info64 info_z;
-    p->setZipError(UNZ_OK);
-    if (p->zip == NULL || p->zip->getMode() != QuaZip::mdUnzip)
-        return -1;
-    p->setZipError(unzGetCurrentFileInfo64(
-        p->zip->getUnzFile(), &info_z, NULL, 0, NULL, 0, NULL, 0));
-    if (p->zipError != UNZ_OK)
-        return -1;
-    return info_z.uncompressed_size;
+    auto &fileInfo = this->fileInfo();
+    if (isWritable() && !isRaw())
+        return p->writePos;
+
+    return fileInfo.uncompressedSize();
 }
 
-bool QuaZipFile::getFileInfo(QuaZipFileInfo &info)
+const QuaZipFileInfo &QuaZipFile::fileInfo() const
 {
-    if (p->zip == NULL || p->zip->getMode() != QuaZip::mdUnzip)
-        return false;
-    p->zip->getCurrentFileInfo(info);
-    p->setZipError(p->zip->getZipError());
-    return p->zipError == UNZ_OK;
+    if (!isOpen()) {
+        p->initFileInfo();
+    }
+
+    return p->fileInfo;
 }
 
 void QuaZipFile::close()
@@ -587,22 +345,13 @@ void QuaZipFile::close()
         qWarning("QuaZipFile::close(): file isn't open");
         return;
     }
-    if (openMode() & ReadOnly)
+    if (isReadable())
         p->setZipError(unzCloseCurrentFile(p->zip->getUnzFile()));
-    else if (openMode() & WriteOnly)
-        if (isRaw())
-            p->setZipError(zipCloseFileInZipRaw64(
-                p->zip->getZipFile(), p->uncompressedSize, p->crc));
-        else
-            p->setZipError(zipCloseFileInZip(p->zip->getZipFile()));
-    else {
-        qWarning("Wrong open mode: %d", (int) openMode());
-        return;
-    }
-    if (p->zipError == UNZ_OK)
-        setOpenMode(QIODevice::NotOpen);
-    else
-        return;
+    else if (isWritable())
+        p->setZipError(zipCloseFileInZip(p->zip->getZipFile()));
+
+    QIODevice::close();
+
     if (p->internal) {
         p->zip->close();
         p->setZipError(p->zip->getZipError());
@@ -611,11 +360,16 @@ void QuaZipFile::close()
 
 qint64 QuaZipFile::readData(char *data, qint64 maxSize)
 {
+    if (maxSize < 0 || maxSize > std::numeric_limits<unsigned>::max()) {
+        p->setZipError(UNZ_PARAMERROR);
+        return -1;
+    }
+
     p->setZipError(UNZ_OK);
     qint64 bytesRead =
-        unzReadCurrentFile(p->zip->getUnzFile(), data, (unsigned) maxSize);
+        unzReadCurrentFile(p->zip->getUnzFile(), data, unsigned(maxSize));
     if (bytesRead < 0) {
-        p->setZipError((int) bytesRead);
+        p->setZipError(int(bytesRead));
         return -1;
     }
     return bytesRead;
@@ -623,20 +377,23 @@ qint64 QuaZipFile::readData(char *data, qint64 maxSize)
 
 qint64 QuaZipFile::writeData(const char *data, qint64 maxSize)
 {
-    p->setZipError(ZIP_OK);
+    if (maxSize < 0 || maxSize > std::numeric_limits<unsigned>::max()) {
+        p->setZipError(ZIP_PARAMERROR);
+        return -1;
+    }
+
     p->setZipError(
-        zipWriteInFileInZip(p->zip->getZipFile(), data, (uint) maxSize));
+        zipWriteInFileInZip(p->zip->getZipFile(), data, unsigned(maxSize)));
     if (p->zipError != ZIP_OK)
         return -1;
-    else {
-        p->writePos += maxSize;
-        return maxSize;
-    }
+
+    p->writePos += maxSize;
+    return maxSize;
 }
 
 QString QuaZipFile::filePath() const
 {
-    return p->fileName;
+    return p->useFilePath;
 }
 
 QuaZip::CaseSensitivity QuaZipFile::caseSensitivity() const
@@ -651,12 +408,16 @@ void QuaZipFile::setCaseSensitivity(QuaZip::CaseSensitivity cs)
         return;
     }
 
+    if (p->caseSensitivity == cs)
+        return;
+
     p->caseSensitivity = cs;
+    p->fetchFileInfo = true;
 }
 
 bool QuaZipFile::isRaw() const
 {
-    return p->raw;
+    return fileInfo().isRaw();
 }
 
 void QuaZipFile::setIsRaw(bool raw)
@@ -666,12 +427,12 @@ void QuaZipFile::setIsRaw(bool raw)
         return;
     }
 
-    p->raw = raw;
+    p->fileInfo.setIsRaw(raw);
 }
 
 int QuaZipFile::compressionLevel() const
 {
-    return p->level;
+    return fileInfo().compressionLevel();
 }
 
 void QuaZipFile::setCompressionLevel(int value)
@@ -681,12 +442,12 @@ void QuaZipFile::setCompressionLevel(int value)
         return;
     }
 
-    p->level = value;
+    p->fileInfo.setCompressionLevel(value);
 }
 
 int QuaZipFile::compressionMethod() const
 {
-    return p->method;
+    return fileInfo().compressionMethod();
 }
 
 void QuaZipFile::setCompressionMethod(int value)
@@ -696,12 +457,12 @@ void QuaZipFile::setCompressionMethod(int value)
         return;
     }
 
-    p->method = value;
+    p->fileInfo.setCompressionMethod(quint16(value));
 }
 
 int QuaZipFile::compressionStrategy() const
 {
-    return p->strategy;
+    return fileInfo().compressionStrategy();
 }
 
 void QuaZipFile::setCompressionStrategy(int value)
@@ -711,7 +472,7 @@ void QuaZipFile::setCompressionStrategy(int value)
         return;
     }
 
-    p->strategy = value;
+    p->fileInfo.setCompressionStrategy(quint16(value));
 }
 
 int QuaZipFile::getZipError() const
@@ -721,20 +482,224 @@ int QuaZipFile::getZipError() const
 
 const QString &QuaZipFile::comment() const
 {
-    return p->fileInfo.comment();
+    return fileInfo().comment();
 }
 
 void QuaZipFile::setComment(const QString &comment)
 {
+    if (isOpen()) {
+        qWarning("QuaZipFile cannot change comment when open.");
+        return;
+    }
+
     p->fileInfo.setComment(comment);
 }
 
-const QuaZExtraField::Map &QuaZipFile::extraFields() const
+const QuaZExtraField::Map &QuaZipFile::centralExtraFields() const
 {
-    return p->fileInfo.centralExtraFields();
+    return fileInfo().centralExtraFields();
 }
 
-void QuaZipFile::setExtraFields(const QuaZExtraField::Map &map)
+void QuaZipFile::setCentralExtraFields(const QuaZExtraField::Map &map)
 {
+    if (isOpen()) {
+        qWarning("QuaZipFile cannot change extra fields when open.");
+        return;
+    }
+
     p->fileInfo.setCentralExtraFields(map);
+}
+
+const QuaZExtraField::Map &QuaZipFile::localExtraFields() const
+{
+    return fileInfo().localExtraFields();
+}
+
+void QuaZipFile::setLocalExtraFields(const QuaZExtraField::Map &map)
+{
+    if (isOpen()) {
+        qWarning("QuaZipFile cannot change extra fields when open.");
+        return;
+    }
+
+    p->fileInfo.setLocalExtraFields(map);
+}
+
+void QuaZipFilePrivate::clearZipError()
+{
+    setZipError(UNZ_OK);
+}
+
+void QuaZipFilePrivate::setZipError(int zipError)
+{
+    this->zipError = zipError;
+    q->setErrorString(zipError == UNZ_OK
+            ? QString()
+            : QString("ZIP/UNZIP API error %1").arg(zipError));
+}
+
+QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q)
+    : QuaZipFilePrivate(q, nullptr)
+{
+}
+
+QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, const QString &zipFilePath)
+    : QuaZipFilePrivate(q, zipFilePath, QString(), QuaZip::csDefault)
+{
+}
+
+QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, const QString &zipFilePath,
+    const QString &filePath, QuaZip::CaseSensitivity cs)
+    : QuaZipFilePrivate(q, new QuaZip(zipFilePath))
+{
+    internal = true;
+    fileInfo.setFilePath(filePath);
+    useFilePath = fileInfo.filePath();
+    caseSensitivity = cs;
+}
+
+QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, QuaZip *zip)
+    : q(q)
+    , zip(zip)
+    , caseSensitivity(QuaZip::csDefault)
+    , writePos(0)
+    , uncompressedSize(0)
+    , internal(false)
+    , fetchFileInfo(true)
+    , zipError(UNZ_OK)
+{
+}
+
+QuaZipFilePrivate::~QuaZipFilePrivate()
+{
+    if (internal)
+        delete zip;
+}
+
+bool QuaZipFilePrivate::initFileInfo()
+{
+    if (fetchFileInfo) {
+        if (!useFilePath.isEmpty()) {
+            zip->setCurrentFile(useFilePath, caseSensitivity);
+            setZipError(zip->getZipError());
+            if (zipError != UNZ_OK)
+                return false;
+        }
+        zip->getCurrentFileInfo(fileInfo);
+        setZipError(zip->getZipError());
+        fetchFileInfo = false;
+        return zipError == UNZ_OK;
+    }
+
+    return true;
+}
+
+bool QuaZipFilePrivate::initRead()
+{
+    if (zip == nullptr) {
+        zipError = UNZ_PARAMERROR;
+        q->setErrorString("Zip archive is not set.");
+        return false;
+    }
+
+    if (internal) {
+        Q_ASSERT(!zip->isOpen());
+        if (!zip->open(QuaZip::mdUnzip)) {
+            setZipError(zip->getZipError());
+            return false;
+        }
+    }
+
+    if (zip->getMode() != QuaZip::mdUnzip) {
+        zipError = UNZ_PARAMERROR;
+        q->setErrorString("Zip archive is not opened for reading.");
+        return false;
+    }
+
+    if (!initFileInfo())
+        return false;
+
+    if (!zip->hasCurrentFile()) {
+        zipError = UNZ_PARAMERROR;
+        q->setErrorString("File to read from Zip archive is not found.");
+        return false;
+    }
+
+    setZipError(unzOpenCurrentFile4(zip->getUnzFile(), NULL, NULL,
+        int(fileInfo.isRaw()), fileInfo.cryptKeys()));
+    return zipError == UNZ_OK;
+}
+
+bool QuaZipFilePrivate::initWrite()
+{
+    if (internal) {
+        qWarning("QuaZipFile::open(): write mode is incompatible with "
+                 "internal QuaZip approach");
+        return false;
+    }
+
+    if (zip == nullptr) {
+        qWarning("QuaZipFile::open(): zip is NULL");
+        return false;
+    }
+
+    switch (zip->getMode()) {
+    case QuaZip::mdCreate:
+    case QuaZip::mdAppend:
+    case QuaZip::mdAdd: {
+        QByteArray compatibleFilePath;
+        QByteArray compatibleComment;
+
+        zip_fileinfo info_z;
+        zip->fillZipInfo(
+            info_z, fileInfo, compatibleFilePath, compatibleComment);
+
+        auto resultCode = QuaZExtraField::OK;
+        auto centralExtra =
+            QuaZExtraField::fromMap(fileInfo.centralExtraFields(), &resultCode);
+        switch (resultCode) {
+        case QuaZExtraField::ERR_FIELD_SIZE_LIMIT:
+        case QuaZExtraField::ERR_BUFFER_SIZE_LIMIT:
+            q->setErrorString("Central extra field is too big.");
+            zipError = ZIP_PARAMERROR;
+            return false;
+        default:
+            break;
+        }
+        auto localExtra =
+            QuaZExtraField::fromMap(fileInfo.localExtraFields(), &resultCode);
+        switch (resultCode) {
+        case QuaZExtraField::ERR_FIELD_SIZE_LIMIT:
+        case QuaZExtraField::ERR_BUFFER_SIZE_LIMIT:
+            q->setErrorString("Local extra field is too big.");
+            zipError = ZIP_PARAMERROR;
+            return false;
+        default:
+            break;
+        }
+
+        info_z.extrafield_global = centralExtra.data();
+        info_z.size_extrafield_global = uInt(centralExtra.length());
+
+        info_z.extrafield_global = localExtra.data();
+        info_z.size_extrafield_global = uInt(localExtra.length());
+
+        setZipError(zipOpenNewFileInZipKeys(
+            zip->getZipFile(), &info_z, fileInfo.cryptKeys()));
+
+        if (zipError == ZIP_OK) {
+            writePos = 0;
+            return true;
+        }
+        break;
+    }
+
+    case QuaZip::mdUnzip:
+    case QuaZip::mdNotOpen:
+        zipError = ZIP_PARAMERROR;
+        q->setErrorString("ZIP file is not writable");
+        break;
+    }
+
+    return false;
 }

@@ -160,7 +160,7 @@ void QuaGzipDevice::setOriginalFileName(const QString &fileName)
                           .arg(FILENAME_MAX));
         return;
     }
-    memcpy(d()->originalFileName, mbcsFileName.data(), length);
+    memcpy(d()->originalFileName, mbcsFileName.data(), size_t(length));
     d()->originalFileName[length] = 0;
 }
 
@@ -185,7 +185,7 @@ void QuaGzipDevice::setComment(const QString &text)
                           .arg(maxCommentLength()));
         return;
     }
-    memcpy(d()->comment, comment.data(), length);
+    memcpy(d()->comment, comment.data(), size_t(length));
     d()->comment[length] = 0;
 }
 
@@ -202,7 +202,7 @@ void QuaGzipDevice::setModificationTime(time_t time)
 QuaZExtraField::Map QuaGzipDevice::extraFields() const
 {
     auto &header = d()->gzHeader;
-    return QuaZExtraField::toMap(header.extra, header.extra_len);
+    return QuaZExtraField::toMap(header.extra, int(header.extra_len));
 }
 
 void QuaGzipDevice::setExtraFields(const QuaZExtraField::Map &map)
@@ -210,10 +210,10 @@ void QuaGzipDevice::setExtraFields(const QuaZExtraField::Map &map)
     auto &header = d()->gzHeader;
 
     QuaZExtraField::ResultCode code;
-    auto bytes = QuaZExtraField::fromMap(map, &code, header.extra_max);
+    auto bytes = QuaZExtraField::fromMap(map, &code, int(header.extra_max));
     if (code == QuaZExtraField::OK) {
-        header.extra_len = bytes.length();
-        memcpy(header.extra, bytes.data(), bytes.length());
+        header.extra_len = uInt(bytes.length());
+        memcpy(header.extra, bytes.data(), size_t(bytes.length()));
     } else {
         d()->setError(QuaZExtraField::errorString(code));
     }
@@ -317,12 +317,12 @@ void QuaGzipDevicePrivate::restoreOriginalFileName()
     static const char GZ[] = "gz";
     if (0 ==
         fileInfo.suffix().compare(QLatin1String(GZ), Qt::CaseInsensitive)) {
-        fileName.resize(fileName.length() - sizeof(GZ));
+        fileName.resize(fileName.length() - int(sizeof(GZ)));
     }
 
     int length = fileName.length();
     if (length <= FILENAME_MAX) {
-        memcpy(originalFileName, fileName.data(), length);
+        memcpy(originalFileName, fileName.data(), size_t(length));
         originalFileName[length] = 0;
     }
 }
