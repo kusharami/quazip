@@ -32,6 +32,9 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quazipkeysgenerator.h"
 #include "quazextrafield.h"
 
+class QFileInfo;
+class QDir;
+
 /// Information about a file inside archive (with zip64 support).
 /** Call QuaZip::getCurrentFileInfo() or QuaZipFile::getFileInfo() to
  * fill this structure. */
@@ -108,6 +111,19 @@ public:
     QuaZipFileInfo(const QuaZipFileInfo &other);
     ~QuaZipFileInfo();
 
+    static QuaZipFileInfo fromFile(
+        const QString &filePath, const QString &storePath = QString());
+    static QuaZipFileInfo fromFile(
+        const QFileInfo &fileInfo, const QString &storePath = QString());
+    static QuaZipFileInfo fromDir(
+        const QDir &dir, const QString &storePath = QString());
+
+    bool initWithDir(const QDir &dir, const QString &storePath = QString());
+    bool initWithFile(
+        const QString &filePath, const QString &storePath = QString());
+    bool initWithFile(
+        const QFileInfo &fileInfo, const QString &storePath = QString());
+
     const QString &filePath() const;
     void setFilePath(const QString &filePath);
 
@@ -166,8 +182,8 @@ public:
     qint32 externalAttributes();
     void setExternalAttributes(qint32 value);
 
-	const QString &symLinkTarget() const;
-	void setSymLinkTarget(const QString &filePath);
+    const QString &symLinkTarget() const;
+    void setSymLinkTarget(const QString &filePath);
 
     int diskNumber() const;
     void setDiskNumber(int value);

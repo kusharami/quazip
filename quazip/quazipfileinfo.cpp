@@ -95,14 +95,18 @@ struct QuaZipFileInfo::Private : public QSharedData {
     QDateTime accessTime;
     QString filePath;
     QString comment;
-	QString symLinkTarget;
+    QString symLinkTarget;
     QuaZExtraField::Map centralExtraFields;
     QuaZExtraField::Map localExtraFields;
-	QuaZipKeysGenerator::Keys cryptKeys;
+    QuaZipKeysGenerator::Keys cryptKeys;
 
     Private();
     Private(const Private &other);
 
+    void setEntryType(EntryType value);
+    void setPermissions(QFile::Permissions value);
+
+    EntryType entryType() const;
     QFile::Permissions permissions() const;
     Attributes attributes() const;
     void adjustFilePath(bool isDir);
@@ -125,14 +129,101 @@ QuaZipFileInfo::~QuaZipFileInfo()
     // here is private data destroyed
 }
 
+QuaZipFileInfo QuaZipFileInfo::fromFile(
+    const QString &filePath, const QString &storePath)
+{
+    QuaZipFileInfo info;
+    info.initWithFile(filePath, storePath);
+    return info;
+}
+
+QuaZipFileInfo QuaZipFileInfo::fromFile(
+    const QFileInfo &fileInfo, const QString &storePath)
+{
+    QuaZipFileInfo info;
+    info.initWithFile(fileInfo, storePath);
+    return info;
+}
+
+QuaZipFileInfo QuaZipFileInfo::fromDir(
+    const QDir &dir, const QString &storePath)
+{
+    QuaZipFileInfo info;
+    info.initWithDir(dir, storePath);
+    return info;
+}
+
+bool QuaZipFileInfo::initWithDir(const QDir &dir, const QString &storePath)
+{
+    auto path = dir.absolutePath();
+    if (path.isEmpty() || path.endsWith('/'))
+        return false;
+
+    return initWithFile(path, storePath);
+}
+
+bool QuaZipFileInfo::initWithFile(
+    const QString &filePath, const QString &storePath)
+{
+    QFileInfo fileInfo(filePath);
+    return initWithFile(fileInfo, storePath);
+}
+
+bool QuaZipFileInfo::initWithFile(
+    const QFileInfo &fileInfo, const QString &storePath)
+{
+    if ((!fileInfo.exists() && !fileInfo.isSymLink()))
+        return false;
+
+    if (!fileInfo.isSymLink() && fileInfo.fileName().isEmpty()) {
+        QDir dir(fileInfo.filePath());
+        return initWithDir(dir, storePath);
+    }
+
+    setFilePath(storePath.isEmpty() ? fileInfo.fileName() : storePath);
+    if (fileInfo.isSymLink()) {
+        d->setEntryType(SymLink);
+        d->symLinkTarget = fileInfo.symLinkTarget();
+    } else if (fileInfo.isDir()) {
+        d->setEntryType(Directory);
+    } else {
+        d->setEntryType(File);
+    }
+
+    Attributes attr;
+    auto perm = fileInfo.permissions();
+    if (!fileInfo.isWritable())
+        attr |= ReadOnly;
+
+    if (fileInfo.isHidden())
+        attr |= Hidden;
+
+    if (fileInfo.isExecutable())
+        perm |= QFile::ExeUser | QFile::ExeOwner;
+
+    setAttributes(attr);
+    setPermissions(perm);
+
+    setModificationTime(fileInfo.lastModified());
+    setLastAccessTime(fileInfo.lastRead());
+    setCreationTime(fileInfo.created());
+
+    return true;
+}
+
 QuaZipFileInfo::EntryType QuaZipFileInfo::entryType() const
 {
-    if (d->filePath.endsWith('/'))
+    return d->entryType();
+}
+
+QuaZipFileInfo::EntryType QuaZipFileInfo::Private::entryType() const
+{
+    if (filePath.endsWith('/'))
         return Directory;
 
-    int uAttr = d->externalAttributes >> 16;
+    int uAttr = externalAttributes >> 16;
 
-    switch (d->zipSystem) {
+    switch (zipSystem) {
     case OS_MSDOS:
     case OS_WINDOWS_NTFS:
     case OS_WINDOWS_VFAT:
@@ -172,7 +263,7 @@ QuaZipFileInfo::EntryType QuaZipFileInfo::entryType() const
             return Directory;
 
         case UNX_IFLNK:
-            if (Private::isSymlinkHost(d->zipSystem))
+            if (isSymlinkHost(zipSystem))
                 return SymLink;
             break;
         }
@@ -187,12 +278,17 @@ void QuaZipFileInfo::setEntryType(EntryType value)
     if (entryType() == value)
         return;
 
-    int uAttr = d->externalAttributes >> 16;
+    d->setEntryType(value);
+}
+
+void QuaZipFileInfo::Private::setEntryType(EntryType value)
+{
+    int uAttr = externalAttributes >> 16;
 
     switch (value) {
     case File:
-        d->externalAttributes &= ~DirAttr;
-        switch (d->zipSystem) {
+        externalAttributes &= ~DirAttr;
+        switch (zipSystem) {
         case OS_VMCMS:
         case OS_ACORN:
         case OS_MSDOS:
@@ -230,8 +326,8 @@ void QuaZipFileInfo::setEntryType(EntryType value)
         break;
 
     case Directory:
-        d->externalAttributes |= DirAttr;
-        switch (d->zipSystem) {
+        externalAttributes |= DirAttr;
+        switch (zipSystem) {
         case OS_MSDOS:
         case OS_WINDOWS_NTFS:
         case OS_WINDOWS_VFAT:
@@ -270,11 +366,11 @@ void QuaZipFileInfo::setEntryType(EntryType value)
 
     case SymLink: {
         auto perm = permissions();
-        d->zipSystem = OS_UNIX;
+        zipSystem = OS_UNIX;
         setPermissions(perm);
-        uAttr = d->externalAttributes >> 16;
+        uAttr = externalAttributes >> 16;
 
-        d->externalAttributes &= ~DirAttr;
+        externalAttributes &= ~DirAttr;
 
         uAttr &= UNX_IFMT;
         uAttr |= UNX_IFLNK;
@@ -282,9 +378,9 @@ void QuaZipFileInfo::setEntryType(EntryType value)
     }
     }
 
-    d->externalAttributes &= 0xFFFF;
-    d->externalAttributes |= uAttr << 16;
-    d->adjustFilePath(value == Directory);
+    externalAttributes &= 0xFFFF;
+    externalAttributes |= uAttr << 16;
+    adjustFilePath(value == Directory);
 }
 
 const QString &QuaZipFileInfo::filePath() const
@@ -485,21 +581,21 @@ void QuaZipFileInfo::setExternalAttributes(qint32 value)
         return;
 
     d->externalAttributes = value;
-	d->adjustFilePath(d.constData()->attributes() & DirAttr);
+    d->adjustFilePath(d.constData()->attributes() & DirAttr);
 }
 
 const QString &QuaZipFileInfo::symLinkTarget() const
 {
-	return d->symLinkTarget;
+    return d->symLinkTarget;
 }
 
 void QuaZipFileInfo::setSymLinkTarget(const QString &filePath)
 {
-	if (entryType() == SymLink && symLinkTarget() == filePath)
-		return;
+    if (entryType() == SymLink && symLinkTarget() == filePath)
+        return;
 
-	d->symLinkTarget = filePath;
-	setEntryType(SymLink);
+    d->symLinkTarget = filePath;
+    setEntryType(SymLink);
 }
 
 bool QuaZipFileInfo::isEncrypted() const
@@ -791,9 +887,14 @@ void QuaZipFileInfo::setPermissions(QFile::Permissions value)
     if (permissions() == value)
         return;
 
-    int uAttr = d->externalAttributes >> 16;
+    d->setPermissions(value);
+}
 
-    switch (d->zipSystem) {
+void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
+{
+    int uAttr = externalAttributes >> 16;
+
+    switch (zipSystem) {
     case OS_MSDOS:
     case OS_WINDOWS_NTFS:
     case OS_WINDOWS_VFAT:
@@ -818,9 +919,9 @@ void QuaZipFileInfo::setPermissions(QFile::Permissions value)
 
         if (testPerm == allRead || testPerm == (allRead | allWrite)) {
             if (testPerm & allWrite) {
-                d->externalAttributes &= ~ReadOnly;
+                externalAttributes &= ~ReadOnly;
             } else {
-                d->externalAttributes |= ReadOnly;
+                externalAttributes |= ReadOnly;
             }
             break;
         } else {
@@ -838,7 +939,7 @@ void QuaZipFileInfo::setPermissions(QFile::Permissions value)
                 uAttr |= UNX_IFLNK;
                 break;
             }
-            d->zipSystem = OS_UNIX;
+            zipSystem = OS_UNIX;
         }
         Q_FALLTHROUGH();
     }
@@ -916,8 +1017,8 @@ void QuaZipFileInfo::setPermissions(QFile::Permissions value)
         break;
     }
 
-    d->externalAttributes &= 0xFFFF;
-    d->externalAttributes |= uAttr << 16;
+    externalAttributes &= 0xFFFF;
+    externalAttributes |= uAttr << 16;
 }
 
 QuaZipFileInfo::Attributes QuaZipFileInfo::attributes() const
@@ -1147,7 +1248,7 @@ QuaZipFileInfo::Private::Private(const Private &other)
     , accessTime(other.accessTime) //15
     , filePath(other.filePath) //16
     , comment(other.comment) //17
-	, symLinkTarget(other.symLinkTarget) //21
+    , symLinkTarget(other.symLinkTarget) //21
     , centralExtraFields(other.centralExtraFields) //18
     , localExtraFields(other.localExtraFields) //19
 {
@@ -1185,7 +1286,7 @@ bool QuaZipFileInfo::Private::equals(const Private &other) const
         modifyTime == other.modifyTime && //15
         accessTime == other.accessTime && //16
         filePath == other.filePath && //17
-		symLinkTarget == other.symLinkTarget && //21
+        symLinkTarget == other.symLinkTarget && //21
         comment == other.comment && //18
         centralExtraFields == other.centralExtraFields && //19
         localExtraFields == other.localExtraFields; //20
