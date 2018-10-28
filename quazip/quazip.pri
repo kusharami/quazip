@@ -17,7 +17,6 @@ HEADERS += \
         $$PWD/quazipfileinfo.h \
         $$PWD/quazip_global.h \
         $$PWD/quazip.h \
-        $$PWD/quazipnewinfo.h \
         $$PWD/unzip.h \
         $$PWD/zip.h \
     $$PWD/quagzipdevice.h \
@@ -37,7 +36,6 @@ SOURCES += $$PWD/qioapi.cpp \
            $$PWD/quazipdir.cpp \
            $$PWD/quazipfile.cpp \
            $$PWD/quazipfileinfo.cpp \
-           $$PWD/quazipnewinfo.cpp \
            $$PWD/unzip.c \
            $$PWD/zip.c \
     $$PWD/quagzipdevice.cpp \
