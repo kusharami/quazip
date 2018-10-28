@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -95,8 +96,8 @@ private:
     ~QuaZipFilePrivate();
 
     bool initFileInfo();
-    bool initRead();
-    bool initWrite();
+    QIODevice::OpenMode initRead(QIODevice::OpenMode mode);
+    QIODevice::OpenMode initWrite(QIODevice::OpenMode mode);
 };
 
 QuaZipFile::QuaZipFile()
@@ -231,21 +232,14 @@ bool QuaZipFile::open(OpenMode mode)
         return false;
     }
 
-    setOpenMode(mode);
-
     if (mode & ReadOnly) {
-        if (!p->initRead()) {
-            setOpenMode(NotOpen);
-            return false;
-        }
+        mode = p->initRead(mode);
+    } else if (mode & WriteOnly) {
+        mode = p->initWrite(mode);
     }
 
-    if (mode & WriteOnly) {
-        if (!p->initWrite()) {
-            setOpenMode(NotOpen);
-            return false;
-        }
-    }
+    if (mode == NotOpen)
+        return false;
 
     p->clearZipError();
     return QIODevice::open(mode);
@@ -594,53 +588,59 @@ bool QuaZipFilePrivate::initFileInfo()
     return true;
 }
 
-bool QuaZipFilePrivate::initRead()
+QIODevice::OpenMode QuaZipFilePrivate::initRead(QIODevice::OpenMode mode)
 {
-    if (zip == nullptr) {
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("Zip archive is not set.");
-        return false;
-    }
-
-    if (internal) {
-        Q_ASSERT(!zip->isOpen());
-        if (!zip->open(QuaZip::mdUnzip)) {
-            setZipError(zip->getZipError());
-            return false;
+    do {
+        if (zip == nullptr) {
+            zipError = UNZ_PARAMERROR;
+            q->setErrorString("Zip archive is not set.");
+            break;
         }
-    }
 
-    if (zip->getMode() != QuaZip::mdUnzip) {
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("Zip archive is not opened for reading.");
-        return false;
-    }
+        if (internal) {
+            Q_ASSERT(!zip->isOpen());
+            if (!zip->open(QuaZip::mdUnzip)) {
+                setZipError(zip->getZipError());
+                break;
+            }
+        }
 
-    if (!initFileInfo())
-        return false;
+        if (zip->getMode() != QuaZip::mdUnzip) {
+            zipError = UNZ_PARAMERROR;
+            q->setErrorString("Zip archive is not opened for reading.");
+            break;
+        }
 
-    if (!zip->hasCurrentFile()) {
-        zipError = UNZ_PARAMERROR;
-        q->setErrorString("File to read from Zip archive is not found.");
-        return false;
-    }
+        if (!initFileInfo())
+            break;
 
-    setZipError(unzOpenCurrentFile4(zip->getUnzFile(), NULL, NULL,
-        int(fileInfo.isRaw()), fileInfo.cryptKeys()));
-    return zipError == UNZ_OK;
+        if (!zip->hasCurrentFile()) {
+            zipError = UNZ_PARAMERROR;
+            q->setErrorString("File to read from Zip archive is not found.");
+            break;
+        }
+
+        setZipError(unzOpenCurrentFile4(zip->getUnzFile(), NULL, NULL,
+            int(fileInfo.isRaw()), fileInfo.cryptKeys()));
+        if (zipError == UNZ_OK) {
+            return mode;
+        }
+    } while (false);
+
+    return QIODevice::NotOpen;
 }
 
-bool QuaZipFilePrivate::initWrite()
+QIODevice::OpenMode QuaZipFilePrivate::initWrite(QIODevice::OpenMode mode)
 {
     if (internal) {
         qWarning("QuaZipFile::open(): write mode is incompatible with "
                  "internal QuaZip approach");
-        return false;
+        return QIODevice::NotOpen;
     }
 
     if (zip == nullptr) {
         qWarning("QuaZipFile::open(): zip is NULL");
-        return false;
+        return QIODevice::NotOpen;
     }
 
     switch (zip->getMode()) {
@@ -662,7 +662,7 @@ bool QuaZipFilePrivate::initWrite()
         case QuaZExtraField::ERR_BUFFER_SIZE_LIMIT:
             q->setErrorString("Central extra field is too big.");
             zipError = ZIP_PARAMERROR;
-            return false;
+            return QIODevice::NotOpen;
         default:
             break;
         }
@@ -673,7 +673,7 @@ bool QuaZipFilePrivate::initWrite()
         case QuaZExtraField::ERR_BUFFER_SIZE_LIMIT:
             q->setErrorString("Local extra field is too big.");
             zipError = ZIP_PARAMERROR;
-            return false;
+            return QIODevice::NotOpen;
         default:
             break;
         }
@@ -689,7 +689,9 @@ bool QuaZipFilePrivate::initWrite()
 
         if (zipError == ZIP_OK) {
             writePos = 0;
-            return true;
+            if (fileInfo.isText())
+                mode |= QIODevice::Text;
+            return mode;
         }
         break;
     }
@@ -701,5 +703,5 @@ bool QuaZipFilePrivate::initWrite()
         break;
     }
 
-    return false;
+    return QIODevice::NotOpen;
 }
