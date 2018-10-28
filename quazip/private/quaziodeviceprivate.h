@@ -53,6 +53,7 @@ public:
     bool hasError : 1;
     bool atEnd : 1;
     bool hasUncompressedSize : 1;
+    bool transaction : 1;
     QByteArray seekBuffer;
     z_stream zstream;
     Byte zbuffer[QUAZIO_BUFFER_SIZE];

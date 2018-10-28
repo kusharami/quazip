@@ -38,6 +38,7 @@ QuaZIODevicePrivate::QuaZIODevicePrivate(QuaZIODevice *owner)
     , hasError(false)
     , atEnd(false)
     , hasUncompressedSize(false)
+    , transaction(false)
 {
     memset(&zstream, 0, sizeof(zstream));
 }
@@ -124,7 +125,7 @@ bool QuaZIODevicePrivate::skip(qint64 skipCount)
 
 qint64 QuaZIODevicePrivate::readCompressedData(Bytef *zbuffer, size_t size)
 {
-    auto readResult = io->read(reinterpret_cast<char *>(zbuffer), size);
+    auto readResult = io->read(reinterpret_cast<char *>(zbuffer), qint64(size));
 
     if (readResult <= 0) {
         setError(readResult < 0 ? io->errorString()
@@ -134,24 +135,26 @@ qint64 QuaZIODevicePrivate::readCompressedData(Bytef *zbuffer, size_t size)
     return readResult;
 }
 
-bool QuaZIODevicePrivate::finishReadTransaction(qint64 savedPosition)
+void QuaZIODevicePrivate::finishReadTransaction(qint64 savedPosition)
 {
+    if (!transaction)
+        return;
+
     Q_ASSERT(io);
     Q_ASSERT(io->isTransactionStarted());
     io->rollbackTransaction();
     auto skipCount = ioPosition - savedPosition;
     while (skipCount > 0) {
         Byte buf[4096];
-        auto skipSize =
-            readCompressedData(buf, std::min(skipCount, qint64(sizeof(buf))));
+        auto skipSize = readCompressedData(
+            buf, size_t(std::min(skipCount, qint64(sizeof(buf)))));
         if (skipSize <= 0) {
-            return false;
+            return;
         }
 
         skipCount -= skipSize;
     }
-
-    return true;
+    transaction = false;
 }
 
 void QuaZIODevicePrivate::setCompressionLevel(int level)
@@ -205,11 +208,6 @@ qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
     auto blockSize = QuaZUtils::maxBlockSize<BlockSize>();
     bool run = true;
 
-    bool transaction = !io->isTransactionStarted() && io->isSequential();
-    if (transaction) {
-        io->startTransaction();
-    }
-
     auto savedPosition = ioPosition;
 
     while (!hasError && run && count > 0) {
@@ -219,6 +217,13 @@ qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
 
         while (!hasError && run && zstream.avail_out > 0) {
             if (zstream.avail_in == 0) {
+                if (transaction)
+                    io->commitTransaction();
+
+                transaction = !io->isTransactionStarted() && io->isSequential();
+                if (transaction) {
+                    io->startTransaction();
+                }
                 auto readResult = readCompressedData(zbuffer, sizeof(zbuffer));
                 if (readResult <= 0) {
                     run = false;
@@ -237,10 +242,7 @@ qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
                 hasUncompressedSize = true;
                 uncompressedSize = zstream.total_out;
                 ioPosition -= zstream.avail_in;
-                if (transaction) {
-                    finishReadTransaction(savedPosition);
-                    transaction = false;
-                }
+                finishReadTransaction(savedPosition);
                 break;
             }
 
@@ -258,13 +260,7 @@ qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
     }
 
     if (hasError) {
-        if (transaction)
-            io->rollbackTransaction();
         return -1;
-    }
-
-    if (transaction) {
-        io->commitTransaction();
     }
 
     return maxlen - count;
@@ -381,6 +377,13 @@ bool QuaZIODevicePrivate::doDeflateInit()
 void QuaZIODevicePrivate::endRead()
 {
     Q_ASSERT(owner->isReadable());
+    if (transaction) {
+        if (hasError)
+            io->rollbackTransaction();
+        else
+            io->commitTransaction();
+        transaction = false;
+    }
     seekInit();
     check(inflateEnd(&zstream));
 }
@@ -406,7 +409,7 @@ void QuaZIODevicePrivate::endWrite()
     }
 
     if (!hasError && zstream.avail_out < sizeof(zbuffer)) {
-        flushBuffer(sizeof(zbuffer) - zstream.avail_out);
+        flushBuffer(int(sizeof(zbuffer) - zstream.avail_out));
     }
     if (!hasError) {
         seekInit(); // HACK: ensure QFileDevice flushed
