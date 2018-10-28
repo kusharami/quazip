@@ -124,8 +124,13 @@ public:
     bool initWithFile(
         const QFileInfo &fileInfo, const QString &storePath = QString());
 
+    bool applyAttributes(const QString &filePath);
+
     const QString &filePath() const;
     void setFilePath(const QString &filePath);
+
+    QString fileName() const;
+    QString path() const;
 
     const QString &comment() const;
     void setComment(const QString &value);

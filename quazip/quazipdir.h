@@ -63,25 +63,14 @@ public:
        If \a dir is not specified, points to the root of the archive.
        The same happens if the \a dir is &quot;/&quot;.
      */
-    QuaZipDir(QuaZip *zip, const QString &dir = QString());
+    explicit QuaZipDir(QuaZip *zip, const QString &dir = QString());
     /// Destructor.
     ~QuaZipDir();
-    /// The assignment operator.
-    bool operator==(const QuaZipDir &that);
-    /// operator!=
-    /**
-      \return \c true if either this and \a that use different QuaZip
-      instances or if they point to different directories.
-      */
-    inline bool operator!=(const QuaZipDir &that)
-    {
-        return !operator==(that);
-    }
-    /// operator==
-    /**
-      \return \c true if both this and \a that use the same QuaZip
-      instance and point to the same directory.
-      */
+    /// Equality operator.
+    bool operator==(const QuaZipDir &that) const;
+    /// Inequality operator.
+    inline bool operator!=(const QuaZipDir &that) const;
+    /// Asignment operator
     QuaZipDir &operator=(const QuaZipDir &that);
     /// Returns the name of the entry at the specified position.
     QString operator[](int pos) const;
@@ -97,11 +86,11 @@ public:
       * Note that the subsequent path() call will not return a path
       * starting with '/' in all cases.
       */
-    bool cd(const QString &dirName);
+    bool cd(const QString &dirPath);
     /// Goes up.
     bool cdUp();
     /// Returns the number of entries in the directory.
-    uint count() const;
+    int count() const;
     /// Returns the current directory name.
     /**
       The name doesn't include the path.
@@ -161,7 +150,7 @@ public:
     QDir::Filters filter();
     /// Returns if the QuaZipDir points to the root of the archive.
     /**
-      Not that the root path is the empty string, not '/'.
+      \note The root path is the empty string, not '/'.
      */
     bool isRoot() const;
     /// Return the default name filter.
@@ -204,5 +193,10 @@ public:
     /// Returns the default sorting mode.
     QDir::SortFlags sorting() const;
 };
+
+bool QuaZipDir::operator!=(const QuaZipDir &that) const
+{
+    return !operator==(that);
+}
 
 #endif // QUAZIP_QUAZIPDIR_H

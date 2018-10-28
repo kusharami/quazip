@@ -100,11 +100,6 @@ private:
     QIODevice::OpenMode initWrite(QIODevice::OpenMode mode);
 };
 
-QuaZipFile::QuaZipFile()
-    : p(new QuaZipFilePrivate(this))
-{
-}
-
 QuaZipFile::QuaZipFile(QObject *parent)
     : QIODevice(parent)
     , p(new QuaZipFilePrivate(this))
@@ -332,7 +327,6 @@ const QuaZipFileInfo &QuaZipFile::fileInfo() const
 
 void QuaZipFile::close()
 {
-    p->clearZipError();
     if (p->zip == NULL || !p->zip->isOpen())
         return;
     if (!isOpen()) {

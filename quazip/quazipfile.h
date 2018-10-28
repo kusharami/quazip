@@ -89,17 +89,12 @@ protected:
 
 public:
     /// Constructs a QuaZipFile instance.
-    /** You should use setZipFilePath() and setFileName() or setZip() before
-     * trying to call open() on the constructed object.
-     **/
-    QuaZipFile();
-    /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object.
      *
      * You should use setZipFilePath() and setFileName() or setZip() before
      * trying to call open() on the constructed object.
      **/
-    QuaZipFile(QObject *parent);
+    explicit QuaZipFile(QObject *parent = nullptr);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object and \a
      * zipFilePath specifies ZIP archive file path.
@@ -107,7 +102,7 @@ public:
      * You should use setFileName() before trying to call open() on the
      * constructed object.
      **/
-    QuaZipFile(const QString &zipFilePath, QObject *parent = NULL);
+    explicit QuaZipFile(const QString &zipFilePath, QObject *parent = nullptr);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object, \a
      * zipFilePath specifies ZIP archive file path and \a filePath and \a cs
@@ -116,7 +111,8 @@ public:
      * \sa setFilePath(), QuaZip::setCurrentFile()
      **/
     QuaZipFile(const QString &zipFilePath, const QString &filePath,
-        QuaZip::CaseSensitivity cs = QuaZip::csDefault, QObject *parent = NULL);
+        QuaZip::CaseSensitivity cs = QuaZip::csDefault,
+        QObject *parent = nullptr);
     /// Constructs a QuaZipFile instance.
     /** \a parent argument specifies this object's parent object.
      *
@@ -166,7 +162,7 @@ public:
      * zip.close();
      * \endcode
      **/
-    QuaZipFile(QuaZip *zip, QObject *parent = NULL);
+    explicit QuaZipFile(QuaZip *zip, QObject *parent = nullptr);
     /// Destroys a QuaZipFile instance.
     /** Closes file if open, destructs internal QuaZip object (if it
      * exists and \em is internal, of course).

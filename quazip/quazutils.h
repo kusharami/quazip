@@ -48,4 +48,8 @@ public:
     }
 
     static bool isAscii(const QString &text);
+
+    static bool createSymLink(const QString &linkPath, const QString &target);
+    static bool createSymLink(
+        const QString &linkPath, const QString &target, bool isDir);
 };

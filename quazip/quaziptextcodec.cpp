@@ -277,7 +277,7 @@ QString QuaZipTextCodec::convertToUnicode(
     }
 
     std::vector<WCHAR> unicode;
-    unicode.resize(resultLength);
+    unicode.resize(size_t(resultLength));
     resultLength = MultiByteToWideChar(
         cp, flags, in, length, unicode.data(), resultLength);
     result = QString::fromWCharArray(unicode.data(), resultLength);
@@ -319,7 +319,8 @@ QByteArray QuaZipTextCodec::convertFromUnicode(
         usedDefaultCharacterP = &usedDefaultCharacter;
     }
     int resultLength = WideCharToMultiByte(cp, flags | errorFlags,
-        (const WCHAR *) in, length, NULL, 0, NULL, usedDefaultCharacterP);
+        reinterpret_cast<const WCHAR *>(in), length, NULL, 0, NULL,
+        usedDefaultCharacterP);
 
     if (usedDefaultCharacter) {
         if (validate) {
@@ -338,8 +339,9 @@ QByteArray QuaZipTextCodec::convertFromUnicode(
     }
 
     result.resize(resultLength);
-    resultLength = WideCharToMultiByte(cp, flags, (const WCHAR *) in, length,
-        result.data(), resultLength, NULL, NULL);
+    resultLength =
+        WideCharToMultiByte(cp, flags, reinterpret_cast<const WCHAR *>(in),
+            length, result.data(), resultLength, NULL, NULL);
 #else
     if (state) {
         state->remainingChars -= length;

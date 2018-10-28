@@ -4,6 +4,7 @@
 /*
 Copyright (C) 2010 Adam Walczak
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 

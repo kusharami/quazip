@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -26,6 +27,8 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <zlib.h>
 
+QuaChecksum32::QuaChecksum32() {}
+
 QuaChecksum32::~QuaChecksum32() {}
 
 QuaCrc32::QuaCrc32()
@@ -40,8 +43,8 @@ QuaCrc32::QuaCrc32(quint32 value)
 
 quint32 QuaCrc32::calculate(const QByteArray &data)
 {
-    return crc32(
-        crc32(0L, Z_NULL, 0), (const Bytef *) data.data(), data.size());
+    return crc32(crc32(0L, Z_NULL, 0),
+        reinterpret_cast<const Bytef *>(data.data()), data.size());
 }
 
 void QuaCrc32::reset()
@@ -51,5 +54,6 @@ void QuaCrc32::reset()
 
 void QuaCrc32::update(const QByteArray &buf)
 {
-    setValue(crc32(value(), (const Bytef *) buf.data(), buf.size()));
+    setValue(crc32(
+        value(), reinterpret_cast<const Bytef *>(buf.data()), buf.size()));
 }

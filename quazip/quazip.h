@@ -521,6 +521,8 @@ public:
       @sa setIoDevice()
       */
     void setAutoClose(bool autoClose) const;
+    /// Returns default file path codec
+    static QTextCodec *defaultFilePathCodec();
     /// Sets the default file name codec to use.
     /**
      * The default codec is used by the constructors, so calling this function
@@ -552,6 +554,8 @@ public:
      * @param codec The codec to use by default. If NULL, resets to default.
      */
     static void setDefaultFilePathCodec(QTextCodec *codec);
+    /// Returns default comment codec
+    static QTextCodec *defaultCommentCodec();
     /// Sets the default comment codec to use.
     /**
      * The default codec is used by the constructors, so calling this function
@@ -574,9 +578,16 @@ public:
      * setDefaultCommentCodec(QTextCodec::codecForName(codecName)).
      */
     static void setDefaultCommentCodec(const char *codecName);
+    /// Returns default password codec.
+    /// \note Same as QuaZipKeysGenerator::defaultPasswordCodec()
+    static QTextCodec *defaultPasswordCodec();
+    /// Sets default password codec.
+    /// \note Same as QuaZipKeysGenerator::setDefaultPasswordCodec()
+    static void setDefaultPasswordCodec(QTextCodec *codec = nullptr);
 
     /// QuaZip constructor will set this flags instead of DefaultCompatibility.
-    /// \sa compatibilityFlags(), setDefaultFilePathCodec(), setDefaultCommentCodec()
+    /// \sa compatibilityFlags(), setDefaultFilePathCodec(),
+    ///  setDefaultCommentCodec()
     static void setDefaultCompatibilityFlags(CompatibilityFlags flags);
 
 private:

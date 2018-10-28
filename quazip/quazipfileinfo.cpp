@@ -29,6 +29,10 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <zlib.h>
 
+#ifdef Q_OS_WIN
+#include <Windows.h>
+#endif
+
 enum
 {
     UNX_IFMT = 0170000,
@@ -209,6 +213,31 @@ bool QuaZipFileInfo::initWithFile(
     setCreationTime(fileInfo.created());
 
     return true;
+}
+
+bool QuaZipFileInfo::applyAttributes(const QString &filePath)
+{
+    if (filePath.isEmpty())
+        return false;
+
+    auto nativeFilePath =
+        QDir::toNativeSeparators(QFileInfo(filePath).absoluteFilePath());
+    if (!QFile::exists(filePath))
+        return false;
+
+    bool ok = QFile::setPermissions(filePath, permissions());
+
+#ifdef Q_OS_WIN
+    auto attr = attributes() & ~DirAttr;
+
+    static_assert(sizeof(WCHAR) == sizeof(decltype(*nativeFilePath.utf16())),
+        "Not MSVC?");
+    ok = SetFileAttributesW(
+             reinterpret_cast<const WCHAR *>(nativeFilePath.utf16()),
+             DWORD(attr)) &&
+        ok;
+#endif
+    return ok;
 }
 
 QuaZipFileInfo::EntryType QuaZipFileInfo::entryType() const
@@ -400,8 +429,28 @@ void QuaZipFileInfo::setFilePath(const QString &filePath)
 
     d->filePath = normalizedFilePath;
     auto attr = d.constData()->attributes();
-    attr.setFlag(DirAttr, normalizedFilePath.endsWith('/'));
+    attr.setFlag(DirAttr, filePath.endsWith('/') || filePath.endsWith('\\'));
     setAttributes(attr);
+}
+
+QString QuaZipFileInfo::fileName() const
+{
+    QFileInfo fileInfo(filePath());
+
+    if (fileInfo.fileName().isEmpty())
+        fileInfo.setFile(fileInfo.path());
+
+    return fileInfo.fileName();
+}
+
+QString QuaZipFileInfo::path() const
+{
+    QFileInfo fileInfo(filePath());
+
+    if (fileInfo.fileName().isEmpty())
+        fileInfo.setFile(fileInfo.path());
+
+    return fileInfo.path();
 }
 
 const QDateTime &QuaZipFileInfo::creationTime() const
@@ -1023,7 +1072,7 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 
 QuaZipFileInfo::Attributes QuaZipFileInfo::attributes() const
 {
-    auto result = d->attributes();
+    auto result = d->attributes() & AllAttrs;
 
     if (d->filePath.endsWith('/'))
         result |= DirAttr;

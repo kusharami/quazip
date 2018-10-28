@@ -1559,8 +1559,7 @@ QString QuaZip::currentFilePath() const
 
     QString result = QDir::cleanPath(p->decodeZipText(
         fileName, info_z.flag, extraMap, QuaZipPrivate::ZIP_FILENAME));
-    if (result.isEmpty())
-        return result;
+
     // Add to directory map
     p->addCurrentFileToDirectoryMap(result);
     return result;
@@ -1765,6 +1764,11 @@ void QuaZip::setDefaultFilePathCodec(QTextCodec *codec)
     QuaZipPrivate::defaultFileNameCodec = codec;
 }
 
+QTextCodec *QuaZip::defaultCommentCodec()
+{
+    return QuaZipPrivate::getDefaultCommentCodec();
+}
+
 void QuaZip::setDefaultCommentCodec(QTextCodec *codec)
 {
     QuaZipPrivate::defaultCommentCodec = codec;
@@ -1778,6 +1782,16 @@ void QuaZip::setDefaultFilePathCodec(const char *codecName)
 void QuaZip::setDefaultCommentCodec(const char *codecName)
 {
     setDefaultCommentCodec(QTextCodec::codecForName(codecName));
+}
+
+QTextCodec *QuaZip::defaultPasswordCodec()
+{
+    return QuaZipKeysGenerator::defaultPasswordCodec();
+}
+
+void QuaZip::setDefaultPasswordCodec(QTextCodec *codec)
+{
+    QuaZipKeysGenerator::setDefaultPasswordCodec(codec);
 }
 
 void QuaZip::setDefaultCompatibilityFlags(CompatibilityFlags flags)
@@ -1983,4 +1997,9 @@ bool QuaZip::isAutoClose() const
 void QuaZip::setAutoClose(bool autoClose) const
 {
     p->autoClose = autoClose;
+}
+
+QTextCodec *QuaZip::defaultFilePathCodec()
+{
+    return QuaZipPrivate::getDefaultFileNameCodec();
 }

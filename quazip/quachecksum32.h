@@ -3,6 +3,7 @@
 
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -50,7 +51,9 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
  * \endcode
  */
 class QUAZIP_EXPORT QuaChecksum32 {
+    Q_DISABLE_COPY(QuaChecksum32)
 public:
+    QuaChecksum32();
     virtual ~QuaChecksum32();
     ///Calculates the checksum for data.
     /** \a data source data
@@ -78,8 +81,6 @@ private:
     quint32 mValue;
 };
 
-#endif //QUACHECKSUM32_H
-
 quint32 QuaChecksum32::value() const
 {
     return mValue;
@@ -89,3 +90,4 @@ void QuaChecksum32::setValue(quint32 value)
 {
     mValue = value;
 }
+#endif //QUACHECKSUM32_H

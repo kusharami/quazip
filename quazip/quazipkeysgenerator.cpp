@@ -96,7 +96,7 @@ void QuaZipKeysGenerator::resetKeys()
 int QuaZipKeysGenerator::addPassword(QString &unicode)
 {
     QByteArray mbcs = d->passwordCodec->fromUnicode(unicode);
-    memset(unicode.data(), 0, unicode.length() * sizeof(QChar));
+    memset(unicode.data(), 0, size_t(unicode.length()) * sizeof(QChar));
     unicode.clear();
     return addPassword(mbcs);
 }
@@ -108,7 +108,7 @@ int QuaZipKeysGenerator::addPassword(QByteArray &mbcs)
     }
 
     int result = mbcs.length();
-    memset(mbcs.data(), 0, result);
+    memset(mbcs.data(), 0, size_t(result));
     mbcs.clear();
 
     return result;
