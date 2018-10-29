@@ -27,6 +27,7 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #include "quacrc32.h"
 #include "quazutils.h"
 #include "quazipfileinfo.h"
+#include "private/quazipextrafields_p.h"
 
 #include "zip.h"
 #include "unzip.h"
@@ -37,28 +38,6 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #include <QLocale>
 #include <QDataStream>
 #include <QDir>
-
-/// @cond internal
-enum
-{
-    ZIP64_HEADER = 0x0001,
-    NTFS_HEADER = 0x000A,
-    NTFS_FILE_TIME_TAG = 0x0001,
-    UNIX_HEADER = 0x000D,
-    UNIX_EXTENDED_TIMESTAMP_HEADER = 0x5455,
-    INFO_ZIP_UNIX_HEADER = 0x5855,
-    INFO_ZIP_UNICODE_PATH_HEADER = 0x7075,
-    INFO_ZIP_UNICODE_COMMENT_HEADER = 0x6375,
-    WINZIP_EXTRA_FIELD_HEADER = 0x5A4C,
-
-    UNIX_MOD_TIME_FLAG = 1 << 0,
-    UNIX_ACC_TIME_FLAG = 1 << 1,
-    UNIX_CRT_TIME_FLAG = 1 << 2,
-    WINZIP_FILENAME_CODEPAGE_FLAG = 1 << 0,
-    WINZIP_ENCODED_FILENAME_FLAG = 1 << 1,
-    WINZIP_COMMENT_CODEPAGE_FLAG = 1 << 2,
-};
-/// @endcond
 
 /// All the internal stuff for the QuaZip class.
 /**
@@ -848,7 +827,7 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
                 return commentCodec->toUnicode(text);
             }
 
-            if (compatibility & QuaZip::DOS_Compatible) {
+            if (compatibility & QuaZip::DosCompatible) {
                 return getLegacyTextCodec()->toUnicode(text);
             }
 
@@ -1796,6 +1775,11 @@ void QuaZip::setDefaultCompatibilityFlags(CompatibilityFlags flags)
     QuaZipPrivate::defaultCompatibility = flags;
 }
 
+QuaZip::CompatibilityFlags QuaZip::defaultCompatibilityFlags()
+{
+    return QuaZipPrivate::defaultCompatibility;
+}
+
 QByteArray QuaZipPrivate::compatibleFilePath(const QString &filePath) const
 {
     QTextCodec *codec = compatibleFilePathCodec();
@@ -1803,7 +1787,7 @@ QByteArray QuaZipPrivate::compatibleFilePath(const QString &filePath) const
     QByteArray result;
     if (codec) {
         result = codec->fromUnicode(filePath);
-        if (compatibility & QuaZip::DOS_Compatible)
+        if (compatibility & QuaZip::DosCompatible)
             result = toDosPath(result);
     } else {
         result = filePath.toUtf8();
@@ -1817,7 +1801,7 @@ QTextCodec *QuaZipPrivate::compatibleFilePathCodec() const
     if (compatibility == QuaZip::CustomCompatibility)
         return filePathCodec;
 
-    if (compatibility & QuaZip::DOS_Compatible)
+    if (compatibility & QuaZip::DosCompatible)
         return getLegacyTextCodec();
 
     return nullptr;
@@ -1835,11 +1819,13 @@ QByteArray QuaZipPrivate::compatibleComment(const QString &comment) const
 
 QTextCodec *QuaZipPrivate::compatibleCommentCodec() const
 {
-    if (compatibility == QuaZip::CustomCompatibility)
+    switch (int(compatibility)) {
+    case QuaZip::CustomCompatibility:
         return commentCodec;
 
-    if (compatibility & QuaZip::DOS_Compatible)
+    case QuaZip::DosCompatible:
         return getLegacyTextCodec();
+    }
 
     return nullptr;
 }
@@ -1863,9 +1849,6 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     } else
         zipClearFlags(getZipFile(), ZIP_WRITE_DATA_DESCRIPTOR);
 
-    QByteArray extraLocal;
-    QByteArray extraCentralDir;
-
     int compatibility = p->compatibility;
     fileInfo.setZipVersionMadeBy(45);
     auto attr = fileInfo.attributes();
@@ -1877,15 +1860,17 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     if (compatibility & (QuaZip::UnixCompatible | QuaZip::WindowsCompatible)) {
         if (compatibility & QuaZip::UnixCompatible) {
             fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_UNIX);
+        } else if (compatibility & QuaZip::DosCompatible) {
+            fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_MSDOS);
         } else {
             fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_WINDOWS_NTFS);
         }
         zipOptions.setFlag(QuaZipFileInfo::Unicode,
-            !(compatibility & QuaZip::DOS_Compatible) &&
+            !(compatibility & QuaZip::DosCompatible) &&
                 (isUnicodeFilePath || isUnicodeComment));
     } else {
-        switch (int(compatibility)) {
-        case QuaZip::DOS_Compatible:
+        switch (compatibility) {
+        case QuaZip::DosCompatible:
             fileInfo.setSystemMadeBy(QuaZipFileInfo::OS_MSDOS);
             zipOptions &= ~QuaZipFileInfo::Unicode;
             break;
@@ -1909,7 +1894,14 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     fileInfo.setPermissions(perm);
 
     compatibleFilePath = p->compatibleFilePath(fileInfo.filePath());
-    compatibleComment = p->compatibleComment(fileInfo.comment());
+    if (isUnicodeComment && !zipOptions.testFlag(QuaZipFileInfo::Unicode) &&
+        compatibility != DosCompatible &&
+        0 != (compatibility & DosCompatible)) {
+        //comment will be stored in extra fields only
+        compatibleComment.clear();
+    } else {
+        compatibleComment = p->compatibleComment(fileInfo.comment());
+    }
 
     zipInfo.tmz_date.tm_year = uInt(modTime.date().year());
     zipInfo.tmz_date.tm_mon = uInt(modTime.date().month() - 1);
@@ -1947,7 +1939,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
         map->remove(INFO_ZIP_UNICODE_COMMENT_HEADER);
         map->remove(WINZIP_EXTRA_FIELD_HEADER);
     }
-    if (compatibility != DOS_Compatible) {
+    if (compatibility != DosCompatible) {
         if (0 == (fileInfo.zipOptions() & QuaZipFileInfo::Unicode)) {
             p->storeInfoZipFilePath(centralExtra, localExtra,
                 fileInfo.filePath(), compatibleFilePath);
@@ -1963,7 +1955,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
 
         if (0 != (compatibility & UnixCompatible) ||
             (compatibility == CustomCompatibility &&
-                fileInfo.systemMadeBy() == QuaZipFileInfo::OS_UNIX)) {
+                QuaZipFileInfo::isUnixHost(fileInfo.systemMadeBy()))) {
             QuaZipPrivate::storeUnixExtraFields(centralExtra, localExtra,
                 createTime, modTime, accTime, fileInfo.symLinkTarget());
         }

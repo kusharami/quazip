@@ -251,7 +251,7 @@ bool JlCompress::extractSingleFile(
         return false;
     }
 
-    if (!info.applyAttributes(fileDest)) {
+    if (!info.applyAttributesTo(fileDest)) {
         qWarning("Unable to apply attributes for '%s'",
             fileDest.toLocal8Bit().data());
     }

@@ -142,9 +142,9 @@ public:
          * File names will be stored in 8.3 mode
          * (8 characters for name, 3 characters for extension)
          */
-        DOS_Compatible = 0x01,
+        DosCompatible = 0x01,
         /** When non-ASCII characters used, file names and comments are stored
-         * in UTF-8 and EFS flag is set.
+         * in UTF-8 and Unicode flag is set.
          *
          * If combined with DOS_Compatible, non-ASCII file names are encoded
          * with UTF-8 and stored in Extra Field 0x7075 (Info-ZIP Unicode Path).
@@ -153,10 +153,11 @@ public:
          */
         UnixCompatible = 0x02,
         /** When non-ASCII characters used, file names and comments are stored
-         * in UTF-8 and EFS flag is set.
+         * in UTF-8 and Unicode flag is set.
          *
          * If combined with DOS_Compatible, non-ASCII file names and
-         * comments are encoded in UTF-8 and stored in Extra Field 0x5A4C
+         * comments are encoded in UTF-8 and stored in
+         * ZipArchive Extra Field 0x5A4C
          */
         WindowsCompatible = 0x04,
         /// By default Unix and Windows compatibility is ON.
@@ -589,6 +590,7 @@ public:
     /// \sa compatibilityFlags(), setDefaultFilePathCodec(),
     ///  setDefaultCommentCodec()
     static void setDefaultCompatibilityFlags(CompatibilityFlags flags);
+    static CompatibilityFlags defaultCompatibilityFlags();
 
 private:
     friend class QuaZipFile;

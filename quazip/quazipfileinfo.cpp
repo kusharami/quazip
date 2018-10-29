@@ -115,12 +115,17 @@ struct QuaZipFileInfo::Private : public QSharedData {
     Attributes attributes() const;
     void adjustFilePath(bool isDir);
     bool equals(const Private &other) const;
-    static inline bool isSymlinkHost(int host);
 };
 
 QuaZipFileInfo::QuaZipFileInfo()
     : d(new Private)
 {
+}
+
+QuaZipFileInfo::QuaZipFileInfo(const QString &filePath)
+    : d(new Private)
+{
+    setFilePath(filePath);
 }
 
 QuaZipFileInfo::QuaZipFileInfo(const QuaZipFileInfo &other)
@@ -136,55 +141,54 @@ QuaZipFileInfo::~QuaZipFileInfo()
 QuaZipFileInfo QuaZipFileInfo::fromFile(
     const QString &filePath, const QString &storePath)
 {
-    QuaZipFileInfo info;
-    info.initWithFile(filePath, storePath);
+    QuaZipFileInfo info(storePath);
+    info.initWithFile(filePath);
     return info;
 }
 
 QuaZipFileInfo QuaZipFileInfo::fromFile(
     const QFileInfo &fileInfo, const QString &storePath)
 {
-    QuaZipFileInfo info;
-    info.initWithFile(fileInfo, storePath);
+    QuaZipFileInfo info(storePath);
+    info.initWithFile(fileInfo);
     return info;
 }
 
 QuaZipFileInfo QuaZipFileInfo::fromDir(
     const QDir &dir, const QString &storePath)
 {
-    QuaZipFileInfo info;
-    info.initWithDir(dir, storePath);
+    QuaZipFileInfo info(storePath);
+    info.initWithDir(dir);
     return info;
 }
 
-bool QuaZipFileInfo::initWithDir(const QDir &dir, const QString &storePath)
+bool QuaZipFileInfo::initWithDir(const QDir &dir)
 {
     auto path = dir.absolutePath();
     if (path.isEmpty() || path.endsWith('/'))
         return false;
 
-    return initWithFile(path, storePath);
+    return initWithFile(path);
 }
 
-bool QuaZipFileInfo::initWithFile(
-    const QString &filePath, const QString &storePath)
+bool QuaZipFileInfo::initWithFile(const QString &filePath)
 {
     QFileInfo fileInfo(filePath);
-    return initWithFile(fileInfo, storePath);
+    return initWithFile(fileInfo);
 }
 
-bool QuaZipFileInfo::initWithFile(
-    const QFileInfo &fileInfo, const QString &storePath)
+bool QuaZipFileInfo::initWithFile(const QFileInfo &fileInfo)
 {
     if ((!fileInfo.exists() && !fileInfo.isSymLink()))
         return false;
 
     if (!fileInfo.isSymLink() && fileInfo.fileName().isEmpty()) {
         QDir dir(fileInfo.filePath());
-        return initWithDir(dir, storePath);
+        return initWithDir(dir);
     }
 
-    setFilePath(storePath.isEmpty() ? fileInfo.fileName() : storePath);
+    if (d.constData()->filePath.isEmpty())
+        setFilePath(fileInfo.fileName());
     if (fileInfo.isSymLink()) {
         d->setEntryType(SymLink);
         d->symLinkTarget = fileInfo.symLinkTarget();
@@ -211,11 +215,12 @@ bool QuaZipFileInfo::initWithFile(
     setModificationTime(fileInfo.lastModified());
     setLastAccessTime(fileInfo.lastRead());
     setCreationTime(fileInfo.created());
+    setUncompressedSize(fileInfo.size());
 
     return true;
 }
 
-bool QuaZipFileInfo::applyAttributes(const QString &filePath)
+bool QuaZipFileInfo::applyAttributesTo(const QString &filePath) const
 {
     if (filePath.isEmpty())
         return false;
@@ -292,7 +297,7 @@ QuaZipFileInfo::EntryType QuaZipFileInfo::Private::entryType() const
             return Directory;
 
         case UNX_IFLNK:
-            if (isSymlinkHost(zipSystem))
+            if (isSymLinkHost(zipSystem))
                 return SymLink;
             break;
         }
@@ -943,6 +948,27 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 {
     int uAttr = externalAttributes >> 16;
 
+    auto testPerm = value;
+    if (testPerm & (QFile::ReadUser | QFile::ReadOwner)) {
+        testPerm &= ~QFile::ReadOwner;
+        testPerm |= QFile::ReadUser;
+    }
+
+    if (testPerm & (QFile::WriteUser | QFile::WriteOwner)) {
+        testPerm &= ~QFile::WriteOwner;
+        testPerm |= QFile::WriteUser;
+    }
+
+    Q_CONSTEXPR auto allRead =
+        QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
+    Q_CONSTEXPR auto allWrite = QFile::WriteUser;
+
+    if (testPerm & allWrite) {
+        externalAttributes &= ~ReadOnly;
+    } else {
+        externalAttributes |= ReadOnly;
+    }
+
     switch (zipSystem) {
     case OS_MSDOS:
     case OS_WINDOWS_NTFS:
@@ -951,45 +977,25 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
     case OS_MVS:
     case OS_VMCMS:
     case OS_ACORN: {
-        auto testPerm = value;
-        if (testPerm & (QFile::ReadUser | QFile::ReadOwner)) {
-            testPerm &= ~QFile::ReadOwner;
-            testPerm |= QFile::ReadUser;
-        }
-
-        if (testPerm & (QFile::WriteUser | QFile::WriteOwner)) {
-            testPerm &= ~QFile::WriteOwner;
-            testPerm |= QFile::WriteUser;
-        }
-
-        Q_CONSTEXPR auto allRead =
-            QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
-        Q_CONSTEXPR auto allWrite = QFile::WriteUser;
-
         if (testPerm == allRead || testPerm == (allRead | allWrite)) {
-            if (testPerm & allWrite) {
-                externalAttributes &= ~ReadOnly;
-            } else {
-                externalAttributes |= ReadOnly;
-            }
             break;
-        } else {
-            uAttr &= ~UNX_IFMT;
-            switch (entryType()) {
-            case Directory:
-                uAttr |= UNX_IFDIR;
-                break;
-
-            case File:
-                uAttr |= UNX_IFREG;
-                break;
-
-            case SymLink:
-                uAttr |= UNX_IFLNK;
-                break;
-            }
-            zipSystem = OS_UNIX;
         }
+
+        uAttr &= ~UNX_IFMT;
+        switch (entryType()) {
+        case Directory:
+            uAttr |= UNX_IFDIR;
+            break;
+
+        case File:
+            uAttr |= UNX_IFREG;
+            break;
+
+        case SymLink:
+            uAttr |= UNX_IFLNK;
+            break;
+        }
+        zipSystem = OS_UNIX;
         Q_FALLTHROUGH();
     }
     case OS_QDOS:
@@ -1140,7 +1146,7 @@ void QuaZipFileInfo::setAttributes(Attributes value)
 
     auto tempFilePath = d->filePath;
     if (tempFilePath.endsWith('/'))
-        tempFilePath.resize(tempFilePath.length() - 1);
+        tempFilePath.chop(1);
 
     int uAttr = d->externalAttributes >> 16;
 
@@ -1260,6 +1266,68 @@ bool QuaZipFileInfo::operator==(const QuaZipFileInfo &other) const
     return d == other.d || d->equals(*other.d.data());
 }
 
+bool QuaZipFileInfo::isUnixHost(ZipSystem host)
+{
+    switch (host) {
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_UNIX:
+    case OS_MACOSX:
+        return true;
+
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+    case OS_THEOS:
+    case OS_AMIGA:
+        break;
+    }
+
+    return false;
+}
+
+bool QuaZipFileInfo::isSymLinkHost(ZipSystem host)
+{
+    switch (host) {
+    case OS_UNIX:
+    case OS_MACOSX:
+    case OS_BEOS:
+    case OS_OPENVMS:
+    case OS_ATARI:
+        return true;
+
+    case OS_QDOS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+    case OS_THEOS:
+    case OS_AMIGA:
+        break;
+    }
+
+    return false;
+}
+
 QuaZipFileInfo::Private::Private()
     : crc(0)
     , externalAttributes(0)
@@ -1311,7 +1379,7 @@ void QuaZipFileInfo::Private::adjustFilePath(bool isDir)
             filePath += '/';
     } else {
         if (filePath.endsWith('/'))
-            filePath.resize(filePath.length() - 1);
+            filePath.chop(1);
     }
 }
 
@@ -1339,10 +1407,4 @@ bool QuaZipFileInfo::Private::equals(const Private &other) const
         comment == other.comment && //18
         centralExtraFields == other.centralExtraFields && //19
         localExtraFields == other.localExtraFields; //20
-}
-
-bool QuaZipFileInfo::Private::isSymlinkHost(int host)
-{
-    return host == OS_UNIX || host == OS_ATARI || host == OS_OPENVMS ||
-        host == OS_BEOS || host == OS_MACOSX;
 }

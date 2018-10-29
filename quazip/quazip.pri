@@ -21,11 +21,13 @@ HEADERS += \
         $$PWD/zip.h \
     $$PWD/quagzipdevice.h \
     $$PWD/private/quaziodeviceprivate.h \
+    $$PWD/private/quazipextrafields_p.h \
     $$PWD/quaziptextcodec.h \
     $$PWD/quazextrafield.h \
     $$PWD/minizip_crypt.h \
     $$PWD/quazutils.h \
-    $$PWD/quazipkeysgenerator.h
+    $$PWD/quazipkeysgenerator.h \
+    $$PWD/quazipextrafields_p.h
 
 SOURCES += $$PWD/qioapi.cpp \
            $$PWD/JlCompress.cpp \

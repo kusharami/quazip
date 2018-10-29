@@ -108,6 +108,7 @@ public:
     };
 
     QuaZipFileInfo();
+    QuaZipFileInfo(const QString &filePath);
     QuaZipFileInfo(const QuaZipFileInfo &other);
     ~QuaZipFileInfo();
 
@@ -118,13 +119,11 @@ public:
     static QuaZipFileInfo fromDir(
         const QDir &dir, const QString &storePath = QString());
 
-    bool initWithDir(const QDir &dir, const QString &storePath = QString());
-    bool initWithFile(
-        const QString &filePath, const QString &storePath = QString());
-    bool initWithFile(
-        const QFileInfo &fileInfo, const QString &storePath = QString());
+    bool initWithDir(const QDir &dir);
+    bool initWithFile(const QString &filePath);
+    bool initWithFile(const QFileInfo &fileInfo);
 
-    bool applyAttributes(const QString &filePath);
+    bool applyAttributesTo(const QString &filePath) const;
 
     const QString &filePath() const;
     void setFilePath(const QString &filePath);
@@ -141,6 +140,11 @@ public:
     inline bool isDir() const;
     inline bool isFile() const;
     inline bool isSymLink() const;
+    inline bool isHidden() const;
+    inline bool isSystem() const;
+    inline bool isWritable() const;
+    inline bool isArchived() const;
+    inline bool isExecutable() const;
 
     QFile::Permissions permissions() const;
     void setPermissions(QFile::Permissions value);
@@ -229,6 +233,9 @@ public:
     bool operator==(const QuaZipFileInfo &other) const;
     inline bool operator!=(const QuaZipFileInfo &other) const;
 
+    static bool isUnixHost(ZipSystem host);
+    static bool isSymLinkHost(ZipSystem host);
+
 private:
     struct Private;
     QSharedDataPointer<Private> d;
@@ -247,6 +254,34 @@ bool QuaZipFileInfo::isFile() const
 bool QuaZipFileInfo::isSymLink() const
 {
     return entryType() == SymLink;
+}
+
+bool QuaZipFileInfo::isHidden() const
+{
+    return 0 != (attributes() & Hidden);
+}
+
+bool QuaZipFileInfo::isSystem() const
+{
+    return 0 != (attributes() & System);
+}
+
+bool QuaZipFileInfo::isWritable() const
+{
+    return 0 == (attributes() & ReadOnly);
+}
+
+bool QuaZipFileInfo::isArchived() const
+{
+    return 0 != (attributes() & Archived);
+}
+
+bool QuaZipFileInfo::isExecutable() const
+{
+    return 0 !=
+        (permissions() &
+            (QFile::ExeGroup | QFile::ExeOther | QFile::ExeOwner |
+                QFile::ExeUser));
 }
 
 bool QuaZipFileInfo::operator!=(const QuaZipFileInfo &other) const
