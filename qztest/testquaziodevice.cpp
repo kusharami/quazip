@@ -25,6 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "testquaziodevice.h"
 #include "quazip/quaziodevice.h"
+#include "qztest.h"
 
 #include <QBuffer>
 #include <QByteArray>
@@ -138,8 +139,8 @@ void TestQuaZIODevice::readMany()
 
 void TestQuaZIODevice::write_data()
 {
-    QTest::addColumn<bool>("truncate");
-    QTest::addColumn<QByteArray>("data");
+    QADD_COLUMN(bool, truncate);
+    QADD_COLUMN(QByteArray, data);
 
     QTest::addRow("truncate_false") << false << QByteArrayLiteral("test");
     QTest::addRow("truncate_true") << true << QByteArrayLiteral("bigTest");

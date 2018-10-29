@@ -34,23 +34,22 @@ class QTemporaryDir;
 #define QADD_COLUMN(type, name) QTest::addColumn<type>(#name);
 
 extern QString tempZipPath(const QTemporaryDir &tempDir, int num = 0);
+extern QString tempFilesPath(const QTemporaryDir &tempDir, int num = 0);
 
-extern bool createTestFiles(
-    const QStringList &fileNames, int size = -1, const QString &dir = "tmp");
-extern void removeTestFiles(
-    const QStringList &fileNames, const QString &dir = "tmp");
+extern bool createTestFiles(const QStringList &fileNames, int size = -1,
+    const QString &filesPath = "tmp");
 extern bool createTestArchive(const QString &zipName,
-    const QStringList &fileNames, const QString &dir = "tmp");
+    const QStringList &fileNames, const QString &filesPath = "tmp");
 extern bool createTestArchive(const QString &zipName,
     const QStringList &fileNames, QTextCodec *codec,
-    const QString &dir = "tmp");
+    const QString &filesPath = "tmp");
 extern bool createTestArchive(const QString &zipName,
     const QStringList &fileNames, QTextCodec *codec, const QString &password,
-    const QString &dir = "tmp");
+    const QString &filesPath);
 
 extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
-    QTextCodec *codec, const QString &dir = "tmp");
+    QTextCodec *codec, const QString &filesPath = "tmp");
 extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
-    QTextCodec *codec, const QString &password, const QString &dir = "tmp");
+    QTextCodec *codec, const QString &password, const QString &filesPath);
 
 #endif // QUAZIP_TEST_QZTEST_H

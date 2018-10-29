@@ -5,146 +5,560 @@
 #include <QByteArray>
 #include <QDir>
 #include <QFileInfo>
+#include <QTemporaryDir>
 
 #include <QtTest/QtTest>
 
 #include "quazip/quazip.h"
 #include "quazip/quazipfile.h"
 #include "quazip/quazipfileinfo.h"
+#include "quazip/quacrc32.h"
+#include "quazip/quazutils.h"
+#include "quazip/private/quazipextrafields_p.h"
 
-#include <QTemporaryDir>
+#include <zlib.h>
+
+Q_DECLARE_METATYPE(QuaZip::CompatibilityFlags)
+Q_DECLARE_METATYPE(QuaZipFileInfo::Attributes)
+
+struct SaveCompatibility {
+    QuaZip::CompatibilityFlags compatibility;
+
+    SaveCompatibility();
+    ~SaveCompatibility();
+};
 
 TestQuaZipFileInfo::TestQuaZipFileInfo(QObject *parent)
     : QObject(parent)
 {
 }
 
-void TestQuaZipFileInfo::testFromFile() {}
+static Q_DECL_CONSTEXPR inline QuaZipFileInfo::Attribute sysAttr()
+{
+#ifdef Q_OS_WIN
+    return QuaZipFileInfo::System;
+#else
+    return QuaZipFileInfo::Attribute(0);
+#endif
+}
 
-void TestQuaZipFileInfo::testFromDir() {}
+static Q_DECL_CONSTEXPR inline QuaZipFileInfo::Attribute notArchived()
+{
+#ifdef Q_OS_WIN
+    return QuaZipFileInfo::Attribute(0);
+#else
+    return QuaZipFileInfo::Archived;
+#endif
+}
 
-void TestQuaZipFileInfo::testFromLink() {}
+static Q_DECL_CONSTEXPR inline QFile::Permissions execPermissions()
+{
+#ifdef Q_OS_WIN
+    return QFile::Permissions();
+#else
+    return QFile::Permissions(QFile::ExeUser | QFile::ExeOwner);
+#endif
+}
+
+static Q_CONSTEXPR QFile::Permissions defaultRead(
+    QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
+static Q_CONSTEXPR QFile::Permissions defaultWrite(
+    QFile::WriteUser | QFile::WriteOwner);
+static Q_CONSTEXPR auto defaultReadWrite =
+    QFile::Permissions(defaultRead | defaultWrite);
+
+void TestQuaZipFileInfo::testFromFile_data()
+{
+    QADD_COLUMN(QString, fileName);
+    QADD_COLUMN(QFile::Permissions, permissions);
+    QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
+
+    QTest::addRow("writable")
+        << QStringLiteral("writable.bin") << defaultReadWrite
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
+
+    QTest::addRow("hidden")
+        << QStringLiteral(".hidden") << defaultReadWrite
+        << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden);
+
+    QTest::addRow("readonly")
+        << QStringLiteral("readonly.bin") << defaultRead
+        << QuaZipFileInfo::Attributes(
+               QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
+
+    QTest::addRow("executable")
+        << QStringLiteral("executable")
+        << QFile::Permissions(defaultReadWrite | execPermissions())
+        << QuaZipFileInfo::Attributes(notArchived());
+}
+
+void TestQuaZipFileInfo::testFromFile()
+{
+    QFETCH(QString, fileName);
+    QFETCH(QFile::Permissions, permissions);
+    QFETCH(QuaZipFileInfo::Attributes, attributes);
+
+    QTemporaryDir tempDir;
+    auto filesPath = tempFilesPath(tempDir);
+    auto filePath = QDir(filesPath).filePath(fileName);
+
+    QVERIFY(createTestFiles({fileName}, -1, filesPath));
+    {
+        QuaZipFileInfo attrInfo;
+        attrInfo.setPermissions(permissions);
+        attrInfo.setAttributes(attributes);
+        bool applyAttributes = attrInfo.applyAttributesTo(filePath);
+        if (!applyAttributes) {
+            qWarning("Some attributes or permissions are not applied");
+        }
+    }
+
+    auto zipFileInfo = QuaZipFileInfo::fromFile(filePath);
+    QVERIFY(zipFileInfo.isFile());
+    QVERIFY(!zipFileInfo.isDir());
+    QVERIFY(!zipFileInfo.isRaw());
+    QVERIFY(!zipFileInfo.isText());
+    QVERIFY(!zipFileInfo.isSymLink());
+    QVERIFY(!zipFileInfo.isEncrypted());
+    QVERIFY(zipFileInfo.comment().isEmpty());
+    QVERIFY(zipFileInfo.centralExtraFields().isEmpty());
+    QVERIFY(zipFileInfo.localExtraFields().isEmpty());
+    QVERIFY(zipFileInfo.symLinkTarget().isEmpty());
+    QVERIFY(zipFileInfo.path().isEmpty());
+
+    QCOMPARE(zipFileInfo.entryType(), QuaZipFileInfo::File);
+    QCOMPARE(zipFileInfo.zipOptions(), QuaZipFileInfo::NormalCompression);
+    QCOMPARE(zipFileInfo.compressedSize(), qint64(0));
+    QCOMPARE(zipFileInfo.compressionMethod(), quint16(Z_DEFLATED));
+    QCOMPARE(zipFileInfo.compressionStrategy(), quint16(Z_DEFAULT_STRATEGY));
+    QCOMPARE(zipFileInfo.compressionLevel(), Z_DEFAULT_COMPRESSION);
+    QCOMPARE(zipFileInfo.crc(), quint32(0));
+    QCOMPARE(zipFileInfo.zipVersionNeeded(), quint16(10));
+    QCOMPARE(zipFileInfo.zipVersionMadeBy(), quint8(10));
+    QCOMPARE(zipFileInfo.madeBy(), quint16(10));
+    QCOMPARE(zipFileInfo.systemMadeBy(), QuaZipFileInfo::OS_MSDOS);
+    QCOMPARE(zipFileInfo.diskNumber(), 0);
+    QCOMPARE(zipFileInfo.internalAttributes(), quint16(0));
+    QCOMPARE(zipFileInfo.attributes(), attributes);
+    QCOMPARE(quint16(zipFileInfo.externalAttributes()), quint16(attributes));
+
+    QCOMPARE(zipFileInfo.isArchived(),
+        attributes.testFlag(QuaZipFileInfo::Archived));
+    QCOMPARE(
+        zipFileInfo.isHidden(), attributes.testFlag(QuaZipFileInfo::Hidden));
+    QCOMPARE(
+        zipFileInfo.isSystem(), attributes.testFlag(QuaZipFileInfo::System));
+    QCOMPARE(zipFileInfo.isWritable(),
+        !attributes.testFlag(QuaZipFileInfo::ReadOnly));
+
+    QCOMPARE(zipFileInfo.isExecutable(),
+        0 !=
+            (permissions &
+                (QFile::ExeGroup | QFile::ExeOther | QFile::ExeUser |
+                    QFile::ExeOwner)));
+
+    QFileInfo fileInfo(filePath);
+
+    QCOMPARE(zipFileInfo.uncompressedSize(), fileInfo.size());
+    QCOMPARE(zipFileInfo.fileName(), fileInfo.fileName());
+    QCOMPARE(zipFileInfo.filePath(), fileInfo.fileName());
+    QCOMPARE(zipFileInfo.modificationTime(), fileInfo.lastModified());
+    QCOMPARE(zipFileInfo.lastAccessTime(), fileInfo.lastRead());
+    QCOMPARE(zipFileInfo.creationTime(), fileInfo.created());
+    QCOMPARE(zipFileInfo.permissions(), fileInfo.permissions());
+
+    QuaZipFileInfo checkZipFileInfo;
+    checkZipFileInfo.initWithFile(fileInfo);
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+    checkZipFileInfo.initWithFile(filePath);
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+}
+
+void TestQuaZipFileInfo::testFromDir_data()
+{
+    QADD_COLUMN(QFile::Permissions, permissions);
+    QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
+
+    QTest::addRow("writable")
+        << QStringLiteral("writable") << defaultReadWrite
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
+
+    QTest::addRow("hidden")
+        << QStringLiteral(".hidden") << defaultReadWrite
+        << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden);
+
+    QTest::addRow("readonly")
+        << QStringLiteral("readonly") << defaultRead
+        << QuaZipFileInfo::Attributes(
+               QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
+}
+
+void TestQuaZipFileInfo::testFromDir()
+{
+    QFETCH(QFile::Permissions, permissions);
+    QFETCH(QuaZipFileInfo::Attributes, attributes);
+
+    attributes |= QuaZipFileInfo::DirAttr;
+
+    QTemporaryDir tempDir;
+    QDir dir(tempFilesPath(tempDir));
+    QVERIFY(QDir(tempDir.path()).mkdir(dir.dirName()));
+
+    {
+        QuaZipFileInfo attrInfo;
+        attrInfo.setPermissions(permissions);
+        attrInfo.setAttributes(attributes);
+        bool applyAttributes = attrInfo.applyAttributesTo(dir.path());
+        if (!applyAttributes) {
+            qWarning("Some attributes or permissions are not applied");
+        }
+    }
+
+    auto zipFileInfo = QuaZipFileInfo::fromDir(dir);
+    QVERIFY(zipFileInfo.isDir());
+    QVERIFY(!zipFileInfo.isFile());
+    QVERIFY(!zipFileInfo.isRaw());
+    QVERIFY(!zipFileInfo.isText());
+    QVERIFY(!zipFileInfo.isSymLink());
+    QVERIFY(!zipFileInfo.isEncrypted());
+    QVERIFY(!zipFileInfo.isExecutable());
+    QVERIFY(zipFileInfo.comment().isEmpty());
+    QVERIFY(zipFileInfo.centralExtraFields().isEmpty());
+    QVERIFY(zipFileInfo.localExtraFields().isEmpty());
+    QVERIFY(zipFileInfo.symLinkTarget().isEmpty());
+    QVERIFY(zipFileInfo.path().isEmpty());
+
+    QCOMPARE(zipFileInfo.entryType(), QuaZipFileInfo::Directory);
+    QCOMPARE(zipFileInfo.zipOptions(), QuaZipFileInfo::NormalCompression);
+    QCOMPARE(zipFileInfo.crc(), quint32(0));
+    QCOMPARE(zipFileInfo.compressedSize(), qint64(0));
+    QCOMPARE(zipFileInfo.uncompressedSize(), qint64(0));
+    QCOMPARE(zipFileInfo.compressionMethod(), quint16(Z_DEFLATED));
+    QCOMPARE(zipFileInfo.compressionStrategy(), quint16(Z_DEFAULT_STRATEGY));
+    QCOMPARE(zipFileInfo.compressionLevel(), Z_DEFAULT_COMPRESSION);
+    QCOMPARE(zipFileInfo.zipVersionNeeded(), quint16(10));
+    QCOMPARE(zipFileInfo.zipVersionMadeBy(), quint8(10));
+    QCOMPARE(zipFileInfo.madeBy(), quint16(10));
+    QCOMPARE(zipFileInfo.systemMadeBy(), QuaZipFileInfo::OS_MSDOS);
+    QCOMPARE(zipFileInfo.diskNumber(), 0);
+    QCOMPARE(zipFileInfo.internalAttributes(), quint16(0));
+    QCOMPARE(zipFileInfo.attributes(), attributes);
+    QCOMPARE(quint16(zipFileInfo.externalAttributes()), quint16(attributes));
+
+    QCOMPARE(zipFileInfo.isArchived(),
+        attributes.testFlag(QuaZipFileInfo::Archived));
+    QCOMPARE(
+        zipFileInfo.isHidden(), attributes.testFlag(QuaZipFileInfo::Hidden));
+    QCOMPARE(
+        zipFileInfo.isSystem(), attributes.testFlag(QuaZipFileInfo::System));
+    QCOMPARE(zipFileInfo.isWritable(),
+        !attributes.testFlag(QuaZipFileInfo::ReadOnly));
+
+    QCOMPARE(zipFileInfo.fileName(), dir.dirName());
+    QCOMPARE(zipFileInfo.filePath(), dir.dirName() + '/');
+
+    QFileInfo dirInfo(dir.path());
+    QCOMPARE(zipFileInfo.modificationTime(), dirInfo.lastModified());
+    QCOMPARE(zipFileInfo.lastAccessTime(), dirInfo.lastRead());
+    QCOMPARE(zipFileInfo.creationTime(), dirInfo.created());
+    QCOMPARE(zipFileInfo.permissions(), dirInfo.permissions());
+
+    QuaZipFileInfo checkZipFileInfo;
+    checkZipFileInfo.initWithDir(dir);
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+    checkZipFileInfo.initWithFile(dirInfo);
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+    checkZipFileInfo.initWithFile(dir.path());
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+}
+
+void TestQuaZipFileInfo::testFromLink_data()
+{
+    QADD_COLUMN(bool, linkToDir);
+    QADD_COLUMN(QString, linkFileName);
+    QADD_COLUMN(QString, targetFileName);
+    QADD_COLUMN(QFile::Permissions, permissions);
+    QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
+
+    QTest::addRow("file_link")
+        << false << QStringLiteral("file_link") << QStringLiteral("file.txt")
+        << defaultReadWrite
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
+
+    QTest::addRow("dir_link")
+        << true << QStringLiteral(".hidden_dir_link") << QStringLiteral("dir")
+        << defaultRead
+        << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden |
+               QuaZipFileInfo::ReadOnly);
+}
+
+void TestQuaZipFileInfo::testFromLink()
+{
+    QFETCH(bool, linkToDir);
+    QFETCH(QString, linkFileName);
+    QFETCH(QString, targetFileName);
+    QFETCH(QFile::Permissions, permissions);
+    QFETCH(QuaZipFileInfo::Attributes, attributes);
+
+    QTemporaryDir tempDir;
+    QDir dir(tempFilesPath(tempDir));
+    QVERIFY(QDir(tempDir.path()).mkdir(dir.dirName()));
+
+    if (linkToDir) {
+        QVERIFY(dir.mkdir(targetFileName));
+    } else {
+        QVERIFY(createTestFiles({targetFileName}, -1, dir.path()));
+    }
+
+    QString linkFilePath = QDir(tempDir.path()).filePath(linkFileName);
+    QVERIFY(
+        QuaZUtils::createSymLink(linkFilePath, dir.filePath(targetFileName)));
+    {
+        QuaZipFileInfo attrInfo;
+        attrInfo.setPermissions(permissions);
+        attrInfo.setAttributes(attributes);
+        bool applyAttributes = attrInfo.applyAttributesTo(linkFilePath);
+        if (!applyAttributes) {
+            qWarning("Some attributes or permissions are not applied");
+        }
+    }
+
+    auto zipFileInfo = QuaZipFileInfo::fromFile(linkFilePath);
+    QVERIFY(zipFileInfo.isSymLink());
+    QVERIFY(!zipFileInfo.isDir());
+    QVERIFY(!zipFileInfo.isFile());
+    QVERIFY(!zipFileInfo.isRaw());
+    QVERIFY(!zipFileInfo.isText());
+    QVERIFY(!zipFileInfo.isEncrypted());
+    QVERIFY(!zipFileInfo.isExecutable());
+    QVERIFY(zipFileInfo.comment().isEmpty());
+    QVERIFY(zipFileInfo.centralExtraFields().isEmpty());
+    QVERIFY(zipFileInfo.localExtraFields().isEmpty());
+    QVERIFY(zipFileInfo.path().isEmpty());
+
+    QCOMPARE(zipFileInfo.symLinkTarget(), targetFileName);
+    QCOMPARE(zipFileInfo.entryType(), QuaZipFileInfo::SymLink);
+    QCOMPARE(zipFileInfo.zipOptions(), QuaZipFileInfo::NormalCompression);
+    QCOMPARE(zipFileInfo.crc(), quint32(0));
+    QCOMPARE(zipFileInfo.compressedSize(), qint64(0));
+    QCOMPARE(zipFileInfo.uncompressedSize(), qint64(0));
+    QCOMPARE(zipFileInfo.compressionMethod(), quint16(Z_DEFLATED));
+    QCOMPARE(zipFileInfo.compressionStrategy(), quint16(Z_DEFAULT_STRATEGY));
+    QCOMPARE(zipFileInfo.compressionLevel(), Z_DEFAULT_COMPRESSION);
+    QCOMPARE(zipFileInfo.zipVersionNeeded(), quint16(10));
+    QCOMPARE(zipFileInfo.zipVersionMadeBy(), quint8(10));
+    QCOMPARE(zipFileInfo.madeBy(), quint16(10));
+    QCOMPARE(zipFileInfo.systemMadeBy(), QuaZipFileInfo::OS_UNIX);
+    QCOMPARE(zipFileInfo.diskNumber(), 0);
+    QCOMPARE(zipFileInfo.internalAttributes(), quint16(0));
+    QCOMPARE(zipFileInfo.attributes(), attributes);
+    QCOMPARE(quint16(zipFileInfo.externalAttributes()), quint16(attributes));
+
+    QCOMPARE(zipFileInfo.isArchived(),
+        attributes.testFlag(QuaZipFileInfo::Archived));
+    QCOMPARE(
+        zipFileInfo.isHidden(), attributes.testFlag(QuaZipFileInfo::Hidden));
+    QCOMPARE(
+        zipFileInfo.isSystem(), attributes.testFlag(QuaZipFileInfo::System));
+    QCOMPARE(zipFileInfo.isWritable(),
+        !attributes.testFlag(QuaZipFileInfo::ReadOnly));
+
+    QFileInfo linkInfo(linkFilePath);
+
+    QCOMPARE(zipFileInfo.fileName(), linkInfo.fileName());
+    QCOMPARE(zipFileInfo.filePath(), linkFileName);
+    QCOMPARE(zipFileInfo.modificationTime(), linkInfo.lastModified());
+    QCOMPARE(zipFileInfo.lastAccessTime(), linkInfo.lastRead());
+    QCOMPARE(zipFileInfo.creationTime(), linkInfo.created());
+    QCOMPARE(zipFileInfo.permissions(), linkInfo.permissions());
+
+    QuaZipFileInfo checkZipFileInfo;
+    checkZipFileInfo.initWithFile(linkInfo);
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+    checkZipFileInfo.initWithFile(linkFilePath);
+    QCOMPARE(zipFileInfo, checkZipFileInfo);
+}
 
 void TestQuaZipFileInfo::testFromZipFile_data()
 {
+    QADD_COLUMN(QString, fileName);
+    QADD_COLUMN(int, fileSize);
     QADD_COLUMN(QString, password);
+    QADD_COLUMN(QuaZip::CompatibilityFlags, compatibility);
+
+    QTest::addRow("simple") << QStringLiteral("simple.bin") << 10 << QString()
+                            << QuaZip::CustomCompatibility;
+
+    QTest::addRow("unix_windows")
+        << QStringLiteral("факел.bin") << 9 << QString()
+        << QuaZip::CompatibilityFlags(
+               QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
+
+    QTest::addRow("text_unix_only") << QStringLiteral("бублик.txt") << -1
+                                    << QString() << QuaZip::UnixCompatible;
+
+    QTest::addRow("text_dos_only") << QStringLiteral("dos.txt") << -1
+                                   << QString() << QuaZip::DosCompatible;
+
+    QTest::addRow("text_dos_compatible")
+        << QStringLiteral("бублик.txt") << -1 << QString()
+        << QuaZip::CompatibilityFlags(QuaZip::DosCompatible |
+               QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
+
+    QTest::addRow("encrypted_windows_only")
+        << QStringLiteral("encrypted.bin") << 12
+        << QStringLiteral("My babushka's birthday")
+        << QuaZip::WindowsCompatible;
 }
 
 void TestQuaZipFileInfo::testFromZipFile()
 {
-    QFETCH(bool, password);
+    QFETCH(QString, fileName);
+    QFETCH(int, fileSize);
+    QFETCH(QString, password);
+    QFETCH(QuaZip::CompatibilityFlags, compatibility);
+    bool isText = fileName.endsWith(".txt");
+
+    SaveCompatibility saveCompatibility;
+    QuaZip::setDefaultCompatibilityFlags(compatibility);
 
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
-    QStringList testFiles;
-    testFiles << "test.txt";
-    QVERIFY(createTestFiles(testFiles, -1, tempDir.path()));
-    QVERIFY(createTestArchive(
-        zipPath, testFiles, nullptr, password, tempDir.path()));
-
-    QuaZipFileInfo fileInfo;
+    auto filesPath = tempFilesPath(tempDir);
+    QDir dir(filesPath);
     {
-        QuaZipFile zipFile(zipPath, testFiles.at(0));
+        QStringList testFiles;
+        testFiles << fileName;
+        QVERIFY(createTestFiles(testFiles, fileSize, filesPath));
+        QVERIFY(createTestArchive(
+            zipPath, testFiles, nullptr, password, filesPath));
+    }
+
+    QuaZipFileInfo zipFileInfo;
+    {
+        QuaZipFile zipFile(zipPath, fileName);
+        auto pwd = password;
+        zipFile.setPassword(&pwd);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
-        fileInfo = zipFile.fileInfo();
+        zipFileInfo = zipFile.fileInfo();
         zipFile.close();
         QCOMPARE(zipFile.getZipError(), 0);
     }
-    QFile file(QDir(tempDir.path()).filePath(testFiles.at(0)));
-    QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(fileInfo.uncompressedSize(), file.readAll().size());
-    QCOMPARE(fileInfo.entryType(), QuaZipFileInfo::File);
-    QVERIFY(fileInfo.isFile());
-    QVERIFY(!fileInfo.isDir());
-    QVERIFY(!fileInfo.isSymLink());
-    QVERIFY(!fileInfo.isEncrypted());
+    QCOMPARE(zipFileInfo.diskNumber(), 0);
+    QCOMPARE(zipFileInfo.zipVersionMadeBy(), quint8(45));
+    QCOMPARE(zipFileInfo.zipVersionNeeded(), quint16(20));
+    QCOMPARE(zipFileInfo.entryType(), QuaZipFileInfo::File);
+    QCOMPARE(zipFileInfo.compressionMethod(), quint16(Z_DEFLATED));
+    QCOMPARE(zipFileInfo.compressionLevel(), Z_DEFAULT_COMPRESSION);
+    QCOMPARE(zipFileInfo.compressionStrategy(), quint16(Z_DEFAULT_STRATEGY));
+    QCOMPARE(zipFileInfo.isText(), isText);
+    QCOMPARE(zipFileInfo.isEncrypted(), !password.isEmpty());
+    QCOMPARE(quint16(zipFileInfo.externalAttributes()),
+        quint16(zipFileInfo.attributes()));
+    QCOMPARE(zipFileInfo.filePath(), fileName);
+    QCOMPARE(zipFileInfo.fileName(), fileName);
+    QCOMPARE(zipFileInfo.path(), QFileInfo(fileName).path());
+
+    QVERIFY(zipFileInfo.isFile());
+    QVERIFY(!zipFileInfo.isRaw());
+    QVERIFY(!zipFileInfo.isDir());
+    QVERIFY(!zipFileInfo.isSymLink());
+    QVERIFY(zipFileInfo.symLinkTarget().isEmpty());
+    QVERIFY(!zipFileInfo.isHidden());
+    QVERIFY(zipFileInfo.isWritable());
+    QVERIFY(!zipFileInfo.isExecutable());
+    QVERIFY(!zipFileInfo.isSystem());
+    QVERIFY(zipFileInfo.isArchived());
+    QVERIFY(zipFileInfo.comment().isEmpty());
+
+    QFileInfo fileInfo(dir.filePath(fileName));
+    quint32 expectedCrc;
+    {
+        QFile file(fileInfo.filePath());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        expectedCrc = zChecksum<QuaCrc32>(&file);
+        QCOMPARE(zipFileInfo.uncompressedSize(), file.size());
+        QVERIFY(zipFileInfo.compressedSize() > 0);
+    }
+    QCOMPARE(zipFileInfo.crc(), expectedCrc);
+    QCOMPARE(zipFileInfo.permissions(), fileInfo.permissions());
+    QCOMPARE(zipFileInfo.modificationTime(), fileInfo.lastModified());
+    QCOMPARE(zipFileInfo.creationTime(), fileInfo.created());
+    QCOMPARE(zipFileInfo.lastAccessTime(), fileInfo.lastRead());
+
+    QuaZipFileInfo::ZipSystem expectedSystem;
+    if (compatibility & QuaZip::UnixCompatible) {
+        expectedSystem = QuaZipFileInfo::OS_UNIX;
+    } else if (compatibility == QuaZip::CustomCompatibility ||
+        0 != (compatibility & QuaZip::DosCompatible)) {
+        expectedSystem = QuaZipFileInfo::OS_MSDOS;
+    } else {
+        expectedSystem = QuaZipFileInfo::OS_WINDOWS_NTFS;
+    }
+    QCOMPARE(zipFileInfo.systemMadeBy(), expectedSystem);
+
+    auto expectedMadeBy = quint16(45 | (expectedSystem << 8));
+    QCOMPARE(zipFileInfo.madeBy(), expectedMadeBy);
+
+    auto expectedZipOptions =
+        QuaZipFileInfo::ZipOptions(QuaZipFileInfo::NormalCompression);
+    if (!password.isNull())
+        expectedZipOptions |= QuaZipFileInfo::Encryption;
+    bool isUnicode = !QuaZUtils::isAscii(fileName);
+    if (isUnicode)
+        expectedZipOptions |= QuaZipFileInfo::Unicode;
+    QCOMPARE(zipFileInfo.zipOptions(), expectedZipOptions);
+
+    quint16 expectedInternalAttributes = 0;
+    if (isText)
+        expectedInternalAttributes |= QuaZipFileInfo::Text;
+    QCOMPARE(zipFileInfo.internalAttributes(), expectedInternalAttributes);
+
+    auto &centralExtra = zipFileInfo.centralExtraFields();
+    auto &localExtra = zipFileInfo.localExtraFields();
+
+    bool dosCompatible = 0 != (compatibility & QuaZip::DosCompatible);
+    bool unixCompatible = 0 != (compatibility & QuaZip::UnixCompatible);
+    bool windowsCompatible = 0 != (compatibility & QuaZip::WindowsCompatible);
+
+    bool hasUnicodePathExtra =
+        isUnicode && dosCompatible && (unixCompatible || windowsCompatible);
+
+    QCOMPARE(
+        localExtra.contains(INFO_ZIP_UNICODE_PATH_HEADER), hasUnicodePathExtra);
+
+    bool hasWinZipExtra = (isUnicode && windowsCompatible) ||
+        compatibility == QuaZip::CustomCompatibility;
+
+    QCOMPARE(centralExtra.contains(WINZIP_EXTRA_FIELD_HEADER), hasWinZipExtra);
+
+    QVERIFY(!localExtra.contains(INFO_ZIP_UNICODE_COMMENT_HEADER));
+
+    QCOMPARE(
+        centralExtra.contains(UNIX_EXTENDED_TIMESTAMP_HEADER), unixCompatible);
+
+    QCOMPARE(localExtra.contains(UNIX_HEADER), unixCompatible);
+
+    QCOMPARE(
+        localExtra.contains(UNIX_EXTENDED_TIMESTAMP_HEADER), unixCompatible);
+
+    QCOMPARE(localExtra.contains(NTFS_HEADER),
+        compatibility != QuaZip::DosCompatible);
+
+    if (!password.isNull()) {
+        QuaZipKeysGenerator keyGen;
+        keyGen.addPassword(password);
+        QVERIFY(memcmp(keyGen.keys(), zipFileInfo.cryptKeys(),
+                    sizeof(QuaZipKeysGenerator::Keys)) == 0);
+    }
 }
 
-//void TestQuaZipFileInfo::getNTFSTime()
-//{
-//    QString zipName = "newtimes.zip";
-//    QStringList testFiles;
-//    testFiles << "test.txt";
-//    QDir curDir;
-//    if (curDir.exists(zipName)) {
-//        if (!curDir.remove(zipName))
-//            QFAIL("Can't remove zip file");
-//    }
-//    if (!createTestFiles(testFiles)) {
-//        QFAIL("Can't create test file");
-//    }
-//    QDateTime base(QDate(1601, 1, 1), QTime(0, 0), Qt::UTC);
-//    quint64 mTicks, aTicks, cTicks;
-//    QFileInfo fileInfo("tmp/test.txt");
-//    {
-//        // create
-//        QuaZip zip(zipName);
-//        QVERIFY(zip.open(QuaZip::mdCreate));
-//        QuaZipFile zipFile(&zip);
-//        QDateTime lm = fileInfo.lastModified().toUTC();
-//        QDateTime lr = fileInfo.lastRead().toUTC();
-//        QDateTime cr = fileInfo.created().toUTC();
-//        mTicks = (static_cast<qint64>(base.date().daysTo(lm.date()))
-//                * Q_UINT64_C(86400000)
-//                + static_cast<qint64>(base.time().msecsTo(lm.time())))
-//            * Q_UINT64_C(10000);
-//        aTicks = (static_cast<qint64>(base.date().daysTo(lr.date()))
-//                * Q_UINT64_C(86400000)
-//                + static_cast<qint64>(base.time().msecsTo(lr.time())))
-//            * Q_UINT64_C(10000);
-//        cTicks = (static_cast<qint64>(base.date().daysTo(cr.date()))
-//                * Q_UINT64_C(86400000)
-//                + static_cast<qint64>(base.time().msecsTo(cr.time())))
-//            * Q_UINT64_C(10000);
-//        QuaZipNewInfo newInfo("test.txt", "tmp/test.txt");
-//        QByteArray extra(36, 0);
-//        extra[0] = 0x0A; // magic
-//        extra[1] = 0x00;
-//        extra[2] = 32; // size
-//        extra[3] = 0;
-//        extra[4] = extra[5] = extra[6] = extra[7] = 0; // reserved
-//        extra[8] = 0x01; // time tag
-//        extra[9] = 0x00;
-//        extra[10] = 24; // time tag size
-//        extra[11] = 0;
-//        for (int i = 12; i < 36; i += 8) {
-//            quint64 ticks;
-//            if (i == 12) {
-//                ticks = mTicks;
-//            } else if (i == 20) {
-//                ticks = aTicks;
-//            } else if (i == 28) {
-//                ticks = cTicks;
-//            } else {
-//                QFAIL("Stupid programming bug here");
-//            }
-//            extra[i] = static_cast<char>(ticks);
-//            extra[i + 1] = static_cast<char>(ticks >> 8);
-//            extra[i + 2] = static_cast<char>(ticks >> 16);
-//            extra[i + 3] = static_cast<char>(ticks >> 24);
-//            extra[i + 4] = static_cast<char>(ticks >> 32);
-//            extra[i + 5] = static_cast<char>(ticks >> 40);
-//            extra[i + 6] = static_cast<char>(ticks >> 48);
-//            extra[i + 7] = static_cast<char>(ticks >> 56);
-//        }
-//        newInfo.extraLocal = extra;
-//        newInfo.extraGlobal = extra;
-//        QVERIFY(zipFile.open(QIODevice::WriteOnly, newInfo));
-//        zipFile.close();
-//        zip.close();
-//    }
-//    {
-//        // check
-//        QuaZip zip(zipName);
-//        QVERIFY(zip.open(QuaZip::mdUnzip));
-//        zip.goToFirstFile();
-//        QuaZipFileInfo zipFileInfo;
-//        QVERIFY(zip.getCurrentFileInfo(&zipFileInfo));
-//        zip.close();
-//        QCOMPARE(zipFileInfo.getNTFSmTime(), fileInfo.lastModified());
-//        QCOMPARE(zipFileInfo.getNTFSaTime(), fileInfo.lastRead());
-//        QCOMPARE(zipFileInfo.getNTFScTime(), fileInfo.created());
-//    }
-//    removeTestFiles(testFiles);
-//    curDir.remove(zipName);
-//}
+SaveCompatibility::SaveCompatibility()
+{
+    compatibility = QuaZip::defaultCompatibilityFlags();
+}
+
+SaveCompatibility::~SaveCompatibility()
+{
+    QuaZip::setDefaultCompatibilityFlags(compatibility);
+}

@@ -25,6 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "testquagzipdevice.h"
 
 #include "quazip/quagzipdevice.h"
+#include "qztest.h"
 
 #include <QTemporaryDir>
 #include <QDateTime>
@@ -32,7 +33,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <zlib.h>
 
-Q_DECLARE_METATYPE(QuaGzipDevice::ExtraFieldMap)
+Q_DECLARE_METATYPE(QuaZExtraField::Map)
 
 struct TestQuaGzipDevice::Gzip {
     gzFile file = NULL;
@@ -42,10 +43,10 @@ struct TestQuaGzipDevice::Gzip {
 
 void TestQuaGzipDevice::read_data()
 {
-    QTest::addColumn<bool>("isGzFile");
-    QTest::addColumn<QByteArray>("fileName");
-    QTest::addColumn<QByteArray>("data");
-    QTest::addColumn<QByteArray>("comment");
+    QADD_COLUMN(bool, isGzFile);
+    QADD_COLUMN(QByteArray, fileName);
+    QADD_COLUMN(QByteArray, data);
+    QADD_COLUMN(QByteArray, comment);
 
     QTest::newRow("file") << true << QByteArray("test.txt")
                           << QByteArray("My simple test") << QByteArray();
@@ -162,15 +163,16 @@ void TestQuaGzipDevice::read()
 
 void TestQuaGzipDevice::write_data()
 {
-    QTest::addColumn<QByteArray>("fileName");
-    QTest::addColumn<QByteArray>("data");
-    QTest::addColumn<QByteArray>("comment");
-    QTest::addColumn<QuaGzipDevice::ExtraFieldMap>("extra");
-    QTest::addColumn<int>("compressionLevel");
-    QTest::addColumn<bool>("isText");
+    QADD_COLUMN(QByteArray, fileName);
+    QADD_COLUMN(QByteArray, data);
+    QADD_COLUMN(QByteArray, comment);
+    QADD_COLUMN(QuaZExtraField::Map, extra);
+    QADD_COLUMN(int, compressionLevel);
+    QADD_COLUMN(bool, isText);
+
     {
-        QuaGzipDevice::ExtraFieldMap extra;
-        extra[{'T', '0'}] = QByteArrayLiteral("Test me");
+        QuaZExtraField::Map extra;
+        extra[QuaZExtraField::Key("T0")] = QByteArrayLiteral("Test me");
 
         QTest::newRow("text")
             << QByteArray("test.txt") << QByteArray("Test write\ntext file")
@@ -179,9 +181,10 @@ void TestQuaGzipDevice::write_data()
     }
 
     {
-        QuaGzipDevice::ExtraFieldMap extra;
-        extra[{'a', 'a'}] = QByteArrayLiteral("I am aa");
-        extra[{'b', 'B'}] = QByteArrayLiteral("I am not aa, I am bB");
+        QuaZExtraField::Map extra;
+        extra[QuaZExtraField::Key("aA")] = QByteArrayLiteral("I am aa");
+        extra[QuaZExtraField::Key("bB")] =
+            QByteArrayLiteral("I am not aa, I am bB");
 
         QTest::newRow("binary")
             << QByteArray("test.bin") << QByteArray(8, 'b') + QByteArray(3, 'c')
@@ -190,7 +193,7 @@ void TestQuaGzipDevice::write_data()
     }
 
     QTest::newRow("empty") << QByteArray("empty.dat") << QByteArray()
-                           << QByteArray() << QuaGzipDevice::ExtraFieldMap()
+                           << QByteArray() << QuaZExtraField::Map()
                            << Z_NO_COMPRESSION << false;
 }
 
@@ -199,7 +202,7 @@ void TestQuaGzipDevice::write()
     QFETCH(QByteArray, fileName);
     QFETCH(QByteArray, data);
     QFETCH(QByteArray, comment);
-    QFETCH(QuaGzipDevice::ExtraFieldMap, extra);
+    QFETCH(QuaZExtraField::Map, extra);
     QFETCH(int, compressionLevel);
     QFETCH(bool, isText);
 
@@ -317,8 +320,8 @@ void TestQuaGzipDevice::write()
     for (auto it = extra.constBegin(); it != extra.constEnd(); ++it) {
         auto &key = it.key();
         auto &value = it.value();
-        QCOMPARE(e[0], quint8(key.key[0]));
-        QCOMPARE(e[1], quint8(key.key[1]));
+        QCOMPARE(e[0], quint8(key));
+        QCOMPARE(e[1], quint8(key >> 8));
         QCOMPARE(e[2], quint8(value.length()));
         QCOMPARE(e[3], quint8(value.length() >> 8));
 

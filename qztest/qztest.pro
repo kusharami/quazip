@@ -17,7 +17,6 @@ testquaziodevice.h \
 testquazipdir.h \
 testquazipfile.h \
 testquazip.h \
-    testquazipnewinfo.h \
     testquazipfileinfo.h \
     testquagzipdevice.h
 
@@ -28,7 +27,6 @@ testquaziodevice.cpp \
 testquazip.cpp \
 testquazipdir.cpp \
 testquazipfile.cpp \
-    testquazipnewinfo.cpp \
     testquazipfileinfo.cpp \
     testquagzipdevice.cpp
 
