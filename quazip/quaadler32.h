@@ -1,5 +1,4 @@
-#ifndef QUAADLER32_H
-#define QUAADLER32_H
+#pragma once
 
 /*
 Copyright (C) 2010 Adam Walczak
@@ -32,19 +31,38 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quachecksum32.h"
 
 /// Adler32 checksum
-/** \class QuaAdler32 quaadler32.h <quazip/quaadler32.h>
- * This class wrappers the adler32 function with the QuaChecksum32 interface.
+/** \class QuaAdler32
+ * This class wrapps the adler32 function with the QuaChecksum32 interface.
  * See QuaChecksum32 for more info.
  */
 class QUAZIP_EXPORT QuaAdler32 : public QuaChecksum32 {
 public:
     QuaAdler32();
     QuaAdler32(quint32 value);
+    QuaAdler32(const QuaAdler32 &other);
 
-    quint32 calculate(const QByteArray &data);
+    virtual void reset() override;
+    virtual void update(const void *data, size_t size) override;
 
-    void reset();
-    void update(const QByteArray &buf);
+    using QuaChecksum32::update;
+
+    inline QuaAdler32 &operator=(const QuaAdler32 &other);
+    inline bool operator==(const QuaAdler32 &other) const;
+    inline bool operator!=(const QuaAdler32 &other) const;
 };
 
-#endif //QUAADLER32_H
+QuaAdler32 &QuaAdler32::operator=(const QuaAdler32 &other)
+{
+    setValue(other.value());
+    return *this;
+}
+
+bool QuaAdler32::operator==(const QuaAdler32 &other) const
+{
+    return value() == other.value();
+}
+
+bool QuaAdler32::operator!=(const QuaAdler32 &other) const
+{
+    return !operator==(other);
+}

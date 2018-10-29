@@ -27,10 +27,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <zlib.h>
 
-QuaChecksum32::QuaChecksum32() {}
-
-QuaChecksum32::~QuaChecksum32() {}
-
 QuaCrc32::QuaCrc32()
 {
     reset();
@@ -41,10 +37,9 @@ QuaCrc32::QuaCrc32(quint32 value)
     setValue(value);
 }
 
-quint32 QuaCrc32::calculate(const QByteArray &data)
+QuaCrc32::QuaCrc32(const QuaCrc32 &other)
 {
-    return crc32(crc32(0L, Z_NULL, 0),
-        reinterpret_cast<const Bytef *>(data.data()), data.size());
+    setValue(other.value());
 }
 
 void QuaCrc32::reset()
@@ -52,8 +47,24 @@ void QuaCrc32::reset()
     setValue(crc32(0L, Z_NULL, 0));
 }
 
-void QuaCrc32::update(const QByteArray &buf)
+void QuaCrc32::update(const void *data, size_t size)
 {
-    setValue(crc32(
-        value(), reinterpret_cast<const Bytef *>(buf.data()), buf.size()));
+    if (size == 0)
+        return;
+
+    Q_ASSERT(data);
+    auto bytes = reinterpret_cast<const Bytef *>(data);
+
+    quint32 current = value();
+    uInt blockSize = std::numeric_limits<uInt>::max();
+    while (size > 0) {
+        if (size < blockSize)
+            blockSize = uInt(size);
+
+        current = crc32(current, bytes, blockSize);
+        size -= blockSize;
+        bytes += blockSize;
+    }
+
+    setValue(current);
 }

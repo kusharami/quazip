@@ -38,10 +38,9 @@ QuaAdler32::QuaAdler32(quint32 value)
     setValue(value);
 }
 
-quint32 QuaAdler32::calculate(const QByteArray &data)
+QuaAdler32::QuaAdler32(const QuaAdler32 &other)
 {
-    return adler32(adler32(0L, Z_NULL, 0),
-        reinterpret_cast<const Bytef *>(data.data()), data.size());
+    setValue(other.value());
 }
 
 void QuaAdler32::reset()
@@ -49,8 +48,24 @@ void QuaAdler32::reset()
     setValue(adler32(0L, Z_NULL, 0));
 }
 
-void QuaAdler32::update(const QByteArray &buf)
+void QuaAdler32::update(const void *data, size_t size)
 {
-    setValue(adler32(
-        value(), reinterpret_cast<const Bytef *>(buf.data()), buf.size()));
+    if (size == 0)
+        return;
+
+    Q_ASSERT(data);
+    auto bytes = reinterpret_cast<const Bytef *>(data);
+
+    quint32 current = value();
+    uInt blockSize = std::numeric_limits<uInt>::max();
+    while (size > 0) {
+        if (size < blockSize)
+            blockSize = uInt(size);
+
+        current = adler32(current, bytes, blockSize);
+        size -= blockSize;
+        bytes += blockSize;
+    }
+
+    setValue(current);
 }

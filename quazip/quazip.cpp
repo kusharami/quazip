@@ -878,16 +878,13 @@ QByteArray QuaZipPrivate::makeInfoZipText(
     if (utf8 == compatibleText)
         return QByteArray();
 
-    QuaCrc32 crc(0);
-    crc.calculate(compatibleText);
-
     QByteArray result;
     {
         QDataStream writer(&result, QIODevice::WriteOnly);
         writer.setByteOrder(QDataStream::LittleEndian);
 
         writer << quint8(1);
-        writer << quint32(crc.value());
+        writer << zChecksum<QuaCrc32>(compatibleText);
         writer.writeRawData(utf8.data(), utf8.size());
     }
     return result;

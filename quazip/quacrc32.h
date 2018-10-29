@@ -1,5 +1,4 @@
-#ifndef QUACRC32_H
-#define QUACRC32_H
+#pragma once
 
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
@@ -29,19 +28,38 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quachecksum32.h"
 
 ///CRC32 checksum
-/** \class QuaCrc32 quacrc32.h <quazip/quacrc32.h>
-* This class wrappers the crc32 function with the QuaChecksum32 interface.
+/** \class QuaCrc32
+* This class wraps the crc32 function with the QuaChecksum32 interface.
 * See QuaChecksum32 for more info.
 */
 class QUAZIP_EXPORT QuaCrc32 : public QuaChecksum32 {
 public:
     QuaCrc32();
     QuaCrc32(quint32 value);
+    QuaCrc32(const QuaCrc32 &other);
 
-    quint32 calculate(const QByteArray &data);
+    virtual void reset() override;
+    virtual void update(const void *data, size_t size) override;
 
-    void reset();
-    void update(const QByteArray &buf);
+    using QuaChecksum32::update;
+
+    inline QuaCrc32 &operator=(const QuaCrc32 &other);
+    inline bool operator==(const QuaCrc32 &other) const;
+    inline bool operator!=(const QuaCrc32 &other) const;
 };
 
-#endif //QUACRC32_H
+QuaCrc32 &QuaCrc32::operator=(const QuaCrc32 &other)
+{
+    setValue(other.value());
+    return *this;
+}
+
+bool QuaCrc32::operator==(const QuaCrc32 &other) const
+{
+    return value() == other.value();
+}
+
+bool QuaCrc32::operator!=(const QuaCrc32 &other) const
+{
+    return !operator==(other);
+}

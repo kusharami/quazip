@@ -43,4 +43,5 @@ SOURCES += $$PWD/qioapi.cpp \
     $$PWD/quaziptextcodec.cpp \
     $$PWD/quazextrafield.cpp \
     $$PWD/quazutils.cpp \
-    $$PWD/quazipkeysgenerator.cpp
+    $$PWD/quazipkeysgenerator.cpp \
+    $$PWD/quachecksum32.cpp
