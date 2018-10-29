@@ -279,7 +279,7 @@ bool QuaGzipDevicePrivate::gzSetHeader()
 {
     gzInitHeader();
     if (gzHeader.time == 0)
-        gzHeader.time = uLong(QDateTime::currentSecsSinceEpoch());
+        gzHeader.time = uLong(QDateTime::currentMSecsSinceEpoch() / 1000);
     gzHeader.done = 1;
     return check(deflateSetHeader(&zstream, &gzHeader));
 }

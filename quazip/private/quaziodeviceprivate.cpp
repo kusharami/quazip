@@ -301,7 +301,7 @@ qint64 QuaZIODevicePrivate::writeInternal(const char *data, qint64 maxlen)
     qint64 count = maxlen;
     auto blockSize = QuaZUtils::maxBlockSize<BlockSize>();
 
-    zstream.next_in = reinterpret_cast<DataType>(data);
+    zstream.next_in = reinterpret_cast<DataType>(const_cast<char *>(data));
 
     while (count > 0) {
         QuaZUtils::adjustBlockSize(blockSize, count);

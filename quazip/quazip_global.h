@@ -53,9 +53,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #define UNUSED
 #endif
 
-#define QUAZIP_EXTRA_NTFS_MAGIC 0x000Au
-#define QUAZIP_EXTRA_NTFS_TIME_MAGIC 0x0001u
-
 #ifndef Q_FALLTHROUGH
 #define Q_FALLTHROUGH()
 #endif

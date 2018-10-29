@@ -81,7 +81,7 @@ void TestQuaGzipDevice::read()
     QScopedPointer<QIODevice> ioDevice;
     if (isGzFile) {
         tempDir.reset(new QTemporaryDir);
-        auto gzFilePath = tempDir->filePath(fileName + ".gz");
+        auto gzFilePath = QDir(tempDir->path()).filePath(fileName + ".gz");
         auto localFilePath = gzFilePath.toLocal8Bit();
 
         {
@@ -108,7 +108,7 @@ void TestQuaGzipDevice::read()
             MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL,
             Z_DEFAULT_STRATEGY);
         deflateSetHeader(&zouts, &gzHeader);
-        zouts.next_in = reinterpret_cast<const Bytef *>(data.data());
+        zouts.next_in = (Bytef *) data.constData();
         zouts.avail_in = data.length();
         zouts.next_out = reinterpret_cast<Bytef *>(buffer->buffer().data());
         zouts.avail_out = buffer->buffer().size();
@@ -206,10 +206,10 @@ void TestQuaGzipDevice::write()
     QFETCH(int, compressionLevel);
     QFETCH(bool, isText);
 
-    time_t savedTime = QDateTime::currentSecsSinceEpoch();
+    time_t savedTime = QDateTime::currentMSecsSinceEpoch() / 1000;
 
     QTemporaryDir tempDir;
-    auto gzFilePath = tempDir.filePath(fileName + ".gz");
+    auto gzFilePath = QDir(tempDir.path()).filePath(fileName + ".gz");
     QuaGzipDevice gzDevice;
 
     QFile fileGZ(gzFilePath);
@@ -341,8 +341,8 @@ void TestQuaGzipDevice::write()
         MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL,
         Z_DEFAULT_STRATEGY);
     deflateSetHeader(&zouts, &gzHeader);
-    zouts.next_in =
-        reinterpret_cast<const Bytef *>(expectedUncompressedData.data());
+    zouts.next_in = reinterpret_cast<Bytef *>(
+        const_cast<char *>(expectedUncompressedData.constData()));
     zouts.avail_in = expectedUncompressedData.length();
     zouts.next_out = reinterpret_cast<Bytef *>(expectedCompressedData.data());
     zouts.avail_out = expectedCompressedData.length();

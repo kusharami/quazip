@@ -772,7 +772,7 @@ quint64 QuaZipPrivate::dateTimeToNTFSTime(const QDateTime &from)
 
 qint64 QuaZipPrivate::dateTimeToUnixTime(const QDateTime &from, qint32 &time32)
 {
-    qint64 secs = from.toSecsSinceEpoch();
+    qint64 secs = from.toMSecsSinceEpoch() / 1000;
     if (secs < std::numeric_limits<qint32>::min())
         time32 = std::numeric_limits<qint32>::min();
     else if (secs > std::numeric_limits<qint32>::max())
