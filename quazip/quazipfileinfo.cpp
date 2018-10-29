@@ -236,7 +236,7 @@ bool QuaZipFileInfo::applyAttributesTo(const QString &filePath) const
     auto attr = attributes() & ~DirAttr;
 
     static_assert(sizeof(WCHAR) == sizeof(decltype(*nativeFilePath.utf16())),
-        "Not MSVC?");
+        "WCHAR size mismatch");
     ok = SetFileAttributesW(
              reinterpret_cast<const WCHAR *>(nativeFilePath.utf16()),
              DWORD(attr)) &&
