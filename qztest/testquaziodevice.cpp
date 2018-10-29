@@ -142,9 +142,9 @@ void TestQuaZIODevice::write_data()
     QADD_COLUMN(bool, truncate);
     QADD_COLUMN(QByteArray, data);
 
-    QTest::addRow("truncate_false") << false << QByteArrayLiteral("test");
-    QTest::addRow("truncate_true") << true << QByteArrayLiteral("bigTest");
-    QTest::addRow("empty") << true << QByteArray();
+    QTest::newRow("truncate_false") << false << QByteArrayLiteral("test");
+    QTest::newRow("truncate_true") << true << QByteArrayLiteral("bigTest");
+    QTest::newRow("empty") << true << QByteArray();
 }
 
 void TestQuaZIODevice::write()

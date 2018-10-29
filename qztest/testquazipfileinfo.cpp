@@ -1,3 +1,27 @@
+/*
+Copyright (C) 2018 Alexandra Cherdantseva
+
+This file is part of QuaZIP test suite.
+
+QuaZIP is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 2.1 of the License, or
+(at your option) any later version.
+
+QuaZIP is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with QuaZIP.  If not, see <http://www.gnu.org/licenses/>.
+
+See COPYING file for the full LGPL text.
+
+Original ZIP package is copyrighted by Gilles Vollant and contributors,
+see quazip/(un)zip.h files for details. Basically it's the zlib license.
+*/
+
 #include "testquazipfileinfo.h"
 
 #include "qztest.h"
@@ -73,20 +97,20 @@ void TestQuaZipFileInfo::testFromFile_data()
     QADD_COLUMN(QFile::Permissions, permissions);
     QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
 
-    QTest::addRow("writable")
+    QTest::newRow("writable")
         << QStringLiteral("writable.bin") << defaultReadWrite
         << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
 
-    QTest::addRow("hidden")
+    QTest::newRow("hidden")
         << QStringLiteral(".hidden") << defaultReadWrite
         << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden);
 
-    QTest::addRow("readonly")
+    QTest::newRow("readonly")
         << QStringLiteral("readonly.bin") << defaultRead
         << QuaZipFileInfo::Attributes(
                QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
 
-    QTest::addRow("executable")
+    QTest::newRow("executable")
         << QStringLiteral("executable")
         << QFile::Permissions(defaultReadWrite | execPermissions())
         << QuaZipFileInfo::Attributes(notArchived());
@@ -179,15 +203,15 @@ void TestQuaZipFileInfo::testFromDir_data()
     QADD_COLUMN(QFile::Permissions, permissions);
     QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
 
-    QTest::addRow("writable")
+    QTest::newRow("writable")
         << QStringLiteral("writable") << defaultReadWrite
         << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
 
-    QTest::addRow("hidden")
+    QTest::newRow("hidden")
         << QStringLiteral(".hidden") << defaultReadWrite
         << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden);
 
-    QTest::addRow("readonly")
+    QTest::newRow("readonly")
         << QStringLiteral("readonly") << defaultRead
         << QuaZipFileInfo::Attributes(
                QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
@@ -280,12 +304,12 @@ void TestQuaZipFileInfo::testFromLink_data()
     QADD_COLUMN(QFile::Permissions, permissions);
     QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
 
-    QTest::addRow("file_link")
+    QTest::newRow("file_link")
         << false << QStringLiteral("file_link") << QStringLiteral("file.txt")
         << defaultReadWrite
         << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
 
-    QTest::addRow("dir_link")
+    QTest::newRow("dir_link")
         << true << QStringLiteral(".hidden_dir_link") << QStringLiteral("dir")
         << defaultRead
         << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden |
@@ -386,26 +410,26 @@ void TestQuaZipFileInfo::testFromZipFile_data()
     QADD_COLUMN(QString, password);
     QADD_COLUMN(QuaZip::CompatibilityFlags, compatibility);
 
-    QTest::addRow("simple") << QStringLiteral("simple.bin") << 10 << QString()
+    QTest::newRow("simple") << QStringLiteral("simple.bin") << 10 << QString()
                             << QuaZip::CustomCompatibility;
 
-    QTest::addRow("unix_windows")
+    QTest::newRow("unix_windows")
         << QStringLiteral("факел.bin") << 9 << QString()
         << QuaZip::CompatibilityFlags(
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
-    QTest::addRow("text_unix_only") << QStringLiteral("бублик.txt") << -1
+    QTest::newRow("text_unix_only") << QStringLiteral("бублик.txt") << -1
                                     << QString() << QuaZip::UnixCompatible;
 
-    QTest::addRow("text_dos_only") << QStringLiteral("dos.txt") << -1
+    QTest::newRow("text_dos_only") << QStringLiteral("dos.txt") << -1
                                    << QString() << QuaZip::DosCompatible;
 
-    QTest::addRow("text_dos_compatible")
+    QTest::newRow("text_dos_compatible")
         << QStringLiteral("бублик.txt") << -1 << QString()
         << QuaZip::CompatibilityFlags(QuaZip::DosCompatible |
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
-    QTest::addRow("encrypted_windows_only")
+    QTest::newRow("encrypted_windows_only")
         << QStringLiteral("encrypted.bin") << 12
         << QStringLiteral("My babushka's birthday")
         << QuaZip::WindowsCompatible;
