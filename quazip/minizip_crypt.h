@@ -29,6 +29,11 @@
 
 #include "quazip_global.h"
 #include "zlib.h"
+#include <ctime>
+
+#if ZLIB_VERNUM <= 0x1250
+typedef uLong z_crc_t;
+#endif
 
 #define CRC32(c, b) ((*(pcrc_32_tab + (((int) (c) ^ (b)) & 0xff))) ^ ((c) >> 8))
 #define CRYPT_KEY_COUNT 3
@@ -70,8 +75,8 @@ inline void reset_keys(unsigned long *pkeys)
     *(pkeys + 2) = 878082192L;
 }
 
-inline void update_keys_pwd(const char *passwd, unsigned long *pkeys,
-                            const z_crc_t FAR *pcrc_32_tab)
+inline void update_keys_pwd(
+    const char *passwd, unsigned long *pkeys, const z_crc_t FAR *pcrc_32_tab)
 {
     while (*passwd != '\0') {
         update_keys(pkeys, pcrc_32_tab, (int) *passwd);
@@ -98,9 +103,8 @@ inline void init_keys(
 #define ZCR_SEED2 3141592654UL /* use PI as default pattern */
 #endif
 
-inline void crypthead_keys(unsigned char *buf,
-    unsigned long *pkeys, const z_crc_t FAR *pcrc_32_tab,
-    unsigned long crcForCrypting)
+inline void crypthead_keys(unsigned char *buf, unsigned long *pkeys,
+    const z_crc_t FAR *pcrc_32_tab, unsigned long crcForCrypting)
 {
     int n; /* index in random header */
     int t; /* temporary */
