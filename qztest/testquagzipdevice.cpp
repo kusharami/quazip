@@ -108,7 +108,8 @@ void TestQuaGzipDevice::read()
             MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL,
             Z_DEFAULT_STRATEGY);
         deflateSetHeader(&zouts, &gzHeader);
-        zouts.next_in = (Bytef *) data.constData();
+        zouts.next_in =
+            reinterpret_cast<Bytef *>(const_cast<char *>(data.constData()));
         zouts.avail_in = data.length();
         zouts.next_out = reinterpret_cast<Bytef *>(buffer->buffer().data());
         zouts.avail_out = buffer->buffer().size();
