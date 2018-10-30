@@ -1,6 +1,4 @@
-#ifndef QUACHECKSUM32_H
-#define QUACHECKSUM32_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
 Copyright (C) 2018 Alexandra Cherdantseva
@@ -135,5 +133,3 @@ inline quint32 zChecksum(const void *data, size_t size)
     calculator.update(data, size);
     return calculator.value();
 }
-
-#endif //QUACHECKSUM32_H

@@ -1,6 +1,4 @@
-#ifndef QUAZIP_TEST_QZTEST_H
-#define QUAZIP_TEST_QZTEST_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
 
@@ -25,7 +23,9 @@ Original ZIP package is copyrighted by Gilles Vollant and contributors,
 see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
-#include <QStringList>
+#include "quazip/quazip.h"
+
+#include <QtTest>
 
 class QIODevice;
 class QTextCodec;
@@ -52,4 +52,12 @@ extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
 extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
     QTextCodec *codec, const QString &password, const QString &filesPath);
 
-#endif // QUAZIP_TEST_QZTEST_H
+struct SaveDefaultZipOptions {
+    QuaZip::CompatibilityFlags compatibility;
+    QTextCodec *defaultFilePathCodec;
+    QTextCodec *defaultCommentCodec;
+    QTextCodec *defaultPasswordCodec;
+
+    SaveDefaultZipOptions();
+    ~SaveDefaultZipOptions();
+};

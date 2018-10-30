@@ -1,8 +1,7 @@
-#ifndef QUAZIP_TEST_QUACHECKSUM32_H
-#define QUAZIP_TEST_QUACHECKSUM32_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP test suite.
 
@@ -27,11 +26,11 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QObject>
 
-class TestQuaChecksum32: public QObject {
+class TestQuaChecksum32 : public QObject {
     Q_OBJECT
 private slots:
-    void calculate();
+    void update_data();
     void update();
+    void calculate_data();
+    void calculate();
 };
-
-#endif // QUAZIP_TEST_QUACHECKSUM32_H

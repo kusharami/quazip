@@ -41,8 +41,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <QFileInfo>
 #include <QTextStream>
 
-#include <QtTest/QtTest>
-
 QString tempZipPath(const QTemporaryDir &tempDir, int num)
 {
     return tempFilesPath(tempDir, num) + QStringLiteral(".zip");
@@ -100,6 +98,7 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
 {
     if (codec != NULL) {
         zip.setFilePathCodec(codec);
+        zip.setCompatibilityFlags(QuaZip::CustomCompatibility);
     }
     if (!zip.open(QuaZip::mdCreate)) {
         qWarning("Couldn't open %s", zipName.toLocal8Bit().constData());
@@ -151,9 +150,7 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
                     return false;
                 }
             }
-            file.close();
         }
-        zipFile.close();
         ++i;
     }
     zip.setComment(QStringLiteral("This is the test archive"));
@@ -201,6 +198,22 @@ bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
     QuaZip zip(ioDevice);
     return createTestArchive(
         zip, "<QIODevice pointer>", fileNames, codec, password, filesPath);
+}
+
+SaveDefaultZipOptions::SaveDefaultZipOptions()
+{
+    compatibility = QuaZip::defaultCompatibilityFlags();
+    defaultFilePathCodec = QuaZip::defaultFilePathCodec();
+    defaultCommentCodec = QuaZip::defaultCommentCodec();
+    defaultPasswordCodec = QuaZip::defaultPasswordCodec();
+}
+
+SaveDefaultZipOptions::~SaveDefaultZipOptions()
+{
+    QuaZip::setDefaultCompatibilityFlags(compatibility);
+    QuaZip::setDefaultFilePathCodec(defaultFilePathCodec);
+    QuaZip::setDefaultCommentCodec(defaultCommentCodec);
+    QuaZip::setDefaultPasswordCodec(defaultPasswordCodec);
 }
 
 int main(int argc, char **argv)
