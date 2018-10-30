@@ -414,18 +414,18 @@ void TestQuaZipFileInfo::testFromZipFile_data()
                             << QuaZip::CustomCompatibility;
 
     QTest::newRow("unix_windows")
-        << QStringLiteral("факел.bin") << 9 << QString()
+        << QString::fromUtf8("факел.bin") << 9 << QString()
         << QuaZip::CompatibilityFlags(
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
-    QTest::newRow("text_unix_only") << QStringLiteral("бублик.txt") << -1
+    QTest::newRow("text_unix_only") << QString::fromUtf8("бублик.txt") << -1
                                     << QString() << QuaZip::UnixCompatible;
 
     QTest::newRow("text_dos_only") << QStringLiteral("dos.txt") << -1
                                    << QString() << QuaZip::DosCompatible;
 
     QTest::newRow("text_dos_compatible")
-        << QStringLiteral("бублик.txt") << -1 << QString()
+        << QString::fromUtf8("бублик.txt") << -1 << QString()
         << QuaZip::CompatibilityFlags(QuaZip::DosCompatible |
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
