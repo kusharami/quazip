@@ -766,14 +766,14 @@ qint64 QuaZipFilePrivate::readInternal(char *data, qint64 maxlen)
     if (zipError != UNZ_OK)
         return -1;
 
+    if (maxlen <= 0)
+        return maxlen;
+
     Q_ASSERT(zip);
     Q_ASSERT(zip->getMode() == QuaZip::mdUnzip);
     Q_ASSERT(zip->ioDevice());
     Q_ASSERT(zip->ioDevice()->isReadable());
     Q_ASSERT(!zip->ioDevice()->isTextModeEnabled());
-
-    if (maxlen <= 0)
-        return maxlen;
 
     qint64 count = maxlen;
     auto blockSize = unsigned(QuaZUtils::maxBlockSize<int>());
