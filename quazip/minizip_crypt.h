@@ -31,7 +31,7 @@
 #include "zlib.h"
 #include <ctime>
 
-#if ZLIB_VERNUM <= 0x1250
+#if ZLIB_VERNUM < 0x1270
 typedef uLong z_crc_t;
 #endif
 
