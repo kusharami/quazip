@@ -45,13 +45,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 Q_DECLARE_METATYPE(QuaZip::CompatibilityFlags)
 Q_DECLARE_METATYPE(QuaZipFileInfo::Attributes)
 
-struct SaveCompatibility {
-    QuaZip::CompatibilityFlags compatibility;
-
-    SaveCompatibility();
-    ~SaveCompatibility();
-};
-
 TestQuaZipFileInfo::TestQuaZipFileInfo(QObject *parent)
     : QObject(parent)
 {
@@ -91,7 +84,7 @@ static Q_CONSTEXPR QFile::Permissions defaultWrite(
 static Q_CONSTEXPR auto defaultReadWrite =
     QFile::Permissions(defaultRead | defaultWrite);
 
-void TestQuaZipFileInfo::testFromFile_data()
+void TestQuaZipFileInfo::fromFile_data()
 {
     QADD_COLUMN(QString, fileName);
     QADD_COLUMN(QFile::Permissions, permissions);
@@ -116,7 +109,7 @@ void TestQuaZipFileInfo::testFromFile_data()
         << QuaZipFileInfo::Attributes(notArchived());
 }
 
-void TestQuaZipFileInfo::testFromFile()
+void TestQuaZipFileInfo::fromFile()
 {
     QFETCH(QString, fileName);
     QFETCH(QFile::Permissions, permissions);
@@ -195,7 +188,7 @@ void TestQuaZipFileInfo::testFromFile()
     QCOMPARE(zipFileInfo, checkZipFileInfo);
 }
 
-void TestQuaZipFileInfo::testFromDir_data()
+void TestQuaZipFileInfo::fromDir_data()
 {
     QADD_COLUMN(QFile::Permissions, permissions);
     QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
@@ -214,7 +207,7 @@ void TestQuaZipFileInfo::testFromDir_data()
                QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
 }
 
-void TestQuaZipFileInfo::testFromDir()
+void TestQuaZipFileInfo::fromDir()
 {
     QFETCH(QFile::Permissions, permissions);
     QFETCH(QuaZipFileInfo::Attributes, attributes);
@@ -289,7 +282,7 @@ void TestQuaZipFileInfo::testFromDir()
     QCOMPARE(zipFileInfo, checkZipFileInfo);
 }
 
-void TestQuaZipFileInfo::testFromLink_data()
+void TestQuaZipFileInfo::fromLink_data()
 {
     QADD_COLUMN(bool, linkToDir);
     QADD_COLUMN(QString, linkFileName);
@@ -309,7 +302,7 @@ void TestQuaZipFileInfo::testFromLink_data()
                QuaZipFileInfo::ReadOnly);
 }
 
-void TestQuaZipFileInfo::testFromLink()
+void TestQuaZipFileInfo::fromLink()
 {
     QFETCH(bool, linkToDir);
     QFETCH(QString, linkFileName);
@@ -393,7 +386,7 @@ void TestQuaZipFileInfo::testFromLink()
     QCOMPARE(zipFileInfo, checkZipFileInfo);
 }
 
-void TestQuaZipFileInfo::testFromZipFile_data()
+void TestQuaZipFileInfo::fromZipFile_data()
 {
     QADD_COLUMN(QString, fileName);
     QADD_COLUMN(int, fileSize);
@@ -425,7 +418,7 @@ void TestQuaZipFileInfo::testFromZipFile_data()
         << QuaZip::WindowsCompatible;
 }
 
-void TestQuaZipFileInfo::testFromZipFile()
+void TestQuaZipFileInfo::fromZipFile()
 {
     QFETCH(QString, fileName);
     QFETCH(int, fileSize);
@@ -433,7 +426,7 @@ void TestQuaZipFileInfo::testFromZipFile()
     QFETCH(QuaZip::CompatibilityFlags, compatibility);
     bool isText = fileName.endsWith(".txt");
 
-    SaveCompatibility saveCompatibility;
+    SaveDefaultZipOptions saveCompatibility;
     QuaZip::setDefaultCompatibilityFlags(compatibility);
 
     QTemporaryDir tempDir;
@@ -565,14 +558,4 @@ void TestQuaZipFileInfo::testFromZipFile()
         QVERIFY(memcmp(keyGen.keys(), zipFileInfo.cryptKeys(),
                     sizeof(QuaZipKeysGenerator::Keys)) == 0);
     }
-}
-
-SaveCompatibility::SaveCompatibility()
-{
-    compatibility = QuaZip::defaultCompatibilityFlags();
-}
-
-SaveCompatibility::~SaveCompatibility()
-{
-    QuaZip::setDefaultCompatibilityFlags(compatibility);
 }

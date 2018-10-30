@@ -30,12 +30,12 @@ class TestQuaZipFileInfo : public QObject {
 public:
     explicit TestQuaZipFileInfo(QObject *parent = nullptr);
 private slots:
-    void testFromFile_data();
-    void testFromFile();
-    void testFromDir_data();
-    void testFromDir();
-    void testFromLink_data();
-    void testFromLink();
-    void testFromZipFile_data();
-    void testFromZipFile();
+    void fromFile_data();
+    void fromFile();
+    void fromDir_data();
+    void fromDir();
+    void fromLink_data();
+    void fromLink();
+    void fromZipFile_data();
+    void fromZipFile();
 };
