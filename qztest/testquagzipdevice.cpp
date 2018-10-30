@@ -108,8 +108,7 @@ void TestQuaGzipDevice::read()
         deflateInit2(&zouts, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
             MAX_WBITS | GZIP_FLAG, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY);
         deflateSetHeader(&zouts, &gzHeader);
-        zouts.next_in =
-            reinterpret_cast<Bytef *>(const_cast<char *>(data.constData()));
+        zouts.next_in = reinterpret_cast<Bytef *>(data.data());
         zouts.avail_in = data.length();
         zouts.next_out = reinterpret_cast<Bytef *>(buffer->buffer().data());
         zouts.avail_out = buffer->buffer().size();
@@ -341,8 +340,7 @@ void TestQuaGzipDevice::write()
     deflateInit2(&zouts, compressionLevel, Z_DEFLATED, MAX_WBITS | GZIP_FLAG,
         MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY);
     deflateSetHeader(&zouts, &gzHeader);
-    zouts.next_in = reinterpret_cast<Bytef *>(
-        const_cast<char *>(expectedUncompressedData.constData()));
+    zouts.next_in = reinterpret_cast<Bytef *>(expectedUncompressedData.data());
     zouts.avail_in = expectedUncompressedData.length();
     zouts.next_out = reinterpret_cast<Bytef *>(expectedCompressedData.data());
     zouts.avail_out = expectedCompressedData.length();
