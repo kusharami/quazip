@@ -220,7 +220,8 @@ bool QuaZipFileInfo::initWithFile(const QFileInfo &fileInfo)
     return true;
 }
 
-bool QuaZipFileInfo::applyAttributesTo(const QString &filePath) const
+bool QuaZipFileInfo::applyAttributesTo(const QString &filePath,
+    Attributes attributes, QFile::Permissions permissions)
 {
     if (filePath.isEmpty())
         return false;
@@ -229,11 +230,18 @@ bool QuaZipFileInfo::applyAttributesTo(const QString &filePath) const
         QDir::toNativeSeparators(QFileInfo(filePath).absoluteFilePath());
     if (!QFile::exists(filePath))
         return false;
+    if (permissions == 0) {
+        permissions |= QFile::ReadOwner | QFile::ReadGroup | QFile::ReadUser |
+            QFile::ReadOther;
 
-    bool ok = QFile::setPermissions(filePath, permissions());
+        if (!attributes & ReadOnly)
+            permissions |= QFile::WriteOwner | QFile::WriteUser;
+    }
+
+    bool ok = QFile::setPermissions(filePath, permissions);
 
 #ifdef Q_OS_WIN
-    auto attr = attributes() & ~DirAttr;
+    auto attr = attributes & ~DirAttr;
 
     static_assert(sizeof(WCHAR) == sizeof(decltype(*nativeFilePath.utf16())),
         "WCHAR size mismatch");
@@ -243,6 +251,11 @@ bool QuaZipFileInfo::applyAttributesTo(const QString &filePath) const
         ok;
 #endif
     return ok;
+}
+
+bool QuaZipFileInfo::applyAttributesTo(const QString &filePath) const
+{
+    return applyAttributesTo(filePath, attributes(), permissions());
 }
 
 QuaZipFileInfo::EntryType QuaZipFileInfo::entryType() const

@@ -127,14 +127,11 @@ void TestQuaZipFileInfo::testFromFile()
     auto filePath = QDir(filesPath).filePath(fileName);
 
     QVERIFY(createTestFiles({fileName}, -1, filesPath));
-    {
-        QuaZipFileInfo attrInfo;
-        attrInfo.setPermissions(permissions);
-        attrInfo.setAttributes(attributes);
-        bool applyAttributes = attrInfo.applyAttributesTo(filePath);
-        if (!applyAttributes) {
-            qWarning("Some attributes or permissions are not applied");
-        }
+
+    bool applyAttributes =
+        QuaZipFileInfo::applyAttributesTo(filePath, attributes, permissions);
+    if (!applyAttributes) {
+        qWarning("Some attributes or permissions are not applied");
     }
 
     auto zipFileInfo = QuaZipFileInfo::fromFile(filePath);
@@ -228,14 +225,10 @@ void TestQuaZipFileInfo::testFromDir()
     QDir dir(tempFilesPath(tempDir));
     QVERIFY(QDir(tempDir.path()).mkdir(dir.dirName()));
 
-    {
-        QuaZipFileInfo attrInfo;
-        attrInfo.setPermissions(permissions);
-        attrInfo.setAttributes(attributes);
-        bool applyAttributes = attrInfo.applyAttributesTo(dir.path());
-        if (!applyAttributes) {
-            qWarning("Some attributes or permissions are not applied");
-        }
+    bool applyAttributes =
+        QuaZipFileInfo::applyAttributesTo(dir.path(), attributes, permissions);
+    if (!applyAttributes) {
+        qWarning("Some attributes or permissions are not applied");
     }
 
     auto zipFileInfo = QuaZipFileInfo::fromDir(dir);
@@ -337,14 +330,11 @@ void TestQuaZipFileInfo::testFromLink()
     QString linkFilePath = QDir(tempDir.path()).filePath(linkFileName);
     QVERIFY(
         QuaZUtils::createSymLink(linkFilePath, dir.filePath(targetFileName)));
-    {
-        QuaZipFileInfo attrInfo;
-        attrInfo.setPermissions(permissions);
-        attrInfo.setAttributes(attributes);
-        bool applyAttributes = attrInfo.applyAttributesTo(linkFilePath);
-        if (!applyAttributes) {
-            qWarning("Some attributes or permissions are not applied");
-        }
+
+    bool applyAttributes = QuaZipFileInfo::applyAttributesTo(
+        linkFilePath, attributes, permissions);
+    if (!applyAttributes) {
+        qWarning("Some attributes or permissions are not applied");
     }
 
     auto zipFileInfo = QuaZipFileInfo::fromFile(linkFilePath);

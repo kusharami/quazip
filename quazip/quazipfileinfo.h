@@ -123,6 +123,10 @@ public:
     bool initWithFile(const QString &filePath);
     bool initWithFile(const QFileInfo &fileInfo);
 
+    static bool applyAttributesTo(const QString &filePath,
+        Attributes attributes,
+        QFile::Permissions permissions = QFile::Permissions(0));
+
     bool applyAttributesTo(const QString &filePath) const;
 
     const QString &filePath() const;
