@@ -94,23 +94,13 @@ voidpf ZCALLBACK qiodevice_open_file_func(voidpf opaque, voidpf file, int mode)
     QIODevice *iodevice = reinterpret_cast<QIODevice *>(file);
     QIODevice::OpenMode desiredMode;
 
-    if (mode & ZLIB_FILEFUNC_MODE_READ)
-        mode |= ZLIB_FILEFUNC_MODE_EXISTING;
-
     if (mode & ZLIB_FILEFUNC_MODE_CREATE)
-        desiredMode = QIODevice::WriteOnly | QIODevice::Truncate;
-    else if (mode & ZLIB_FILEFUNC_MODE_EXISTING) {
-        if ((mode & ZLIB_FILEFUNC_MODE_READWRITEFILTER) ==
-            ZLIB_FILEFUNC_MODE_READWRITEFILTER)
-            desiredMode = QIODevice::ReadWrite;
-        else if (mode & ZLIB_FILEFUNC_MODE_WRITE)
-            desiredMode = QIODevice::WriteOnly;
-        else
-            desiredMode = QIODevice::ReadOnly;
-    } else if (mode & ZLIB_FILEFUNC_MODE_WRITE)
-        desiredMode = QIODevice::WriteOnly;
-    else
-        return NULL;
+        desiredMode |= QIODevice::Truncate | QIODevice::WriteOnly;
+    else if (mode & ZLIB_FILEFUNC_MODE_WRITE)
+        desiredMode |= QIODevice::WriteOnly;
+
+    if (mode & (ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_EXISTING))
+        desiredMode |= QIODevice::ReadOnly;
 
     bool shouldClose = false;
     if (!iodevice->isOpen()) {
@@ -120,9 +110,14 @@ voidpf ZCALLBACK qiodevice_open_file_func(voidpf opaque, voidpf file, int mode)
 
     if (iodevice->isOpen()) {
         if ((iodevice->openMode() & desiredMode) == desiredMode) {
-            if (0 == (desiredMode & QIODevice::ReadOnly) ||
-                !iodevice->isSequential()) {
-                d->pos = iodevice->pos();
+            if (!iodevice->isReadable() || !iodevice->isSequential()) {
+                if (!iodevice->isSequential()) {
+                    if (mode & ZLIB_FILEFUNC_MODE_CREATE)
+                        iodevice->reset();
+                    d->pos = iodevice->pos();
+                } else {
+                    d->pos = 0;
+                }
                 return iodevice;
             } // sequential read is not supported
         }
