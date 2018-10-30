@@ -43,13 +43,6 @@ class QUAZIP_EXPORT QuaGzipDevice : public QuaZIODevice {
     Q_OBJECT
 
 public:
-    /// @cond internal
-    enum
-    {
-        GZIP_FLAG = 16
-    };
-    /// @endcond
-
     /// Constructor.
     /**
       \param parent The parent object, as per QObject logic.

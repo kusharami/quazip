@@ -33,12 +33,13 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 class QIODevice;
 class QuaZIODevice;
 
+/// \cond internal
 enum
 {
-    QUAZIO_BUFFER_SIZE = 32768
+    QUAZIO_BUFFER_SIZE = 32768,
+    GZIP_FLAG = 16
 };
 
-/// \cond internal
 class QuaZIODevicePrivate {
 public:
     using SizeType = decltype(z_stream::total_out);

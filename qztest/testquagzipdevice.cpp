@@ -25,6 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "testquagzipdevice.h"
 
 #include "quazip/quagzipdevice.h"
+#include "quazip/private/quaziodeviceprivate.h"
 #include "qztest.h"
 
 #include <QTemporaryDir>
@@ -105,8 +106,7 @@ void TestQuaGzipDevice::read()
         gzHeader.name = reinterpret_cast<Bytef *>(fileName.data());
         gzHeader.comment = reinterpret_cast<Bytef *>(comment.data());
         deflateInit2(&zouts, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-            MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL,
-            Z_DEFAULT_STRATEGY);
+            MAX_WBITS | GZIP_FLAG, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY);
         deflateSetHeader(&zouts, &gzHeader);
         zouts.next_in =
             reinterpret_cast<Bytef *>(const_cast<char *>(data.constData()));
@@ -276,7 +276,7 @@ void TestQuaGzipDevice::write()
     zins.zalloc = Z_NULL;
     zins.zfree = Z_NULL;
     zins.opaque = Z_NULL;
-    inflateInit2(&zins, QuaGzipDevice::GZIP_FLAG);
+    inflateInit2(&zins, GZIP_FLAG);
 
     gz_header gzHeader;
     memset(&gzHeader, 0, sizeof(gzHeader));
@@ -338,9 +338,8 @@ void TestQuaGzipDevice::write()
     zouts.zalloc = Z_NULL;
     zouts.zfree = Z_NULL;
     zouts.opaque = Z_NULL;
-    deflateInit2(&zouts, compressionLevel, Z_DEFLATED,
-        MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL,
-        Z_DEFAULT_STRATEGY);
+    deflateInit2(&zouts, compressionLevel, Z_DEFLATED, MAX_WBITS | GZIP_FLAG,
+        MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY);
     deflateSetHeader(&zouts, &gzHeader);
     zouts.next_in = reinterpret_cast<Bytef *>(
         const_cast<char *>(expectedUncompressedData.constData()));

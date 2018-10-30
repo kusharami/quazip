@@ -258,13 +258,13 @@ bool QuaGzipDevicePrivate::doDeflateInit()
 
 bool QuaGzipDevicePrivate::gzInflateInit()
 {
-    return check(inflateInit2(&zstream, QuaGzipDevice::GZIP_FLAG));
+    return check(inflateInit2(&zstream, GZIP_FLAG));
 }
 
 bool QuaGzipDevicePrivate::gzDeflateInit()
 {
     return check(deflateInit2(&zstream, compressionLevel, Z_DEFLATED,
-        MAX_WBITS | QuaGzipDevice::GZIP_FLAG, MAX_MEM_LEVEL, strategy));
+        MAX_WBITS | GZIP_FLAG, MAX_MEM_LEVEL, strategy));
 }
 
 bool QuaGzipDevicePrivate::gzReadHeader()
