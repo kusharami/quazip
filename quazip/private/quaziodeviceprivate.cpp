@@ -66,6 +66,9 @@ bool QuaZIODevicePrivate::flushBuffer(int size)
 
 bool QuaZIODevicePrivate::seekInternal(qint64 newPos)
 {
+    if (newPos < 0)
+        return false;
+
     if (!owner->isReadable())
         return false;
 

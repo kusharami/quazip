@@ -30,7 +30,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 void TestQuaZipDir::entryList_data()
 {
-    QTest::addColumn<QString>("zipName");
     QTest::addColumn<QStringList>("fileNames");
     QTest::addColumn<QString>("dirName");
     QTest::addColumn<QStringList>("nameFilters");
@@ -39,6 +38,7 @@ void TestQuaZipDir::entryList_data()
     QTest::addColumn<int>("sort");
     QTest::addColumn<QStringList>("entries");
     QTest::addColumn<int>("caseSensitivity");
+
     QTest::newRow("simple")
         << "simple.zip"
         << (QStringList() << "test0.txt"

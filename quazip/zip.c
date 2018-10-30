@@ -866,10 +866,29 @@ int LoadCentralDirectoryRecord(zip64_internal* pziinit)
 extern zipFile ZEXPORT zipOpen3 (voidpf file, int append, zipcharpc* globalcomment, zlib_filefunc64_32_def* pzlib_filefunc64_32_def,
                                  unsigned flags)
 {
+
+    int openMode;
+    switch (append)
+    {
+        case APPEND_STATUS_CREATE:
+            openMode = ZLIB_FILEFUNC_MODE_CREATE;
+            break;
+
+        case APPEND_STATUS_CREATEAFTER:
+            openMode = ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_EXISTING;
+            break;
+
+        case APPEND_STATUS_ADDINZIP:
+            openMode = ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_EXISTING;
+            break;
+
+        default:
+            return NULL;
+    }
+
     zip64_internal ziinit;
     zip64_internal* zi;
     int err=ZIP_OK;
-
     ziinit.flags = flags;
     ziinit.z_filefunc.zseek32_file = NULL;
     ziinit.z_filefunc.ztell32_file = NULL;
@@ -878,11 +897,8 @@ extern zipFile ZEXPORT zipOpen3 (voidpf file, int append, zipcharpc* globalcomme
     else
         ziinit.z_filefunc = *pzlib_filefunc64_32_def;
 
-    ziinit.filestream = ZOPEN64(ziinit.z_filefunc,
-                  file,
-                  (append == APPEND_STATUS_CREATE) ?
-                  (ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_CREATE) :
-                    (ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_EXISTING));
+
+    ziinit.filestream = ZOPEN64(ziinit.z_filefunc, file, openMode);
 
     if (ziinit.filestream == NULL)
         return NULL;
@@ -896,8 +912,6 @@ extern zipFile ZEXPORT zipOpen3 (voidpf file, int append, zipcharpc* globalcomme
     ziinit.number_entry = 0;
     ziinit.add_position_when_writting_offset = 0;
     init_linkedlist(&(ziinit.central_dir));
-
-
 
     zi = (zip64_internal*)ALLOC(sizeof(zip64_internal));
     if (zi==NULL)
@@ -1493,24 +1507,22 @@ extern int ZEXPORT zipWriteInFileInZip (zipFile file,const void* buf,unsigned in
           }
           else
           {
-              uInt copy_this,i;
+              uInt copy_this;
               if (zi->ci.stream.avail_in < zi->ci.stream.avail_out)
                   copy_this = zi->ci.stream.avail_in;
               else
                   copy_this = zi->ci.stream.avail_out;
 
-              for (i = 0; i < copy_this; i++)
-                  *(((char*)zi->ci.stream.next_out)+i) =
-                      *(((const char*)zi->ci.stream.next_in)+i);
-              {
-                  zi->ci.stream.avail_in -= copy_this;
-                  zi->ci.stream.avail_out-= copy_this;
-                  zi->ci.stream.next_in+= copy_this;
-                  zi->ci.stream.next_out+= copy_this;
-                  zi->ci.stream.total_in+= copy_this;
-                  zi->ci.stream.total_out+= copy_this;
-                  zi->ci.pos_in_buffered_data += copy_this;
-              }
+              memcpy(zi->ci.stream.next_out,
+                     zi->ci.stream.next_in, copy_this);
+
+              zi->ci.stream.avail_in -= copy_this;
+              zi->ci.stream.avail_out-= copy_this;
+              zi->ci.stream.next_in+= copy_this;
+              zi->ci.stream.next_out+= copy_this;
+              zi->ci.stream.total_in+= copy_this;
+              zi->ci.stream.total_out+= copy_this;
+              zi->ci.pos_in_buffered_data += copy_this;
           }
       }/* while(...) */
     }

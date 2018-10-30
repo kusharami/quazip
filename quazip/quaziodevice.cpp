@@ -186,7 +186,7 @@ qint64 QuaZIODevice::readData(char *data, qint64 maxSize)
         return d->readInternal(data, maxSize);
     }
 
-    return 0;
+    return -1;
 }
 
 qint64 QuaZIODevice::writeData(const char *data, qint64 maxSize)

@@ -35,6 +35,11 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 
 using namespace std;
 
+enum
+{
+    SEEK_BUFFER_SIZE = 32768
+};
+
 /// The implementation class for QuaZip.
 /**
 \internal
@@ -56,15 +61,14 @@ private:
     QuaZip::CaseSensitivity caseSensitivity;
     QuaZipFileInfo fileInfo;
     QString useFilePath;
+    QByteArray seekBuffer;
 
     /// Write position to keep track of.
     /**
       QIODevice::pos() is broken for non-seekable devices, so we need
       our own position.
       */
-    qint64 writePos;
-    /// Uncompressed size to write along with a raw file.
-    qint64 uncompressedSize;
+    ZPOS64_T writePos;
     /// Whether \ref zip points to an internal QuaZip instance.
     /**
       This is true if the archive was opened by name, rather than by
@@ -76,6 +80,7 @@ private:
     int zipError;
     /// Resets \ref zipError.
     inline void clearZipError();
+
     /// Sets the zip error.
     /**
       This function is marked as const although it changes one field.
@@ -98,6 +103,10 @@ private:
     bool initFileInfo();
     QIODevice::OpenMode initRead(QIODevice::OpenMode mode);
     QIODevice::OpenMode initWrite(QIODevice::OpenMode mode);
+
+    bool seekInternal(qint64 newPos);
+    qint64 readInternal(char *data, qint64 maxlen);
+    qint64 writeInternal(const char *data, qint64 maxlen);
 };
 
 QuaZipFile::QuaZipFile(QObject *parent)
@@ -291,7 +300,7 @@ qint64 QuaZipFile::size() const
         return isRaw() ? compressedSize() : uncompressedSize();
 
     if (isWritable()) {
-        return p->writePos;
+        return qint64(p->writePos);
     }
 
     qWarning("QuaZipFile::size(): file is not open");
@@ -311,7 +320,7 @@ qint64 QuaZipFile::uncompressedSize() const
 {
     auto &fileInfo = this->fileInfo();
     if (isWritable() && !isRaw())
-        return p->writePos;
+        return qint64(p->writePos);
 
     return fileInfo.uncompressedSize();
 }
@@ -331,50 +340,36 @@ void QuaZipFile::close()
         qWarning("QuaZipFile::close(): file isn't open");
         return;
     }
+    int error = ZIP_OK;
     if (isReadable())
-        p->setZipError(unzCloseCurrentFile(p->zip->getUnzFile()));
+        error = unzCloseCurrentFile(p->zip->getUnzFile());
     else if (isWritable())
-        p->setZipError(zipCloseFileInZip(p->zip->getZipFile()));
-
-    QIODevice::close();
+        error = zipCloseFileInZip(p->zip->getZipFile());
 
     if (p->internal) {
         p->zip->close();
-        p->setZipError(p->zip->getZipError());
+        error = p->zip->getZipError();
+    }
+
+    p->seekBuffer.clear();
+    QIODevice::close();
+    if (error != ZIP_OK) {
+        p->setZipError(error);
     }
 }
 
 qint64 QuaZipFile::readData(char *data, qint64 maxSize)
 {
-    if (maxSize < 0 || maxSize > std::numeric_limits<unsigned>::max()) {
-        p->setZipError(UNZ_PARAMERROR);
-        return -1;
+    if (isReadable() && p->seekInternal(pos())) {
+        return p->readInternal(data, maxSize);
     }
 
-    p->setZipError(UNZ_OK);
-    qint64 bytesRead =
-        unzReadCurrentFile(p->zip->getUnzFile(), data, unsigned(maxSize));
-    if (bytesRead < 0) {
-        p->setZipError(int(bytesRead));
-        return -1;
-    }
-    return bytesRead;
+    return -1;
 }
 
 qint64 QuaZipFile::writeData(const char *data, qint64 maxSize)
 {
-    if (maxSize < 0 || maxSize > std::numeric_limits<unsigned>::max()) {
-        p->setZipError(ZIP_PARAMERROR);
-        return -1;
-    }
-
-    p->setZipError(
-        zipWriteInFileInZip(p->zip->getZipFile(), data, unsigned(maxSize)));
-    if (p->zipError != ZIP_OK)
-        return -1;
-
-    p->writePos += maxSize;
-    return maxSize;
+    return p->writeInternal(data, maxSize);
 }
 
 QString QuaZipFile::filePath() const
@@ -549,7 +544,6 @@ QuaZipFilePrivate::QuaZipFilePrivate(QuaZipFile *q, QuaZip *zip)
     , zip(zip)
     , caseSensitivity(QuaZip::csDefault)
     , writePos(0)
-    , uncompressedSize(0)
     , internal(false)
     , fetchFileInfo(true)
     , zipError(UNZ_OK)
@@ -574,6 +568,10 @@ bool QuaZipFilePrivate::initFileInfo()
         zip->getCurrentFileInfo(fileInfo);
         setZipError(zip->getZipError());
         fetchFileInfo = false;
+
+        if (fileInfo.uncompressedSize() < 0)
+            setZipError(UNZ_BADZIPFILE);
+
         return zipError == UNZ_OK;
     }
 
@@ -614,6 +612,7 @@ QIODevice::OpenMode QuaZipFilePrivate::initRead(QIODevice::OpenMode mode)
 
         setZipError(unzOpenCurrentFile4(zip->getUnzFile(), NULL, NULL,
             int(fileInfo.isRaw()), fileInfo.cryptKeys()));
+
         if (zipError == UNZ_OK) {
             return mode;
         }
@@ -696,4 +695,148 @@ QIODevice::OpenMode QuaZipFilePrivate::initWrite(QIODevice::OpenMode mode)
     }
 
     return QIODevice::NotOpen;
+}
+
+bool QuaZipFilePrivate::seekInternal(qint64 newPos)
+{
+    if (newPos < 0)
+        return false;
+
+    if (!q->isReadable())
+        return false;
+
+    if (!zip)
+        return false;
+
+    if (q->isSequential())
+        return true;
+
+    auto uncompressedSize = fileInfo.uncompressedSize();
+    if (newPos > uncompressedSize)
+        return false;
+
+    auto currentPos = unztell64(zip->getUnzFile());
+    if (currentPos > ZPOS64_T(uncompressedSize)) {
+        qWarning("Damaged ZIP archive?");
+        return false;
+    }
+
+    auto skipCount = qint64(currentPos);
+    skipCount -= newPos;
+    if (skipCount > 0 ||
+        currentPos > ZPOS64_T(std::numeric_limits<qint64>::max())) {
+        auto unzFile = zip->getUnzFile();
+        int err = unzCloseCurrentFile(unzFile);
+        if (err == UNZ_OK) {
+            err = unzOpenCurrentFile4(unzFile, NULL, NULL,
+                int(fileInfo.isRaw()), fileInfo.cryptKeys());
+        }
+
+        if (err != UNZ_OK) {
+            setZipError(err);
+            return false;
+        }
+
+        skipCount = newPos;
+    } else {
+        skipCount = -skipCount;
+    }
+
+    int blockSize = SEEK_BUFFER_SIZE;
+    QuaZUtils::adjustBlockSize(blockSize, uncompressedSize);
+
+    while (skipCount > 0) {
+        QuaZUtils::adjustBlockSize(blockSize, skipCount);
+        if (seekBuffer.size() < blockSize) {
+            seekBuffer.resize(blockSize);
+        }
+
+        auto readBytes = readInternal(seekBuffer.data(), blockSize);
+        if (readBytes != blockSize) {
+            return false;
+        }
+        skipCount -= readBytes;
+    }
+
+    return true;
+}
+
+qint64 QuaZipFilePrivate::readInternal(char *data, qint64 maxlen)
+{
+    if (zipError != UNZ_OK || !q->isReadable())
+        return -1;
+
+    if (zip->getIODevice()->isTextModeEnabled()) {
+        zipError = UNZ_PARAMERROR;
+        qWarning("Zip archive should not be opened in text mode!");
+        return -1;
+    }
+
+    if (maxlen <= 0)
+        return maxlen;
+
+    qint64 count = maxlen;
+    auto blockSize = unsigned(QuaZUtils::maxBlockSize<int>());
+
+    auto uncompressedSize = ZPOS64_T(fileInfo.uncompressedSize());
+
+    auto unzFile = zip->getUnzFile();
+    auto currentPos = unztell64(unzFile);
+    while (currentPos < uncompressedSize && count > 0) {
+        QuaZUtils::adjustBlockSize(blockSize, count);
+
+        if (currentPos + blockSize > uncompressedSize) {
+            blockSize = unsigned(uncompressedSize - currentPos);
+        }
+
+        int result = unzReadCurrentFile(unzFile, data, blockSize);
+        if (result < 0) {
+            setZipError(result);
+            return -1;
+        }
+
+        count -= result;
+        currentPos += result;
+    }
+
+    return maxlen - count;
+}
+
+qint64 QuaZipFilePrivate::writeInternal(const char *data, qint64 maxlen)
+{
+    if (zipError != ZIP_OK || !q->isWritable())
+        return -1;
+
+    if (zip->getIODevice()->isTextModeEnabled()) {
+        zipError = ZIP_PARAMERROR;
+        qWarning("Zip archive should not be opened in text mode!");
+        return -1;
+    }
+
+    if (maxlen <= 0)
+        return maxlen;
+
+    qint64 count = maxlen;
+    auto blockSize = unsigned(QuaZUtils::maxBlockSize<int>());
+    auto zipFile = zip->getZipFile();
+    Q_CONSTEXPR auto maxSize = ZPOS64_T(std::numeric_limits<qint64>::max());
+    while (writePos < maxSize && count > 0) {
+        QuaZUtils::adjustBlockSize(blockSize, count);
+
+        if (writePos + blockSize > maxSize) {
+            setZipError(ZIP_INTERNALERROR);
+            return -1;
+        }
+
+        int result = zipWriteInFileInZip(zipFile, data, blockSize);
+        if (result < 0) {
+            setZipError(result);
+            return -1;
+        }
+
+        writePos += blockSize;
+        count -= blockSize;
+    }
+
+    return maxlen - count;
 }

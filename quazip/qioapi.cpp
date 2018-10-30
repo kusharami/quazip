@@ -93,12 +93,24 @@ voidpf ZCALLBACK qiodevice_open_file_func(voidpf opaque, voidpf file, int mode)
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
     QIODevice *iodevice = reinterpret_cast<QIODevice *>(file);
     QIODevice::OpenMode desiredMode;
-    if ((mode & ZLIB_FILEFUNC_MODE_READWRITEFILTER) == ZLIB_FILEFUNC_MODE_READ)
-        desiredMode = QIODevice::ReadOnly;
-    else if (mode & ZLIB_FILEFUNC_MODE_EXISTING)
-        desiredMode = QIODevice::ReadWrite;
-    else if (mode & ZLIB_FILEFUNC_MODE_CREATE)
+
+    if (mode & ZLIB_FILEFUNC_MODE_READ)
+        mode |= ZLIB_FILEFUNC_MODE_EXISTING;
+
+    if (mode & ZLIB_FILEFUNC_MODE_CREATE)
         desiredMode = QIODevice::WriteOnly | QIODevice::Truncate;
+    else if (mode & ZLIB_FILEFUNC_MODE_EXISTING) {
+        if ((mode & ZLIB_FILEFUNC_MODE_READWRITEFILTER) ==
+            ZLIB_FILEFUNC_MODE_READWRITEFILTER)
+            desiredMode = QIODevice::ReadWrite;
+        else if (mode & ZLIB_FILEFUNC_MODE_WRITE)
+            desiredMode = QIODevice::WriteOnly;
+        else
+            desiredMode = QIODevice::ReadOnly;
+    } else if (mode & ZLIB_FILEFUNC_MODE_WRITE)
+        desiredMode = QIODevice::WriteOnly;
+    else
+        return NULL;
 
     bool shouldClose = false;
     if (!iodevice->isOpen()) {

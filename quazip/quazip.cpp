@@ -1209,11 +1209,27 @@ bool QuaZip::open(Mode mode)
             flags |= ZIP_AUTO_CLOSE;
         if (p->dataDescriptorWritingEnabled)
             flags |= ZIP_WRITE_DATA_DESCRIPTOR;
-        p->zipFile_f = zipOpen3(ioDevice,
-            mode == mdCreate ? APPEND_STATUS_CREATE
-                             : mode == mdAppend ? APPEND_STATUS_CREATEAFTER
-                                                : APPEND_STATUS_ADDINZIP,
-            NULL, NULL, flags);
+
+        int openMode;
+        switch (mode) {
+        case mdCreate:
+            openMode = APPEND_STATUS_CREATE;
+            break;
+
+        case mdAppend:
+            openMode = APPEND_STATUS_CREATEAFTER;
+            break;
+
+        case mdAdd:
+            openMode = APPEND_STATUS_ADDINZIP;
+            break;
+
+        default:
+            Q_UNREACHABLE();
+            return false;
+        }
+
+        p->zipFile_f = zipOpen3(ioDevice, openMode, NULL, NULL, flags);
         if (p->zipFile_f != NULL) {
             if (ioDevice->isSequential()) {
                 if (mode != mdCreate) {
@@ -1303,6 +1319,12 @@ void QuaZip::setIODevice(QIODevice *ioDevice)
     }
     p->ioDevice = ioDevice;
     p->zipName = QString();
+
+    if (ioDevice && ioDevice->isTextModeEnabled()) {
+        p->zipError = ZIP_PARAMERROR;
+        qWarning(
+            "QuaZip::setIoDevice(): Zip should not be opened in text mode!");
+    }
 }
 
 int QuaZip::getEntriesCount() const

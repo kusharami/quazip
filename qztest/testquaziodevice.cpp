@@ -41,10 +41,11 @@ void TestQuaZIODevice::read()
     zouts.zfree = Z_NULL;
     zouts.opaque = Z_NULL;
     deflateInit(&zouts, Z_DEFAULT_COMPRESSION);
-    zouts.next_in = reinterpret_cast<const Bytef *>("test");
+    zouts.next_in = reinterpret_cast<Bytef *>(const_cast<char *>("test"));
     zouts.avail_in = 4;
     zouts.next_out = reinterpret_cast<Bytef *>(buf.data());
     zouts.avail_out = buf.size();
+    qint64 compressedSize = qint64(buf.size()) - zouts.avail_out;
     deflate(&zouts, Z_FINISH);
     deflateEnd(&zouts);
     QBuffer testBuffer(&buf);
@@ -80,6 +81,7 @@ void TestQuaZIODevice::read()
     testDevice.close();
     QVERIFY(!testDevice.isOpen());
     QVERIFY(!testDevice.hasError());
+    QCOMPARE(testBuffer.pos(), compressedSize);
 }
 
 void TestQuaZIODevice::readMany()
@@ -90,10 +92,11 @@ void TestQuaZIODevice::readMany()
     zouts.zfree = Z_NULL;
     zouts.opaque = Z_NULL;
     deflateInit(&zouts, Z_BEST_COMPRESSION);
-    zouts.next_in = reinterpret_cast<const Bytef *>("tatatest");
+    zouts.next_in = reinterpret_cast<Bytef *>(const_cast<char *>("tatatest"));
     zouts.avail_in = 8;
     zouts.next_out = reinterpret_cast<Bytef *>(buf.data());
     zouts.avail_out = buf.size();
+    qint64 compressedSize = qint64(buf.size()) - zouts.avail_out;
     deflate(&zouts, Z_FINISH);
     deflateEnd(&zouts);
     QBuffer testBuffer(&buf);
@@ -135,6 +138,7 @@ void TestQuaZIODevice::readMany()
     testDevice.close();
     QVERIFY(!testDevice.hasError());
     QVERIFY(!testDevice.isOpen());
+    QCOMPARE(testBuffer.pos(), compressedSize);
 }
 
 void TestQuaZIODevice::write_data()

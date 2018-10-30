@@ -40,7 +40,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 void TestQuaZipFile::zipUnzip_data()
 {
-    QTest::addColumn<QString>("zipName");
     QTest::addColumn<QStringList>("fileNames");
     QTest::addColumn<QByteArray>("filePathCodec");
     QTest::addColumn<QByteArray>("password");

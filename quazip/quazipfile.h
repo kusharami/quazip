@@ -53,22 +53,6 @@ quazip/(un)zip.h files for details, basically it's zlib license.
  * you need to read multiple files inside the same archive in parallel,
  * you should extract them all into a temporary directory first.
  *
- * \section quazipfile-sequential Sequential or random-access?
- *
- * At the first thought, QuaZipFile has fixed size, the start and the
- * end and should be therefore considered random-access device. But
- * there is one major obstacle to making it random-access: ZIP/UNZIP API
- * does not support seek() operation and the only way to implement it is
- * through reopening the file and re-reading to the required position,
- * but this is prohibitively slow.
- *
- * Therefore, QuaZipFile is considered to be a sequential device. This
- * has advantage of availability of the ungetChar() operation (QIODevice
- * does not implement it properly for non-sequential devices unless they
- * support seek()). Disadvantage is a somewhat strange behaviour of the
- * size() and pos() functions. This should be kept in mind while using
- * this class.
- *
  **/
 
 /// @cond internal
