@@ -1,8 +1,7 @@
-#ifndef QUAZIP_TEST_JLCOMPRESS_H
-#define QUAZIP_TEST_JLCOMPRESS_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP test suite.
 
@@ -27,7 +26,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QObject>
 
-class TestJlCompress: public QObject {
+class TestJlCompress : public QObject {
     Q_OBJECT
 private slots:
     void compressFile_data();
@@ -42,7 +41,4 @@ private slots:
     void extractFiles();
     void extractDir_data();
     void extractDir();
-    void zeroPermissions();
 };
-
-#endif // QUAZIP_TEST_JLCOMPRESS_H

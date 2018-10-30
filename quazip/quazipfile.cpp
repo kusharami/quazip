@@ -327,8 +327,6 @@ const QuaZipFileInfo &QuaZipFile::fileInfo() const
 
 void QuaZipFile::close()
 {
-    if (p->zip == NULL || !p->zip->isOpen())
-        return;
     if (!isOpen()) {
         qWarning("QuaZipFile::close(): file isn't open");
         return;
