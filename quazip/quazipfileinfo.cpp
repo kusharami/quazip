@@ -231,12 +231,14 @@ bool QuaZipFileInfo::applyAttributesTo(const QString &filePath,
     if (!QFile::exists(filePath))
         return false;
     if (permissions == 0) {
-        permissions |= QFile::ReadOwner | QFile::ReadGroup | QFile::ReadUser |
-            QFile::ReadOther;
-
-        if (!attributes & ReadOnly)
-            permissions |= QFile::WriteOwner | QFile::WriteUser;
+        permissions = QFile::permissions(filePath);
     }
+
+    if (attributes & ReadOnly)
+        permissions &= ~(QFile::WriteOwner | QFile::WriteUser |
+            QFile::WriteGroup | QFile::WriteOther);
+    else
+        permissions |= QFile::WriteOwner | QFile::WriteUser;
 
     bool ok = QFile::setPermissions(filePath, permissions);
 
@@ -884,9 +886,10 @@ QFile::Permissions QuaZipFileInfo::Private::permissions() const
         break;
 
     case OS_THEOS:
-        if (uAttr & THS_IRUSR)
+        if (uAttr & THS_IRUSR) {
             permissions |=
                 QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup;
+        }
 
         if (uAttr & (THS_IEUSR | THS_IWUSR))
             permissions |= QFile::WriteUser | QFile::WriteOwner;
@@ -944,6 +947,10 @@ QFile::Permissions QuaZipFileInfo::Private::permissions() const
             permissions |= QFile::ExeOther;
 
         break;
+    }
+
+    if (permissions == 0) {
+        permissions = QFile::ReadOwner | QFile::ReadUser;
     }
 
     return permissions;
