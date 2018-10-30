@@ -324,7 +324,7 @@ void TestQuaZip::setIoDevice()
     QuaZip zip;
     QFile file("testSetIoDevice.zip");
     zip.setIODevice(&file);
-    QCOMPARE(zip.getIODevice(), &file);
+    QCOMPARE(zip.ioDevice(), &file);
     zip.open(QuaZip::mdCreate);
     QVERIFY(file.isOpen());
     zip.close();
@@ -389,7 +389,7 @@ void TestQuaZip::saveFileBug()
     QuaZip zip;
     QSaveFile saveFile(zipName);
     zip.setIODevice(&saveFile);
-    QCOMPARE(zip.getIODevice(), &saveFile);
+    QCOMPARE(zip.ioDevice(), &saveFile);
     zip.open(QuaZip::mdCreate);
     zip.close();
     QVERIFY(QFileInfo(saveFile.fileName()).exists());

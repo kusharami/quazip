@@ -1616,7 +1616,7 @@ QString QuaZip::zipFilePath() const
     return p->zipName;
 }
 
-QIODevice *QuaZip::getIODevice() const
+QIODevice *QuaZip::ioDevice() const
 {
     return p->ioDevice;
 }

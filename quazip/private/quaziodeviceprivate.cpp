@@ -69,8 +69,7 @@ bool QuaZIODevicePrivate::seekInternal(qint64 newPos)
     if (newPos < 0)
         return false;
 
-    if (!owner->isReadable())
-        return false;
+    Q_ASSERT(owner->isReadable());
 
     if (io->isSequential())
         return true;
@@ -186,14 +185,12 @@ void QuaZIODevicePrivate::setStrategy(int value)
 
 qint64 QuaZIODevicePrivate::readInternal(char *data, qint64 maxlen)
 {
-    if (hasError || !io->isReadable() || !seekInit()) {
+    if (hasError || !seekInit()) {
         return -1;
     }
 
-    if (io->isTextModeEnabled()) {
-        setError("Source device is not binary.");
-        return -1;
-    }
+    Q_ASSERT(io->isReadable());
+    Q_ASSERT(!io->isTextModeEnabled());
 
     if (maxlen <= 0)
         return maxlen;
@@ -286,14 +283,12 @@ bool QuaZIODevicePrivate::initRead()
 
 qint64 QuaZIODevicePrivate::writeInternal(const char *data, qint64 maxlen)
 {
-    if (hasError || !io->isWritable() || !seekInit()) {
+    if (hasError || !seekInit()) {
         return -1;
     }
 
-    if (io->isTextModeEnabled()) {
-        setError("Target device is not binary.");
-        return -1;
-    }
+    Q_ASSERT(io->isWritable());
+    Q_ASSERT(!io->isTextModeEnabled());
 
     if (maxlen <= 0)
         return maxlen;

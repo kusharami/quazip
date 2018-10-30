@@ -172,9 +172,6 @@ public:
      **/
     void setZipFilePath(const QString &zipFilePath);
     /// Returns a pointer to the associated QuaZip object.
-    /** Returns \c NULL if there is no associated QuaZip or it is
-     * internal (so you will not mess with it).
-     **/
     QuaZip *zip() const;
     /// Binds to the existing QuaZip instance.
     /** This function destroys internal QuaZip object, if any, and makes

@@ -148,7 +148,7 @@ QString QuaZipFile::zipFilePath() const
 
 QuaZip *QuaZipFile::zip() const
 {
-    return p->internal ? nullptr : p->zip;
+    return p->zip;
 }
 
 QString QuaZipFile::actualFilePath() const
@@ -187,15 +187,6 @@ void QuaZipFile::setZip(QuaZip *zip)
 
 void QuaZipFile::setFilePath(const QString &filePath)
 {
-    if (p->zip == NULL) {
-        qWarning("QuaZipFile::setFilePath(): call setZipFilePath() first");
-        return;
-    }
-    if (!p->internal) {
-        qWarning("QuaZipFile::setFilePath(): should not be used when not using "
-                 "internal QuaZip");
-        return;
-    }
     if (isOpen()) {
         qWarning("QuaZipFile::setFilePath(): can not set file name for already "
                  "opened file");
@@ -269,7 +260,7 @@ void QuaZipFile::setPassword(QString *password)
 bool QuaZipFile::isSequential() const
 {
     if (isReadable())
-        return p->zip->getIODevice()->isSequential();
+        return p->zip->ioDevice()->isSequential();
 
     return true;
 }
@@ -601,6 +592,10 @@ QIODevice::OpenMode QuaZipFilePrivate::initRead(QIODevice::OpenMode mode)
             break;
         }
 
+        Q_ASSERT(zip->ioDevice());
+        Q_ASSERT(zip->ioDevice()->isReadable());
+        Q_ASSERT(!zip->ioDevice()->isTextModeEnabled());
+
         if (!initFileInfo())
             break;
 
@@ -638,6 +633,9 @@ QIODevice::OpenMode QuaZipFilePrivate::initWrite(QIODevice::OpenMode mode)
     case QuaZip::mdCreate:
     case QuaZip::mdAppend:
     case QuaZip::mdAdd: {
+        Q_ASSERT(zip->ioDevice());
+        Q_ASSERT(zip->ioDevice()->isWritable());
+        Q_ASSERT(!zip->ioDevice()->isTextModeEnabled());
         QByteArray compatibleFilePath;
         QByteArray compatibleComment;
 
@@ -702,11 +700,13 @@ bool QuaZipFilePrivate::seekInternal(qint64 newPos)
     if (newPos < 0)
         return false;
 
-    if (!q->isReadable())
+    if (zipError != UNZ_OK)
         return false;
 
-    if (!zip)
-        return false;
+    Q_ASSERT(zip);
+    Q_ASSERT(zip->getMode() == QuaZip::mdUnzip);
+    Q_ASSERT(zip->ioDevice());
+    Q_ASSERT(zip->ioDevice()->isReadable());
 
     if (q->isSequential())
         return true;
@@ -763,14 +763,14 @@ bool QuaZipFilePrivate::seekInternal(qint64 newPos)
 
 qint64 QuaZipFilePrivate::readInternal(char *data, qint64 maxlen)
 {
-    if (zipError != UNZ_OK || !q->isReadable())
+    if (zipError != UNZ_OK)
         return -1;
 
-    if (zip->getIODevice()->isTextModeEnabled()) {
-        zipError = UNZ_PARAMERROR;
-        qWarning("Zip archive should not be opened in text mode!");
-        return -1;
-    }
+    Q_ASSERT(zip);
+    Q_ASSERT(zip->getMode() == QuaZip::mdUnzip);
+    Q_ASSERT(zip->ioDevice());
+    Q_ASSERT(zip->ioDevice()->isReadable());
+    Q_ASSERT(!zip->ioDevice()->isTextModeEnabled());
 
     if (maxlen <= 0)
         return maxlen;
@@ -804,14 +804,15 @@ qint64 QuaZipFilePrivate::readInternal(char *data, qint64 maxlen)
 
 qint64 QuaZipFilePrivate::writeInternal(const char *data, qint64 maxlen)
 {
-    if (zipError != ZIP_OK || !q->isWritable())
+    if (zipError != ZIP_OK)
         return -1;
 
-    if (zip->getIODevice()->isTextModeEnabled()) {
-        zipError = ZIP_PARAMERROR;
-        qWarning("Zip archive should not be opened in text mode!");
-        return -1;
-    }
+    Q_ASSERT(zip);
+    Q_ASSERT(zip->isOpen());
+    Q_ASSERT(zip->getMode() != QuaZip::mdUnzip);
+    Q_ASSERT(zip->ioDevice());
+    Q_ASSERT(zip->ioDevice()->isWritable());
+    Q_ASSERT(!zip->ioDevice()->isTextModeEnabled());
 
     if (maxlen <= 0)
         return maxlen;

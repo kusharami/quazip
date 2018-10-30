@@ -288,7 +288,7 @@ public:
     /**
      * \sa setIoDevice(), zipFilePath(), setZipFilePath()
      **/
-    QIODevice *getIODevice() const;
+    QIODevice *ioDevice() const;
     /// Sets the device representing the ZIP file.
     /** Does nothing if the ZIP file is open.
      *
