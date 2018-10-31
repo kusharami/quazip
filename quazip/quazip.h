@@ -136,8 +136,8 @@ public:
         CustomCompatibility = 0,
         /** On Windows file names and comments will be stored in current
          * OEM code page if it is not UTF-7 or UTF-8.
-         * In other cases and on other systems IBM 437 code page (if available)
-         * or IBM 850 code page will be used.
+         * In other cases and on other systems IBM 437, or IBM 850,
+         * or IBM 866 code page will be used.
          *
          * File names will be stored in 8.3 mode
          * (8 characters for name, 3 characters for extension)
@@ -243,8 +243,8 @@ public:
     /**
      * \note On Windows This codec defaults to current OEM code page
      * if it is not UTF-7 or UTF-8.
-     * In other cases and on other systems it defaults to IBM 437 code page
-     * (if available) or to IBM 850 code page.
+     * In other cases and on other systems it defaults to IBM 437,
+     * or IBM 850, or IBM 866 code page.
      */
     QTextCodec *filePathCodec() const;
     /// Sets the codec used to encode/decode comments inside archive.

@@ -19,8 +19,8 @@ public:
     /// Default constructor
     /**
      * On Windows it uses current OEM code page if it is not UTF-7 or UTF-8.
-     * In other cases and on other systems it uses
-     * IBM 437 code page (if available) or IBM 850 code page.
+     * In other cases and on other systems it uses IBM866 if default locale
+     * is Russian, IBM 437 code page (if available) or IBM 850 code page.
      **/
     QuaZipTextCodec();
     /// Constructs codec using Windows code page number
