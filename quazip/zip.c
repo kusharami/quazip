@@ -104,7 +104,7 @@ typedef uLongf z_crc_t;
 #  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
 #endif
 #endif
-const char zip_copyright[] =" zip 1.01 Copyright 1998-2004 Gilles Vollant - http://www.winimage.com/zLibDll";
+static const char zip_copyright[] =" zip 1.01 Copyright 1998-2004 Gilles Vollant - http://www.winimage.com/zLibDll";
 
 
 #define SIZEDATA_INDATABLOCK (4096-(4*4))
@@ -250,7 +250,7 @@ local int add_data_in_datablock(linkedlist_data* ll, const void* buf, uLong len)
     }
 
     ldi = ll->last_block;
-    from_copy = (unsigned char*)buf;
+    from_copy = (const unsigned char*)buf;
 
     while (len>0)
     {
@@ -367,13 +367,11 @@ local int zip64local_getByte(const zlib_filefunc64_32_def* pzlib_filefunc_def,vo
         *pi = (int)c;
         return ZIP_OK;
     }
-    else
-    {
-        if (ZERROR64(*pzlib_filefunc_def,filestream))
-            return ZIP_ERRNO;
-        else
-            return ZIP_EOF;
-    }
+
+    if (ZERROR64(*pzlib_filefunc_def,filestream))
+        return ZIP_ERRNO;
+
+    return ZIP_EOF;
 }
 
 
@@ -867,19 +865,21 @@ extern zipFile ZEXPORT zipOpen3 (voidpf file, int append, zipcharpc* globalcomme
                                  unsigned flags)
 {
 
-    int openMode;
+    int open_mode;
     switch (append)
     {
         case APPEND_STATUS_CREATE:
-            openMode = ZLIB_FILEFUNC_MODE_CREATE;
+            open_mode = ZLIB_FILEFUNC_MODE_CREATE;
             break;
 
         case APPEND_STATUS_CREATEAFTER:
-            openMode = ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_EXISTING;
+            open_mode = ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_EXISTING;
             break;
 
         case APPEND_STATUS_ADDINZIP:
-            openMode = ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_WRITE | ZLIB_FILEFUNC_MODE_EXISTING;
+            open_mode = ZLIB_FILEFUNC_MODE_READ
+                    | ZLIB_FILEFUNC_MODE_WRITE
+                    | ZLIB_FILEFUNC_MODE_EXISTING;
             break;
 
         default:
@@ -898,7 +898,7 @@ extern zipFile ZEXPORT zipOpen3 (voidpf file, int append, zipcharpc* globalcomme
         ziinit.z_filefunc = *pzlib_filefunc64_32_def;
 
 
-    ziinit.filestream = ZOPEN64(ziinit.z_filefunc, file, openMode);
+    ziinit.filestream = ZOPEN64(ziinit.z_filefunc, file, open_mode);
 
     if (ziinit.filestream == NULL)
         return NULL;
@@ -1213,6 +1213,7 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     zi->ci.stream_initialised = 0;
     zi->ci.pos_in_buffered_data = 0;
     zi->ci.raw = raw;
+
     zi->ci.pos_local_header = ZTELL64(zi->z_filefunc,zi->filestream);
 
     zi->ci.size_centralheader = SIZECENTRALHEADER + size_filename + zipfi->size_extrafield_global + size_comment;
