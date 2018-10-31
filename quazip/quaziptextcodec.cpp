@@ -5,6 +5,8 @@
 #include <vector>
 #endif
 
+#include <QLocale>
+
 class QuaZipTextCodecPrivate {
 public:
     QTextCodec *customCodec;
@@ -360,11 +362,21 @@ void QuaZipTextCodecPrivate::setCodePage(quint32 codepage)
 {
     customCodec = nullptr;
     if (codepage == 0) {
-        customCodec =
-            QuaZipTextCodec::codecForCodePage(QuaZipTextCodec::WCP_IBM437);
-        if (!customCodec) {
+        switch (QLocale().language()) {
+        case QLocale::Russian:
+        case QLocale::Ukrainian:
+        case QLocale::Belarusian:
             customCodec =
-                QuaZipTextCodec::codecForCodePage(QuaZipTextCodec::WCP_IBM850);
+                QuaZipTextCodec::codecForCodePage(QuaZipTextCodec::WCP_IBM866);
+            break;
+        default:
+            customCodec =
+                QuaZipTextCodec::codecForCodePage(QuaZipTextCodec::WCP_IBM437);
+            if (!customCodec) {
+                customCodec = QuaZipTextCodec::codecForCodePage(
+                    QuaZipTextCodec::WCP_IBM850);
+            }
+            break;
         }
     } else {
         customCodec = QuaZipTextCodec::codecForCodePage(codepage);
