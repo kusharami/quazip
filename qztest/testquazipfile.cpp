@@ -49,7 +49,6 @@ void TestQuaZipFile::zipUnzip_data()
     QADD_COLUMN(QByteArray, passwordCodec);
     QADD_COLUMN(bool, zip64);
     QADD_COLUMN(bool, append);
-    QADD_COLUMN(bool, autoClose);
     QADD_COLUMN(int, size);
 
     QTest::newRow("simple")
@@ -58,7 +57,7 @@ void TestQuaZipFile::zipUnzip_data()
                           << "testdir2/test2.txt"
                           << "testdir2/subdir/test2sub.txt")
         << QString() << QString() << QByteArray() << QByteArray()
-        << QByteArray() << false << false << true << -1;
+        << QByteArray() << false << false << -1;
 
     QTest::newRow("dos only")
         << (QStringList() << QString::fromUtf8("dos_имя1.txt")
@@ -67,7 +66,7 @@ void TestQuaZipFile::zipUnzip_data()
         << QString::fromUtf8("DOS Комментарий")
         << QString::fromUtf8("dos Пароль") << QByteArrayLiteral("IBM866")
         << QByteArrayLiteral("IBM866") << QByteArrayLiteral("IBM866") << false
-        << false << false << -1;
+        << false << -1;
 
     QTest::newRow("codecs+append")
         << (QStringList() << QString::fromUtf8(
@@ -75,7 +74,7 @@ void TestQuaZipFile::zipUnzip_data()
         << QString::fromUtf8("わたしはジップファイル")
         << QString::fromUtf8("password Юникод ユニコード")
         << QByteArrayLiteral("IBM866") << QByteArrayLiteral("Shift_JIS")
-        << QByteArrayLiteral("UTF-8") << false << true << true << -1;
+        << QByteArrayLiteral("UTF-8") << false << true << -1;
 
     QTest::newRow("zip64+append")
         << (QStringList() << "test64.txt")
@@ -83,7 +82,7 @@ void TestQuaZipFile::zipUnzip_data()
         << QByteArray() << true << true << false << -1;
     QTest::newRow("large enough to flush")
         << (QStringList() << "flush.txt") << QByteArray() << QByteArray()
-        << true << false << false << 65536 * 2;
+        << true << false << 65536 * 2;
 }
 
 void TestQuaZipFile::zipUnzip()
@@ -96,7 +95,6 @@ void TestQuaZipFile::zipUnzip()
     QFETCH(QByteArray, passwordCodec);
     QFETCH(bool, zip64);
     QFETCH(bool, append);
-    QFETCH(bool, autoClose);
     QFETCH(int, size);
 
     QTemporaryDir tempDir;
@@ -118,9 +116,6 @@ void TestQuaZipFile::zipUnzip()
     QuaZip testZip(&zip);
     testZip.setZip64Enabled(zip64);
     QCOMPARE(testZip.isZip64Enabled(), zip64);
-
-    testZip.setAutoClose(autoClose);
-    QCOMPARE(testZip.isAutoClose(), autoClose);
 
     if (!filePathCodec.isEmpty())
         testZip.setFilePathCodec(filePathCodec);
@@ -189,9 +184,7 @@ void TestQuaZipFile::zipUnzip()
     testZip.close();
     QCOMPARE(testZip.zipError(), ZIP_OK);
 
-    QCOMPARE(zip.isOpen(), !autoClose);
-    if (!autoClose)
-        zip.close();
+    QVERIFY(!zip.isOpen());
     QVERIFY(zip.open(QFile::ReadOnly));
     if (append) {
         zip.seek(garbageData.length());
@@ -279,7 +272,6 @@ void TestQuaZipFile::zipUnzip()
     }
     testZip.close();
     QCOMPARE(testZip.zipError(), UNZ_OK);
-    QCOMPARE(zip.isOpen(), !autoClose);
 }
 
 void TestQuaZipFile::getZip()
