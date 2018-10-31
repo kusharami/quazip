@@ -297,7 +297,7 @@ public:
      **/
     void setIODevice(QIODevice *ioDevice);
     /// Returns the mode in which ZIP file was opened.
-    Mode getMode() const;
+    Mode openMode() const;
     /// Returns \c true if ZIP file is open, \c false otherwise.
     bool isOpen() const;
     /// Returns the error code of the last operation.
@@ -309,7 +309,7 @@ public:
      * error code too. See documentation for the specific functions for
      * details on error detection.
      **/
-    int getZipError() const;
+    int zipError() const;
     /// Returns number of the entries in the ZIP central directory.
     /** Returns negative error code in the case of error. The same error
      * code will be returned by subsequent getZipError() call.
@@ -318,7 +318,7 @@ public:
     /// Returns global comment in the ZIP file.
     /// \note Comment is decoded with commentCodec() when there is no
     /// UTF BOM Header present, otherwise UTF codec is used,
-    QString getComment() const;
+    QString globalComment() const;
     /// Sets the global comment in the ZIP file.
     /** The comment will be written to the archive on close operation.
      * QuaZip makes a distinction between a null QString() comment
@@ -331,7 +331,7 @@ public:
      *
      * \sa open(), setCommentCodec()
      **/
-    void setComment(const QString &comment);
+    void setGlobalComment(const QString &comment);
     /// Sets the current file to the first file in the archive.
     /** Returns \c true on success, \c false otherwise. Call
      * getZipError() to get the error code.

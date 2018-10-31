@@ -147,6 +147,9 @@ public:
      * \endcode
      **/
     explicit QuaZipFile(QuaZip *zip, QObject *parent = nullptr);
+    QuaZipFile(QuaZip *zip, const QString &filePath,
+        QuaZip::CaseSensitivity cs = QuaZip::csDefault,
+        QObject *parent = nullptr);
     /// Destroys a QuaZipFile instance.
     /** Closes file if open, destructs internal QuaZip object (if it
      * exists and \em is internal, of course).
@@ -232,6 +235,7 @@ public:
      * \sa QuaZip::setCurrentFile()
      **/
     void setFilePath(const QString &filePath);
+    void setFilePath(const QString &filePath, QuaZip::CaseSensitivity cs);
 
     /// Case sensitivity of filePath to search in archive
     QuaZip::CaseSensitivity caseSensitivity() const;
@@ -277,6 +281,7 @@ public:
      **/
     virtual bool open(OpenMode mode) override;
 
+    bool isEncrypted() const;
     /// Set the password to use for file data encryption/decryption
     /**
      * \param password Password will be encoded with QuaZip::passwordCodec()
@@ -294,6 +299,13 @@ public:
     /// or to write already compressed data
     /// \note Nothing is changed when QuaZipFile is already open
     void setIsRaw(bool raw);
+
+    bool isFile() const;
+    bool isDir() const;
+    bool isSymLink() const;
+
+    bool isText() const;
+    void setIsText(bool value);
 
     /// Compression level.
     /// Default is Z_DEFAULT_COMPRESSION
@@ -375,13 +387,19 @@ public:
     /// \note Will be overwritten when open for reading
     void setLastAccessTime(const QDateTime &time);
 
+    QFile::Permissions permissions() const;
+    void setPermissions(QFile::Permissions value);
+
+    QuaZipFileInfo::Attributes attributes() const;
+    void setAttributes(QuaZipFileInfo::Attributes value);
+
     /// Closes the file.
     /** Call getZipError() to determine if the close was successful.
      **/
     virtual void close() override;
 
     /// Returns the error code returned by the last ZIP/UNZIP API call.
-    int getZipError() const;
+    int zipError() const;
 
     const QString &comment() const;
     void setComment(const QString &comment);

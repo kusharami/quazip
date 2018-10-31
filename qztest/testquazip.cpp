@@ -142,7 +142,7 @@ void TestQuaZip::add()
     QuaZip testZip(zipName);
     QVERIFY(testZip.open(QuaZip::mdUnzip));
     // according to the bug #3485459 the global is lost, so we test it
-    QString globalComment = testZip.getComment();
+    QString globalComment = testZip.globalComment();
     testZip.close();
     QVERIFY(testZip.open(QuaZip::mdAdd));
     foreach (QString fileName, fileNamesToAdd) {
@@ -160,7 +160,7 @@ void TestQuaZip::add()
     QStringList allNames = fileNames + fileNamesToAdd;
     QCOMPARE(testZip.getEntriesCount(), allNames.size());
     QCOMPARE(testZip.getFileNameList(), allNames);
-    QCOMPARE(testZip.getComment(), globalComment);
+    QCOMPARE(testZip.globalComment(), globalComment);
     testZip.close();
     removeTestFiles(fileNames);
     removeTestFiles(fileNamesToAdd);
@@ -338,14 +338,14 @@ void TestQuaZip::setCommentCodec()
     QuaZip zip("commentCodec.zip");
     QVERIFY(zip.open(QuaZip::mdCreate));
     zip.setCommentCodec("WINDOWS-1251");
-    zip.setComment(QString::fromUtf8("Вопрос"));
+    zip.setGlobalComment(QString::fromUtf8("Вопрос"));
     QuaZipFile zipFile(&zip);
     QVERIFY(zipFile.open(QIODevice::WriteOnly, QuaZipNewInfo("test.txt")));
     zipFile.close();
     zip.close();
     QVERIFY(zip.open(QuaZip::mdUnzip));
     zip.setCommentCodec(QTextCodec::codecForName("KOI8-R"));
-    QCOMPARE(zip.getComment(), QString::fromUtf8("бНОПНЯ"));
+    QCOMPARE(zip.globalComment(), QString::fromUtf8("бНОПНЯ"));
     zip.close();
     QDir().remove(zip.zipFilePath());
 }

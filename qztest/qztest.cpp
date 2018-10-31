@@ -153,7 +153,7 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
         }
         ++i;
     }
-    zip.setComment(QStringLiteral("This is the test archive"));
+    zip.setGlobalComment(QStringLiteral("This is the test archive"));
     zip.close();
     if (zipName.startsWith("<")) { // something like "<QIODevice pointer>"
         return true;
@@ -218,7 +218,9 @@ SaveDefaultZipOptions::~SaveDefaultZipOptions()
 
 int main(int argc, char **argv)
 {
+    QLocale::setDefault(QLocale::Russian);
     QCoreApplication app(argc, argv);
+
     int err = 0;
     {
         TestQuaZip testQuaZip;

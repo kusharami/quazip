@@ -61,3 +61,7 @@ struct SaveDefaultZipOptions {
     SaveDefaultZipOptions();
     ~SaveDefaultZipOptions();
 };
+
+Q_DECLARE_METATYPE(QuaZip::CaseSensitivity)
+Q_DECLARE_METATYPE(QuaZip::CompatibilityFlags)
+Q_DECLARE_METATYPE(QuaZipFileInfo::Attributes)

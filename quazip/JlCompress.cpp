@@ -64,8 +64,8 @@ bool JlCompress::compressFile(QuaZip *zip, QString fileName, QString fileDest)
     // Controllo l'apertura dello zip
     if (!zip)
         return false;
-    if (zip->getMode() != QuaZip::mdCreate &&
-        zip->getMode() != QuaZip::mdAppend && zip->getMode() != QuaZip::mdAdd)
+    if (zip->openMode() != QuaZip::mdCreate &&
+        zip->openMode() != QuaZip::mdAppend && zip->openMode() != QuaZip::mdAdd)
         return false;
 
     QScopedPointer<QFile> inFile;
@@ -88,14 +88,14 @@ bool JlCompress::compressFile(QuaZip *zip, QString fileName, QString fileDest)
     if (inFile) {
         // Copio i dati
         if (!copyData(inFile.data(), &outFile) ||
-            outFile.getZipError() != UNZ_OK) {
+            outFile.zipError() != UNZ_OK) {
             return false;
         }
     }
 
     // Chiudo i file
     outFile.close();
-    return outFile.getZipError() != UNZ_OK;
+    return outFile.zipError() != UNZ_OK;
 }
 
 bool JlCompress::compressSubDir(QuaZip *zip, QString dir, QString origDir,
@@ -109,8 +109,8 @@ bool JlCompress::compressSubDir(QuaZip *zip, QString dir, QString origDir,
     // Controllo l'apertura dello zip
     if (!zip)
         return false;
-    if (zip->getMode() != QuaZip::mdCreate &&
-        zip->getMode() != QuaZip::mdAppend && zip->getMode() != QuaZip::mdAdd)
+    if (zip->openMode() != QuaZip::mdCreate &&
+        zip->openMode() != QuaZip::mdAppend && zip->openMode() != QuaZip::mdAdd)
         return false;
 
     // Controllo la cartella
@@ -186,14 +186,14 @@ bool JlCompress::extractSingleFile(
     // Controllo l'apertura dello zip
     if (!zip)
         return false;
-    if (zip->getMode() != QuaZip::mdUnzip)
+    if (zip->openMode() != QuaZip::mdUnzip)
         return false;
 
     // Apro il file compresso
     if (!fileName.isEmpty())
         zip->setCurrentFile(fileName);
     QuaZipFile inFile(zip);
-    if (!inFile.open(QIODevice::ReadOnly) || inFile.getZipError() != UNZ_OK)
+    if (!inFile.open(QIODevice::ReadOnly) || inFile.zipError() != UNZ_OK)
         return false;
 
     // Controllo esistenza cartella file risultato
@@ -238,7 +238,7 @@ bool JlCompress::extractSingleFile(
             break;
 
         inFile.close();
-        if (inFile.getZipError() == UNZ_OK)
+        if (inFile.zipError() == UNZ_OK)
             outFile.commit();
         break;
     }
@@ -247,7 +247,7 @@ bool JlCompress::extractSingleFile(
         break;
     }
 
-    if (inFile.getZipError() != UNZ_OK) {
+    if (inFile.zipError() != UNZ_OK) {
         return false;
     }
 
@@ -288,7 +288,7 @@ bool JlCompress::compressFile(QString zipArchive, QString file)
 
     // Chiudo il file zip
     zip.close();
-    if (zip.getZipError() == ZIP_OK) {
+    if (zip.zipError() == ZIP_OK) {
         zipFile.commit();
         return true;
     }
@@ -321,7 +321,7 @@ bool JlCompress::compressFiles(QString zipArchive, QStringList files)
 
     // Chiudo il file zip
     zip.close();
-    if (zip.getZipError() == ZIP_OK) {
+    if (zip.zipError() == ZIP_OK) {
         zipFile.commit();
         return true;
     }
@@ -355,7 +355,7 @@ bool JlCompress::compressDir(
 
     // Chiudo il file zip
     zip.close();
-    if (zip.getZipError() == ZIP_OK) {
+    if (zip.zipError() == ZIP_OK) {
         zipFile.commit();
         return true;
     }
@@ -386,7 +386,7 @@ QString JlCompress::extractFile(QuaZip *zip, QString fileName, QString fileDest)
 
     // Chiudo il file zip
     zip->close();
-    if (zip->getZipError() != 0) {
+    if (zip->zipError() != 0) {
         return QString();
     }
 
@@ -510,7 +510,7 @@ QStringList JlCompress::getFileList(QuaZip *zip)
 
     // Chiudo il file zip
     zip->close();
-    if (zip->getZipError() != 0) {
+    if (zip->zipError() != 0) {
         return QStringList();
     }
     return lst;

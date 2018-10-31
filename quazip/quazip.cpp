@@ -182,6 +182,7 @@ private:
     QTextCodec *compatibleCommentCodec() const;
 
     static QByteArray toDosPath(const QByteArray &path);
+    static QString compatibleFilePath(const QString &path, QTextCodec *codec);
 
     QHash<QString, unz64_file_pos> directoryCaseSensitive;
     QHash<QString, unz64_file_pos> directoryCaseInsensitive;
@@ -1138,6 +1139,41 @@ QByteArray QuaZipPrivate::toDosPath(const QByteArray &path)
     return names.join('/');
 }
 
+QString QuaZipPrivate::compatibleFilePath(
+    const QString &path, QTextCodec *codec)
+{
+    if (codec->canEncode(path))
+        return path;
+
+    auto split = path.split('/', QString::SkipEmptyParts);
+
+    for (auto &sec : split) {
+        if (codec->canEncode(sec))
+            continue;
+
+        int dotIndex = sec.lastIndexOf('.');
+        QString name;
+        QString extension;
+        if (dotIndex >= 0) {
+            name = sec.left(dotIndex);
+            extension = sec.right(sec.length() - dotIndex);
+        } else {
+            name = sec;
+        }
+
+        if (!extension.isEmpty() && !codec->canEncode(extension)) {
+            name = sec;
+            extension.clear();
+        }
+
+        quint32 crc = zChecksum<QuaCrc32>(
+            name.constData(), name.length() * sizeof(QChar));
+        sec = QString::number(crc, 16) + extension;
+    }
+
+    return split.join('/');
+}
+
 QuaZip::QuaZip()
     : p(new QuaZipPrivate(this))
 {
@@ -1340,7 +1376,7 @@ int QuaZip::getEntriesCount() const
     return int(globalInfo.number_entry);
 }
 
-QString QuaZip::getComment() const
+QString QuaZip::globalComment() const
 {
     p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
@@ -1621,7 +1657,7 @@ QIODevice *QuaZip::ioDevice() const
     return p->ioDevice;
 }
 
-QuaZip::Mode QuaZip::getMode() const
+QuaZip::Mode QuaZip::openMode() const
 {
     return p->mode;
 }
@@ -1631,12 +1667,12 @@ bool QuaZip::isOpen() const
     return p->mode != mdNotOpen;
 }
 
-int QuaZip::getZipError() const
+int QuaZip::zipError() const
 {
     return p->zipError;
 }
 
-void QuaZip::setComment(const QString &comment)
+void QuaZip::setGlobalComment(const QString &comment)
 {
     p->comment = comment;
 }
@@ -1808,7 +1844,7 @@ QByteArray QuaZipPrivate::compatibleFilePath(const QString &filePath) const
 
     QByteArray result;
     if (codec) {
-        result = codec->fromUnicode(filePath);
+        result = codec->fromUnicode(compatibleFilePath(filePath, codec));
         if (compatibility & QuaZip::DosCompatible)
             result = toDosPath(result);
     } else {
@@ -1833,8 +1869,11 @@ QByteArray QuaZipPrivate::compatibleComment(const QString &comment) const
 {
     QTextCodec *codec = compatibleCommentCodec();
 
-    if (codec)
+    if (codec) {
+        if (!codec->canEncode(comment))
+            return QByteArray();
         return codec->fromUnicode(comment);
+    }
 
     return comment.toUtf8();
 }

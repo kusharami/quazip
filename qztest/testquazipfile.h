@@ -26,22 +26,21 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
 #include <QObject>
-#include <QStringList>
 
-class TestQuaZipFile: public QObject {
+class TestQuaZipFile : public QObject {
     Q_OBJECT
 private slots:
+    void construct_data();
+    void construct();
     void zipUnzip_data();
     void zipUnzip();
-    void bytesAvailable_data();
-    void bytesAvailable();
     void getZip();
     void setZipFilePath();
-    void getFileInfo();
-    void setFileName();
-    void constructorDestructor();
-    void setFileAttrs();
-    void largeFile();
+    void zipFileInfo_data();
+    void zipFileInfo();
+    void fileAttributes_data();
+    void fileAttributes();
+    void zip64();
 };
 
 #endif // QUAZIP_TEST_QUAZIPFILE_H

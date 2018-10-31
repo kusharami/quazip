@@ -42,9 +42,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <zlib.h>
 
-Q_DECLARE_METATYPE(QuaZip::CompatibilityFlags)
-Q_DECLARE_METATYPE(QuaZipFileInfo::Attributes)
-
 TestQuaZipFileInfo::TestQuaZipFileInfo(QObject *parent)
     : QObject(parent)
 {
@@ -449,7 +446,7 @@ void TestQuaZipFileInfo::fromZipFile()
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
         zipFileInfo = zipFile.fileInfo();
         zipFile.close();
-        QCOMPARE(zipFile.getZipError(), 0);
+        QCOMPARE(zipFile.zipError(), 0);
     }
     QCOMPARE(zipFileInfo.diskNumber(), 0);
     QCOMPARE(zipFileInfo.zipVersionMadeBy(), quint8(45));
