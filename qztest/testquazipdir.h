@@ -27,14 +27,13 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QObject>
 
-class TestQuaZipDir: public QObject {
+class TestQuaZipDir : public QObject {
     Q_OBJECT
 private slots:
     void entryList_data();
     void entryList();
     void cd_data();
     void cd();
-    void entryInfoList();
     void operators();
     void filePath();
 };

@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -33,6 +34,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 /// \cond internal
 class QuaZipDirPrivate : public QSharedData {
 public:
+    QuaZipDirPrivate();
     QuaZipDirPrivate(const QuaZipDirPrivate &other);
     QuaZipDirPrivate(QuaZip *zip, const QString &dir = QString());
 
@@ -59,13 +61,30 @@ QuaZipDir::QuaZipDir(const QuaZipDir &that)
 QuaZipDir::QuaZipDir(QuaZip *zip, const QString &dir)
     : d(new QuaZipDirPrivate(zip, dir))
 {
-    if (d->dir.startsWith('/'))
-        d->dir = d->dir.mid(1);
+    setPath(dir);
+}
+
+QuaZipDir::QuaZipDir()
+    : d(new QuaZipDirPrivate)
+{
 }
 
 QuaZipDir::~QuaZipDir()
 {
     // destruct shared data
+}
+
+QuaZip *QuaZipDir::zip() const
+{
+    return d->zip;
+}
+
+void QuaZipDir::setZip(QuaZip *zip)
+{
+    if (d.constData()->zip == zip)
+        return;
+
+    d->zip = zip;
 }
 
 bool QuaZipDir::operator==(const QuaZipDir &that) const
@@ -114,11 +133,9 @@ bool QuaZipDir::cd(const QString &dirPath)
             return false;
         }
         int slashPos = d->dir.lastIndexOf('/');
-        if (slashPos == -1) {
-            d->dir = "";
-        } else {
-            d->dir = d->dir.left(slashPos);
-        }
+        Q_ASSERT(slashPos >= 0);
+
+        d->dir = d->dir.left(slashPos);
         return true;
     }
 
@@ -148,10 +165,11 @@ bool QuaZipDir::cd(const QString &dirPath)
 
     // a simple subdirectory
     if (exists(normalizedDirPath)) {
+        normalizedDirPath = '/' + normalizedDirPath;
         if (isRoot())
             d->dir = normalizedDirPath;
         else
-            d->dir += "/" + normalizedDirPath;
+            d->dir += normalizedDirPath;
         return true;
     }
 
@@ -327,14 +345,20 @@ bool QuaZipDirPrivate::entryInfoList(QStringList nameFilters,
     QDir::Filters filter, QDir::SortFlags sort,
     QList<QuaZipFileInfo> &result) const
 {
-    QString basePath = QDir::cleanPath(dir);
-    if (!basePath.isEmpty())
+    result.clear();
+    if (!zip)
+        return false;
+
+    if (dir.contains(".."))
+        return false;
+
+    QString basePath = dir;
+    if (!basePath.isEmpty() && !basePath.endsWith('/'))
         basePath += "/";
     int baseLength = basePath.length();
-    result.clear();
     QuaZipDirRestoreCurrent saveCurrent(zip);
     if (!zip->goToFirstFile()) {
-        return zip->getZipError() == UNZ_OK;
+        return zip->zipError() == UNZ_OK;
     }
     QDir::Filters fltr = filter;
     if (fltr == QDir::NoFilter)
@@ -385,7 +409,7 @@ bool QuaZipDirPrivate::entryInfoList(QStringList nameFilters,
         result.append(info);
     } while (zip->goToNextFile());
 
-    if (zip->getZipError() != UNZ_OK)
+    if (zip->zipError() != UNZ_OK)
         return false;
 
     QDir::SortFlags srt = sort;
@@ -497,8 +521,7 @@ QDir::Filters QuaZipDir::filter()
 
 bool QuaZipDir::isRoot() const
 {
-    auto path = QDir::cleanPath(d->dir);
-    return path.isEmpty() || path == '/';
+    return d->dir == '/';
 }
 
 QStringList QuaZipDir::nameFilters() const
@@ -513,10 +536,14 @@ QString QuaZipDir::path() const
 
 QString QuaZipDir::relativeFilePath(const QString &fileName) const
 {
-    auto path = QDir::cleanPath(d->dir);
-    if (!path.startsWith('/'))
-        path = '/' + path;
+    auto path = d->dir;
+    Q_ASSERT(path.startsWith('/'));
     return QDir(path).relativeFilePath(fileName);
+}
+
+bool QuaZipDir::isValid() const
+{
+    return d->zip && !d->dir.contains("..");
 }
 
 void QuaZipDir::setCaseSensitivity(QuaZip::CaseSensitivity caseSensitivity)
@@ -536,7 +563,18 @@ void QuaZipDir::setNameFilters(const QStringList &nameFilters)
 
 void QuaZipDir::setPath(const QString &path)
 {
-    d->dir = path;
+    auto normalizedPath = QDir::cleanPath(path);
+
+    if (!normalizedPath.startsWith('/'))
+        normalizedPath = '/' + normalizedPath;
+
+    if (normalizedPath.endsWith('/'))
+        normalizedPath = normalizedPath.right(1);
+
+    if (normalizedPath == this->path())
+        return;
+
+    d->dir = normalizedPath;
 }
 
 void QuaZipDir::setSorting(QDir::SortFlags sort)
@@ -547,6 +585,11 @@ void QuaZipDir::setSorting(QDir::SortFlags sort)
 QDir::SortFlags QuaZipDir::sorting() const
 {
     return d->sorting;
+}
+
+QuaZipDirPrivate::QuaZipDirPrivate()
+    : QuaZipDirPrivate(nullptr, QString())
+{
 }
 
 QuaZipDirPrivate::QuaZipDirPrivate(const QuaZipDirPrivate &other)
@@ -561,7 +604,7 @@ QuaZipDirPrivate::QuaZipDirPrivate(const QuaZipDirPrivate &other)
 
 QuaZipDirPrivate::QuaZipDirPrivate(QuaZip *zip, const QString &dir)
     : zip(zip)
-    , dir(dir)
+    , dir(dir.isEmpty() ? QString('/') : dir)
     , caseSensitivity(QuaZip::csDefault)
     , filter(QDir::NoFilter)
     , sorting(QDir::NoSort)

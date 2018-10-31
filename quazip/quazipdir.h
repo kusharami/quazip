@@ -1,8 +1,7 @@
-#ifndef QUAZIP_QUAZIPDIR_H
-#define QUAZIP_QUAZIPDIR_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -56,6 +55,8 @@ private:
     QSharedDataPointer<QuaZipDirPrivate> d;
 
 public:
+    /// Default constructor
+    QuaZipDir();
     /// The copy constructor.
     QuaZipDir(const QuaZipDir &that);
     /// Constructs a QuaZipDir instance pointing to the specified directory.
@@ -66,6 +67,10 @@ public:
     explicit QuaZipDir(QuaZip *zip, const QString &dir = QString());
     /// Destructor.
     ~QuaZipDir();
+
+    QuaZip *zip() const;
+    void setZip(QuaZip *zip);
+
     /// Equality operator.
     bool operator==(const QuaZipDir &that) const;
     /// Inequality operator.
@@ -157,8 +162,7 @@ public:
     QStringList nameFilters() const;
     /// Returns the path to the current dir.
     /**
-      The path never starts with '/', and the root path is an empty
-      string.
+      The path ALWAYS starts with '/'
       */
     QString path() const;
     /// Returns the path to the specified file relative to the current dir.
@@ -171,6 +175,9 @@ public:
      * @return Path relative to the current dir.
      */
     QString relativeFilePath(const QString &fileName) const;
+
+    bool isValid() const;
+
     /// Sets the default case sensitivity mode.
     void setCaseSensitivity(QuaZip::CaseSensitivity caseSensitivity);
     /// Sets the default filter.
@@ -183,9 +190,9 @@ public:
       path actually exists and doesn't use relative paths, so it's
       possible to go to the root directory with setPath(&quot;&quot;).
 
-      Note that this function still chops the trailing and/or leading
-      '/' and treats a single '/' as the root path (path() will still
-      return an empty string).
+      \note This function chops the trailing '/' and
+      treats a single '/' as the root path and removes all redundant '.' and '..'
+      if path starts with .. then it is invalid path
       */
     void setPath(const QString &path);
     /// Sets the default sorting mode.
@@ -198,5 +205,3 @@ bool QuaZipDir::operator!=(const QuaZipDir &that) const
 {
     return !operator==(that);
 }
-
-#endif // QUAZIP_QUAZIPDIR_H
