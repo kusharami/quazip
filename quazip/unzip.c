@@ -618,9 +618,9 @@ extern unzFile unzOpenInternal (voidpf file,
 
 
     us.filestream = ZOPEN64(us.z_filefunc,
-                                                 file,
-                                                 ZLIB_FILEFUNC_MODE_READ |
-                                                 ZLIB_FILEFUNC_MODE_EXISTING);
+                         file,
+                         ZLIB_FILEFUNC_MODE_READ |
+                         ZLIB_FILEFUNC_MODE_EXISTING);
     if (us.filestream==NULL)
         return NULL;
 
