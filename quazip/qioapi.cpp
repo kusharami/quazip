@@ -79,10 +79,10 @@ ZPOS64_T call_ztell64(
 struct QIODevice_descriptor {
     // Position only used for writing to sequential devices.
     qint64 pos;
-    bool hasError;
+    int errorCode;
     inline QIODevice_descriptor()
         : pos(0)
-        , hasError(false)
+        , errorCode(Z_OK)
     {
     }
 };
@@ -99,28 +99,31 @@ voidpf ZCALLBACK qiodevice_open_file_func(voidpf opaque, voidpf file, int mode)
     else if (mode & ZLIB_FILEFUNC_MODE_WRITE)
         desiredMode |= QIODevice::WriteOnly;
 
-    if (mode & (ZLIB_FILEFUNC_MODE_READ | ZLIB_FILEFUNC_MODE_EXISTING))
+    if (0 != (mode & ZLIB_FILEFUNC_MODE_READ) ||
+        mode == ZLIB_FILEFUNC_MODE_EXISTING) {
         desiredMode |= QIODevice::ReadOnly;
+    }
+
+    if (desiredMode == QIODevice::NotOpen)
+        return NULL;
 
     bool shouldClose = false;
     if (!iodevice->isOpen()) {
         shouldClose = iodevice->open(desiredMode);
     }
-    desiredMode &= ~QIODevice::Truncate;
 
-    if (iodevice->isOpen()) {
-        if ((iodevice->openMode() & desiredMode) == desiredMode) {
-            if (!iodevice->isReadable() || !iodevice->isSequential()) {
-                if (!iodevice->isSequential()) {
-                    if (mode & ZLIB_FILEFUNC_MODE_CREATE)
-                        iodevice->reset();
-                    d->pos = iodevice->pos();
-                } else {
-                    d->pos = 0;
-                }
-                return iodevice;
-            } // sequential read is not supported
+    desiredMode &= ~QIODevice::Truncate;
+    if ((iodevice->openMode() & desiredMode) == desiredMode) {
+        if (!iodevice->isSequential()) {
+            if (mode & ZLIB_FILEFUNC_MODE_CREATE)
+                iodevice->reset();
+            d->pos = iodevice->pos();
+            return iodevice;
         }
+        if (!iodevice->isReadable()) {
+            d->pos = 0;
+            return iodevice;
+        } // sequential read is not supported
     }
 
     if (shouldClose) {
@@ -136,11 +139,15 @@ uLong ZCALLBACK qiodevice_read_file_func(
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
     QIODevice *iodevice = reinterpret_cast<QIODevice *>(stream);
+    Q_ASSERT(!iodevice->isSequential());
     if (!iodevice->seek(d->pos)) {
+        d->errorCode = Z_STREAM_ERROR;
         return 0;
     }
     qint64 ret64 = iodevice->read((char *) buf, size);
-    if (ret64 != -1) {
+    if (ret64 < 0) {
+        d->errorCode = Z_STREAM_ERROR;
+    } else {
         d->pos += ret64;
         return uLong(ret64);
     }
@@ -155,41 +162,30 @@ uLong ZCALLBACK qiodevice_write_file_func(
     QIODevice *iodevice = reinterpret_cast<QIODevice *>(stream);
     if (!iodevice->isSequential()) {
         if (!iodevice->seek(d->pos)) {
+            d->errorCode = Z_STREAM_ERROR;
             return 0;
         }
     }
     qint64 ret64 = iodevice->write(reinterpret_cast<const char *>(buf), size);
-    if (ret64 != -1) {
+    if (ret64 < 0) {
+        d->errorCode = Z_STREAM_ERROR;
+    } else {
         d->pos += ret64;
         return uLong(ret64);
     }
     return 0;
 }
 
-uLong ZCALLBACK qiodevice_tell_file_func(voidpf opaque, voidpf stream)
+uLong ZCALLBACK qiodevice_tell_file_func(voidpf opaque, voidpf)
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
-    QIODevice *iodevice = reinterpret_cast<QIODevice *>(stream);
-    qint64 ret64;
-    if (iodevice->isSequential()) {
-        ret64 = d->pos;
-    } else {
-        ret64 = iodevice->pos();
-    }
-    return uLong(ret64);
+    return uLong(d->pos);
 }
 
-ZPOS64_T ZCALLBACK qiodevice64_tell_file_func(voidpf opaque, voidpf stream)
+ZPOS64_T ZCALLBACK qiodevice64_tell_file_func(voidpf opaque, voidpf)
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
-    QIODevice *iodevice = reinterpret_cast<QIODevice *>(stream);
-    qint64 ret;
-    if (iodevice->isSequential()) {
-        ret = d->pos;
-    } else {
-        ret = iodevice->pos();
-    }
-    return ZPOS64_T(ret);
+    return ZPOS64_T(d->pos);
 }
 
 int ZCALLBACK qiodevice_seek_file_func(
@@ -207,7 +203,8 @@ int ZCALLBACK qiodevice_seek_file_func(
         }
 
         qWarning("qiodevice_seek_file_func() called for sequential device");
-        return -1;
+        d->errorCode = Z_STREAM_ERROR;
+        return Z_STREAM_ERROR;
     }
     int ret;
     switch (origin) {
@@ -221,9 +218,11 @@ int ZCALLBACK qiodevice_seek_file_func(
         d->pos = offset;
         break;
     default:
-        return -1;
+        d->errorCode = Z_STREAM_ERROR;
+        return Z_STREAM_ERROR;
     }
     ret = iodevice->seek(d->pos) ? Z_OK : Z_STREAM_ERROR;
+    d->errorCode = ret;
     return ret;
 }
 
@@ -242,7 +241,8 @@ int ZCALLBACK qiodevice64_seek_file_func(
         }
 
         qWarning("qiodevice_seek_file_func() called for sequential device");
-        return -1;
+        d->errorCode = Z_STREAM_ERROR;
+        return Z_STREAM_ERROR;
     }
     int ret;
     switch (origin) {
@@ -256,9 +256,11 @@ int ZCALLBACK qiodevice64_seek_file_func(
         d->pos = offset;
         break;
     default:
-        return -1;
+        d->errorCode = Z_STREAM_ERROR;
+        return Z_STREAM_ERROR;
     }
     ret = iodevice->seek(d->pos) ? Z_OK : Z_STREAM_ERROR;
+    d->errorCode = ret;
     return ret;
 }
 
@@ -268,20 +270,20 @@ int ZCALLBACK qiodevice_close_file_func(voidpf opaque, voidpf stream)
     delete d;
     QIODevice *device = reinterpret_cast<QIODevice *>(stream);
     device->close();
-    return 0;
+    return Z_OK;
 }
 
 int ZCALLBACK qiodevice_fakeclose_file_func(voidpf opaque, voidpf /*stream*/)
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
     delete d;
-    return 0;
+    return Z_OK;
 }
 
 int ZCALLBACK qiodevice_error_file_func(voidpf opaque, voidpf /*stream UNUSED*/)
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
-    return d->hasError ? Z_ERRNO : Z_OK;
+    return d->errorCode;
 }
 
 void fill_qiodevice_filefunc(zlib_filefunc_def *pzlib_filefunc_def)
