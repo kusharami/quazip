@@ -314,7 +314,7 @@ public:
     /** Returns negative error code in the case of error. The same error
      * code will be returned by subsequent getZipError() call.
      **/
-    int getEntriesCount() const;
+    int entryCount() const;
     /// Returns global comment in the ZIP file.
     /// \note Comment is decoded with commentCodec() when there is no
     /// UTF BOM Header present, otherwise UTF codec is used,
@@ -451,14 +451,14 @@ public:
       figure out which).
       \sa getFileInfoList()
       */
-    QStringList getFileNameList() const;
+    QStringList filePathList() const;
     /// Returns information list about all files inside the archive.
     /**
       \return A list of QuaZipFileInfo objects or an empty list if there
       was an error or if the archive is empty (call getZipError() to
       figure out which).
       */
-    QList<QuaZipFileInfo> getFileInfoList() const;
+    QList<QuaZipFileInfo> fileInfoList() const;
 
     /// Compatibility flags for next files to be compressed.
     /// \sa CompatibilityFlags
@@ -554,7 +554,7 @@ public:
      *
      * @param codec The codec to use by default. If NULL, resets to default.
      */
-    static void setDefaultFilePathCodec(QTextCodec *codec);
+    static void setDefaultFilePathCodec(QTextCodec *codec = nullptr);
     /// Returns default comment codec
     static QTextCodec *defaultCommentCodec();
     /// Sets the default comment codec to use.
@@ -566,7 +566,7 @@ public:
      * If neither function is called, QTextCodec::codecForLocale() will be used
      * to decode and encode comments.
      */
-    static void setDefaultCommentCodec(QTextCodec *codec);
+    static void setDefaultCommentCodec(QTextCodec *codec = nullptr);
     /**
      * @overload
      * Equivalent to calling

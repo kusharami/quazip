@@ -1,8 +1,7 @@
-#ifndef QUA_ZIPFILEINFO_H
-#define QUA_ZIPFILEINFO_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -292,5 +291,3 @@ bool QuaZipFileInfo::operator!=(const QuaZipFileInfo &other) const
 {
     return !operator==(other);
 }
-
-#endif

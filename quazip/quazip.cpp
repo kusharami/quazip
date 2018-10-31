@@ -1307,7 +1307,6 @@ void QuaZip::close()
         QByteArray encodedComment;
         if (!p->comment.isEmpty()) {
             if (p->commentCodec->mibEnum() != QuaZipTextCodec::IANA_UTF8 &&
-                QuaZUtils::isAscii(p->comment) &&
                 p->commentCodec->canEncode(p->comment)) {
                 encodedComment = p->commentCodec->fromUnicode(p->comment);
             } else {
@@ -1363,7 +1362,7 @@ void QuaZip::setIODevice(QIODevice *ioDevice)
     }
 }
 
-int QuaZip::getEntriesCount() const
+int QuaZip::entryCount() const
 {
     p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
@@ -1373,6 +1372,12 @@ int QuaZip::getEntriesCount() const
     unz_global_info64 globalInfo;
     if ((p->zipError = unzGetGlobalInfo64(p->unzFile_f, &globalInfo)) != UNZ_OK)
         return p->zipError;
+
+    if (globalInfo.number_entry > ZPOS64_T(std::numeric_limits<int>::max())) {
+        p->zipError = ZIP_BADZIPFILE;
+        return p->zipError;
+    }
+
     return int(globalInfo.number_entry);
 }
 
@@ -1755,7 +1760,7 @@ bool QuaZipPrivate::getFileInfoList(QList<TFileInfo> *result) const
     return true;
 }
 
-QStringList QuaZip::getFileNameList() const
+QStringList QuaZip::filePathList() const
 {
     QStringList list;
     if (p->getFileInfoList(&list))
@@ -1763,7 +1768,7 @@ QStringList QuaZip::getFileNameList() const
     return QStringList();
 }
 
-QList<QuaZipFileInfo> QuaZip::getFileInfoList() const
+QList<QuaZipFileInfo> QuaZip::fileInfoList() const
 {
     QList<QuaZipFileInfo> list;
     if (p->getFileInfoList(&list))
@@ -2002,10 +2007,18 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     }
     if (compatibility != DosCompatible) {
         if (0 == (fileInfo.zipOptions() & QuaZipFileInfo::Unicode)) {
-            p->storeInfoZipFilePath(centralExtra, localExtra,
-                fileInfo.filePath(), compatibleFilePath);
-            p->storeInfoZipComment(
-                centralExtra, fileInfo.comment(), compatibleComment);
+            if (compatibility != CustomCompatibility ||
+                !filePathCodec()->canEncode(fileInfo.filePath())) {
+                p->storeInfoZipFilePath(centralExtra, localExtra,
+                    fileInfo.filePath(), compatibleFilePath);
+            }
+
+            if (compatibility != CustomCompatibility ||
+                (!fileInfo.comment().isEmpty() &&
+                    compatibleComment.isEmpty())) {
+                p->storeInfoZipComment(
+                    centralExtra, fileInfo.comment(), compatibleComment);
+            }
             p->storeWinZipExtraFields(
                 centralExtra, fileInfo.filePath(), compatibleFilePath);
         }

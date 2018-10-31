@@ -73,16 +73,21 @@ void TestQuaZipFile::zipUnzip_data()
                 "русское имя файла с пробелами.txt"))
         << QString::fromUtf8("わたしはジップファイル")
         << QString::fromUtf8("password Юникод ユニコード")
-        << QByteArrayLiteral("IBM866") << QByteArrayLiteral("Shift_JIS")
-        << QByteArrayLiteral("UTF-8") << false << true << -1;
+        << QByteArrayLiteral("IBM866") << QByteArrayLiteral("EUC-JP")
+        << QByteArrayLiteral("Shift_JIS") << false << true << -1;
 
     QTest::newRow("zip64+append")
         << (QStringList() << "test64.txt")
         << QString::fromUtf8("わたしはジップファイル") << QString("")
-        << QByteArray() << true << true << false << -1;
+        << QByteArray() << QByteArray() << QByteArray() << true << true << false
+        << -1;
     QTest::newRow("large enough to flush")
-        << (QStringList() << "flush.txt") << QByteArray() << QByteArray()
-        << true << false << 65536 * 2;
+        << (QStringList() << QString::fromUtf8(
+                "BAD CODEC FILE NAME わたしはジップファイル.txt"))
+        << QString::fromUtf8("BAD CODEC COMMENT わたしはジップファイル")
+        << QString() << QByteArrayLiteral("windows-1251")
+        << QByteArrayLiteral("windows-1252") << QByteArray() << true << false
+        << 65536 * 2;
 }
 
 void TestQuaZipFile::zipUnzip()
@@ -256,6 +261,47 @@ void TestQuaZipFile::zipUnzip()
                 break;
 
             expectedFilePath = QLocale().toUpper(fileName);
+
+            bool hasUnicodeFlag = 0 !=
+                (archived.fileInfo().zipOptions() & QuaZipFileInfo::Unicode);
+            if (compatibility == QuaZip::DosCompatible) {
+                QVERIFY(!hasUnicodeFlag);
+                QVERIFY(!archived.centralExtraFields().contains(
+                    WINZIP_EXTRA_FIELD_HEADER));
+                QVERIFY(!archived.centralExtraFields().contains(
+                    INFO_ZIP_UNICODE_PATH_HEADER));
+                QVERIFY(!archived.localExtraFields().contains(
+                    INFO_ZIP_UNICODE_PATH_HEADER));
+                QVERIFY(!archived.centralExtraFields().contains(
+                    INFO_ZIP_UNICODE_COMMENT_HEADER));
+            } else {
+                bool hasUnicodeExtra;
+                bool hasWinZipExtra;
+
+                if (compatibility == QuaZip::CustomCompatibility) {
+                    hasWinZipExtra = !hasUnicodeFlag;
+                    hasUnicodeExtra = hasWinZipExtra &&
+                        (!testZip.filePathCodec()->canEncode(fileName) ||
+                            !testZip.commentCodec()->canEncode(comment));
+                } else {
+                    hasUnicodeExtra = !hasUnicodeFlag &&
+                        (!QuaZUtils::isAscii(fileName) ||
+                            !QuaZUtils::isAscii(comment));
+                    hasWinZipExtra = hasUnicodeExtra;
+                }
+                QCOMPARE(archived.centralExtraFields().contains(
+                             WINZIP_EXTRA_FIELD_HEADER),
+                    hasWinZipExtra);
+                QCOMPARE(archived.centralExtraFields().contains(
+                             INFO_ZIP_UNICODE_PATH_HEADER),
+                    hasUnicodeExtra);
+                QCOMPARE(archived.localExtraFields().contains(
+                             INFO_ZIP_UNICODE_PATH_HEADER),
+                    hasUnicodeExtra);
+                QCOMPARE(archived.centralExtraFields().contains(
+                             INFO_ZIP_UNICODE_COMMENT_HEADER),
+                    hasUnicodeExtra);
+            }
         } while (true);
         testZip.goToNextFile();
     }
@@ -269,6 +315,21 @@ void TestQuaZipFile::zipUnzip()
         QVERIFY(archived.open(QIODevice::ReadOnly));
         QVERIFY(original.readAll() != archived.readAll());
         QVERIFY(archived.zipError() != UNZ_OK);
+    }
+
+    if (!password.isNull()) {
+        QVERIFY(testZip.goToFirstFile());
+        QFile original(dir.filePath(testZip.currentFilePath()));
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        QuaZipFile archived(&testZip);
+        auto pwd = testZip.passwordCodec()->fromUnicode(password);
+        auto info = archived.fileInfo();
+        info.setPassword(&pwd);
+        QVERIFY(pwd.isNull());
+        archived.setFileInfo(info);
+        QVERIFY(archived.open(QIODevice::ReadOnly));
+        QCOMPARE(original.readAll(), archived.readAll());
+        QCOMPARE(archived.zipError(), UNZ_OK);
     }
     testZip.close();
     QCOMPARE(testZip.zipError(), UNZ_OK);

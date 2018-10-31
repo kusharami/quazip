@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -440,6 +441,8 @@ const QString &QuaZipFileInfo::filePath() const
 void QuaZipFileInfo::setFilePath(const QString &filePath)
 {
     auto normalizedFilePath = QDir::cleanPath(filePath);
+    if (filePath.endsWith('/'))
+        Q_ASSERT(normalizedFilePath.endsWith('/'));
     if (normalizedFilePath.startsWith('/')) {
         normalizedFilePath = normalizedFilePath.mid(1);
     }

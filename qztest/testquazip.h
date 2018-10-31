@@ -1,6 +1,4 @@
-#ifndef QUAZIP_TEST_QUAZIP_H
-#define QUAZIP_TEST_QUAZIP_H
-
+#pragma once
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
 
@@ -27,29 +25,21 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QObject>
 
-#if (QT_VERSION >= 0x050100)
-#define QUAZIP_TEST_QSAVEFILE
-#endif
-
-class TestQuaZip: public QObject {
+class TestQuaZip : public QObject {
     Q_OBJECT
 private slots:
-    void getFileList_data();
-    void getFileList();
-    void add_data();
-    void add();
-    void setFilePathCodec_data();
-    void setFilePathCodec();
-    void setDataDescriptorWritingEnabled();
+    void fileList_data();
+    void fileList();
+    void addFiles_data();
+    void addFiles();
+    void filePathCodec_data();
+    void filePathCodec();
+    void commentCodec_data();
+    void commentCodec();
+    void dataDescriptorWritingEnabled();
     void testQIODeviceAPI();
-    void setZipFilePath();
-    void setIoDevice();
-    void setCommentCodec();
-    void setAutoClose();
-#ifdef QUAZIP_TEST_QSAVEFILE
-    void saveFileBug();
-#endif
+    void zipFilePath();
+    void ioDevice();
+    void autoClose();
     void testSequential();
 };
-
-#endif // QUAZIP_TEST_QUAZIP_H
