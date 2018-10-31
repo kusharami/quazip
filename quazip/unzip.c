@@ -123,7 +123,7 @@ typedef uLongf z_crc_t;
 #define SIZEZIPLOCALHEADER (0x1e)
 
 
-const char unz_copyright[] =
+static const char unz_copyright[] =
    " unzip 1.01 Copyright 1998-2004 Gilles Vollant - http://www.winimage.com/zLibDll";
 
 /* unz_file_info_interntal contain internal info about a file in zipfile*/
@@ -1537,7 +1537,6 @@ static int unzOpenCurrentFile34 (unzFile file,
         }
 #endif
     }
-    pfile_in_zip_read_info->raw=raw;
     pfile_in_zip_read_info->offset_local_extrafield = offset_local_extrafield;
     pfile_in_zip_read_info->size_local_extrafield = size_local_extrafield;
     pfile_in_zip_read_info->stream_initialised=0;
@@ -1576,7 +1575,7 @@ static int unzOpenCurrentFile34 (unzFile file,
         return err;
       }
 #else
-      pfile_in_zip_read_info->raw=1;
+      raw=1;
 #endif
     }
     else if ((s->cur_file_info.compression_method==Z_DEFLATED) && (!raw))
@@ -1603,9 +1602,11 @@ static int unzOpenCurrentFile34 (unzFile file,
          * In unzip, i don't wait absolutely Z_STREAM_END because I known the
          * size of both compressed and uncompressed data
          */
-    } else {
-        pfile_in_zip_read_info->raw=1;
+    } else
+    {
+        raw=1;
     }
+
     pfile_in_zip_read_info->rest_read_compressed =
             s->cur_file_info.compressed_size ;
     pfile_in_zip_read_info->rest_read_uncompressed =
@@ -1622,7 +1623,7 @@ static int unzOpenCurrentFile34 (unzFile file,
 
     s->encrypted = 0;
 #ifndef NOUNCRYPT
-    if (encrypted && (password != NULL || keys != NULL))
+    if (!raw && encrypted && (password != NULL || keys != NULL))
     {
         unsigned char crypt_header[RAND_HEAD_LEN];
 
@@ -1651,6 +1652,12 @@ static int unzOpenCurrentFile34 (unzFile file,
         s->encrypted = 1;
     }
 #endif
+    if (encrypted && !s->encrypted)
+    {
+        pfile_in_zip_read_info->rest_read_compressed += RAND_HEAD_LEN;
+        raw = 1;
+    }
+    pfile_in_zip_read_info->raw=raw;
 
     return UNZ_OK;
 }

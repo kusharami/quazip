@@ -530,7 +530,10 @@ void QuaZipFileInfo::setUncompressedSize(qint64 size)
 
 qint64 QuaZipFileInfo::compressedSize() const
 {
-    return d->compressedSize;
+    qint64 size = d->compressedSize;
+    if (isRaw() && (d->zipOptions & Encryption))
+        size += RAND_HEAD_LEN;
+    return size;
 }
 
 void QuaZipFileInfo::setCompressedSize(qint64 size)
@@ -538,6 +541,8 @@ void QuaZipFileInfo::setCompressedSize(qint64 size)
     if (compressedSize() == size)
         return;
 
+    if (isRaw() && (d.constData()->zipOptions & Encryption))
+        size -= RAND_HEAD_LEN;
     d->compressedSize = size;
 }
 

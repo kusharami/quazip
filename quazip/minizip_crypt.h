@@ -97,7 +97,6 @@ inline void init_keys(
 #define zencode(pkeys, pcrc_32_tab, c, t) \
     (t = decrypt_byte(pkeys), update_keys(pkeys, pcrc_32_tab, c), t ^ (c))
 
-#define RAND_HEAD_LEN 12
     /* "last resort" source for second part of crypt seed pattern */
 #ifndef ZCR_SEED2
 #define ZCR_SEED2 3141592654UL /* use PI as default pattern */

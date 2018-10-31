@@ -1305,13 +1305,25 @@ void QuaZip::close()
     case mdAppend:
     case mdAdd: {
         QByteArray encodedComment;
-        if (!p->comment.isEmpty()) {
-            if (p->commentCodec->mibEnum() != QuaZipTextCodec::IANA_UTF8 &&
-                p->commentCodec->canEncode(p->comment)) {
-                encodedComment = p->commentCodec->fromUnicode(p->comment);
+        const auto &comment = p->comment;
+        if (!comment.isEmpty()) {
+            QTextCodec *commentCodec = nullptr;
+            switch (int(p->compatibility)) {
+            case DosCompatible:
+            case CustomCompatibility:
+                commentCodec = p->compatibleCommentCodec();
+                break;
+
+            default:
+                if (QuaZUtils::isAscii(comment))
+                    commentCodec = QuaZipPrivate::getLegacyTextCodec();
+                break;
+            }
+            if (commentCodec && commentCodec->canEncode(comment)) {
+                encodedComment = commentCodec->fromUnicode(comment);
             } else {
                 encodedComment =
-                    QByteArrayLiteral("\x0EF\x0BB\x0BF") + p->comment.toUtf8();
+                    QByteArrayLiteral("\x0EF\x0BB\x0BF") + comment.toUtf8();
             }
         }
 

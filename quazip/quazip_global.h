@@ -57,4 +57,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #define Q_FALLTHROUGH()
 #endif
 
+#define RAND_HEAD_LEN 12
+
 #endif // QUAZIP_GLOBAL_H
