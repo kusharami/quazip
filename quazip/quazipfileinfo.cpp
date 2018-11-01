@@ -79,6 +79,7 @@ enum
     THS_IXOTH = 0x0001, /* execute permission: other */
 
     RAW_FLAG = 1 << 0,
+    HAS_KEYS_FLAG = 1 << 1
 };
 
 struct QuaZipFileInfo::Private : public QSharedData {
@@ -93,6 +94,7 @@ struct QuaZipFileInfo::Private : public QSharedData {
     quint16 compressionStrategy;
     quint16 zipVersionNeeded;
     int diskNumber;
+    int compressionLevel;
     qint64 uncompressedSize;
     qint64 compressedSize;
     QDateTime createTime;
@@ -530,10 +532,7 @@ void QuaZipFileInfo::setUncompressedSize(qint64 size)
 
 qint64 QuaZipFileInfo::compressedSize() const
 {
-    qint64 size = d->compressedSize;
-    if (isRaw() && (d->zipOptions & Encryption))
-        size += RAND_HEAD_LEN;
-    return size;
+    return d->compressedSize;
 }
 
 void QuaZipFileInfo::setCompressedSize(qint64 size)
@@ -541,8 +540,6 @@ void QuaZipFileInfo::setCompressedSize(qint64 size)
     if (compressedSize() == size)
         return;
 
-    if (isRaw() && (d.constData()->zipOptions & Encryption))
-        size -= RAND_HEAD_LEN;
     d->compressedSize = size;
 }
 
@@ -573,6 +570,7 @@ void QuaZipFileInfo::setPassword(QByteArray *value)
 {
     if (value == nullptr || value->isNull()) {
         d->zipOptions &= ~Encryption;
+        clearCryptKeys();
         return;
     }
 
@@ -695,8 +693,28 @@ const QuaZipKeysGenerator::Keys &QuaZipFileInfo::cryptKeys() const
 
 void QuaZipFileInfo::setCryptKeys(const QuaZipKeysGenerator::Keys &keys)
 {
+    if (hasCryptKeys() && isEncrypted() &&
+        0 == memcmp(keys, cryptKeys(), sizeof(QuaZipKeysGenerator::Keys))) {
+        return;
+    }
+
     memcpy(d->cryptKeys, keys, sizeof(QuaZipKeysGenerator::Keys));
     d->zipOptions |= Encryption;
+    d->flags |= HAS_KEYS_FLAG;
+}
+
+bool QuaZipFileInfo::hasCryptKeys() const
+{
+    return 0 != (d->flags & HAS_KEYS_FLAG);
+}
+
+void QuaZipFileInfo::clearCryptKeys()
+{
+    if (0 == (d.constData()->flags & HAS_KEYS_FLAG))
+        return;
+
+    memset(d->cryptKeys, 0, sizeof(QuaZipKeysGenerator::Keys));
+    d->flags &= ~HAS_KEYS_FLAG;
 }
 
 quint16 QuaZipFileInfo::compressionMethod() const
@@ -727,6 +745,52 @@ void QuaZipFileInfo::setCompressionStrategy(quint16 value)
 
 int QuaZipFileInfo::compressionLevel() const
 {
+    return d->compressionLevel;
+}
+
+void QuaZipFileInfo::setCompressionLevel(int level)
+{
+    auto originalMethod = d.constData()->compressionMethod;
+    auto originalOptions = d.constData()->zipOptions;
+
+    auto method = originalMethod;
+    auto zipOptions = originalOptions;
+
+    zipOptions &= ~CompressionFlags;
+    if (method == Z_NO_COMPRESSION || method == Z_DEFLATED) {
+        switch (level) {
+        case Z_NO_COMPRESSION:
+            method = Z_NO_COMPRESSION;
+            break;
+
+        case Z_BEST_SPEED:
+            method = Z_DEFLATED;
+            zipOptions |= SuperFastCompression;
+            break;
+
+        default:
+            method = Z_DEFLATED;
+            if (level >= Z_BEST_COMPRESSION) {
+                zipOptions |= MaximumCompression;
+            } else if (level > 0 && level < 5) {
+                zipOptions |= FastCompression;
+            }
+            break;
+        }
+    }
+
+    if (method == originalMethod && zipOptions == originalOptions &&
+        compressionLevel() == level) {
+        return;
+    }
+
+    d->compressionLevel = level;
+    d->compressionMethod = method;
+    d->zipOptions = zipOptions;
+}
+
+int QuaZipFileInfo::detectCompressionLevel() const
+{
     switch (d->compressionMethod) {
     case Z_DEFLATED:
         switch (d->zipOptions & CompressionFlags) {
@@ -751,38 +815,6 @@ int QuaZipFileInfo::compressionLevel() const
     return Z_DEFAULT_COMPRESSION;
 }
 
-void QuaZipFileInfo::setCompressionLevel(int level)
-{
-    if (compressionLevel() == level)
-        return;
-
-    d->zipOptions &= ~CompressionFlags;
-    switch (level) {
-    case Z_NO_COMPRESSION:
-        d->compressionMethod = Z_NO_COMPRESSION;
-        break;
-
-    case Z_BEST_SPEED:
-        d->compressionMethod = Z_DEFLATED;
-        d->zipOptions |= SuperFastCompression;
-        break;
-
-    case Z_BEST_COMPRESSION:
-        d->compressionMethod = Z_DEFLATED;
-        d->zipOptions |= MaximumCompression;
-        break;
-
-    default:
-        d->compressionMethod = Z_DEFLATED;
-        if (level >= Z_BEST_COMPRESSION) {
-            d->zipOptions |= MaximumCompression;
-        } else if (level > 0 && level < 5) {
-            d->zipOptions |= FastCompression;
-        }
-        break;
-    }
-}
-
 QuaZipFileInfo::ZipOptions QuaZipFileInfo::zipOptions() const
 {
     return d->zipOptions;
@@ -798,14 +830,7 @@ void QuaZipFileInfo::setZipOptions(ZipOptions options)
 
 bool QuaZipFileInfo::isRaw() const
 {
-    switch (d->compressionMethod) {
-    case Z_DEFLATED:
-    case Z_NO_COMPRESSION:
-        return 0 != (d->flags & RAW_FLAG) ||
-            0 != (d->zipOptions & ~CompatibleOptions);
-    }
-
-    return true;
+    return 0 != (d->flags & RAW_FLAG);
 }
 
 void QuaZipFileInfo::setIsRaw(bool value)
@@ -1368,8 +1393,9 @@ QuaZipFileInfo::Private::Private()
     , compressionStrategy(Z_DEFAULT_STRATEGY)
     , zipVersionNeeded(10)
     , diskNumber(0)
-    , uncompressedSize(-1)
-    , compressedSize(-1)
+    , compressionLevel(Z_DEFAULT_COMPRESSION)
+    , uncompressedSize(0)
+    , compressedSize(0)
 {
     memset(cryptKeys, 0, sizeof(cryptKeys));
 }
@@ -1386,6 +1412,7 @@ QuaZipFileInfo::Private::Private(const Private &other)
     , compressionStrategy(other.compressionStrategy) //8
     , zipVersionNeeded(other.zipVersionNeeded) //9
     , diskNumber(other.diskNumber) //10
+    , compressionLevel(other.compressionLevel) //22
     , uncompressedSize(other.uncompressedSize) //11
     , compressedSize(other.compressedSize) //12
     , createTime(other.createTime) //13
@@ -1423,6 +1450,7 @@ bool QuaZipFileInfo::Private::equals(const Private &other) const
         compressionStrategy == other.compressionStrategy && //7
         externalAttributes == other.externalAttributes && //8
         crc == other.crc && //9
+        compressionLevel == other.compressionLevel && //22
         diskNumber == other.diskNumber && //10
         uncompressedSize == other.uncompressedSize && //11
         compressedSize == other.compressedSize && //12

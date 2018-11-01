@@ -1125,30 +1125,33 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     uInt size_comment;
     uInt i;
     int err = ZIP_OK;
-    uLong version_to_extract;
 
-#ifdef NOCRYPT
-    if (password != NULL || keys != NULL)
-        return ZIP_PARAMERROR;
-#else
     if (password != NULL && keys != NULL)
         return ZIP_PARAMERROR;
-#endif
 
     if (file == NULL)
         return ZIP_PARAMERROR;
 
+    if (zipfi == NULL)
+        return ZIP_PARAMERROR;
+
     int raw = zipfi->raw;
+    int method = zipfi->method;
     if (!raw)
     {
+#ifdef NOCRYPT
+        if (password != NULL || keys != NULL)
+            return ZIP_PARAMERROR;
+#endif
 #ifdef HAVE_BZIP2
-        if ((method!=0) && (method!=Z_DEFLATED) && (method!=Z_BZIP2ED))
-          return ZIP_PARAMERROR;
+        if (method!=Z_NO_COMPRESSION && method!=Z_DEFLATED && method!=Z_BZIP2ED)
+            return ZIP_PARAMERROR;
 #else
-        if (zipfi->method!=0 && zipfi->method!=Z_DEFLATED)
-          return ZIP_PARAMERROR;
+        if (method!=Z_NO_COMPRESSION && method!=Z_DEFLATED)
+            return ZIP_PARAMERROR;
 #endif
     }
+    int version_to_extract = zipfi->versionNeeded;
 
     zi = (zip64_internal*)file;
 
@@ -1159,15 +1162,18 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
             return err;
     }
 
-    if (zipfi->method == 0
-            && (zipfi->level == 0 || (zi->flags & ZIP_WRITE_DATA_DESCRIPTOR) == 0)
-            && (zi->flags & ZIP_SEQUENTIAL) == 0)
+    if (!raw || version_to_extract < 10)
     {
-        version_to_extract = 10;
-    }
-    else
-    {
-        version_to_extract = 20;
+        if (zipfi->method == 0
+                && (zipfi->level == 0 || (zi->flags & ZIP_WRITE_DATA_DESCRIPTOR) == 0)
+                && (zi->flags & ZIP_SEQUENTIAL) == 0)
+        {
+            version_to_extract = 10;
+        }
+        else
+        {
+            version_to_extract = 20;
+        }
     }
 
     const char* filename = zipfi->filename;
@@ -1182,33 +1188,30 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
 
     size_filename = (uInt)strlen(filename);
 
-    if (zipfi == NULL)
-        zi->ci.dosDate = 0;
+    if (zipfi->dosDate != 0)
+        zi->ci.dosDate = zipfi->dosDate;
     else
-    {
-        if (zipfi->dosDate != 0)
-            zi->ci.dosDate = zipfi->dosDate;
-        else
-          zi->ci.dosDate = zip64local_TmzDateToDosDate(&zipfi->tmz_date);
-    }
+      zi->ci.dosDate = zip64local_TmzDateToDosDate(&zipfi->tmz_date);
 
     int level = zipfi->level;
     zi->ci.flag = zipfi->flag;
+    zi->ci.flag &= 6;
     if ((level==8) || (level==9))
       zi->ci.flag |= 2;
-    if (level==2)
+    if (level > 1 && level < 5)
       zi->ci.flag |= 4;
     if (level==1)
       zi->ci.flag |= 6;
-    if (password != NULL || keys != NULL)
+    if (!raw && (password != NULL || keys != NULL))
       zi->ci.flag |= 1;
+    int encrypt = zi->ci.flag & 1;
     if (version_to_extract >= 20
             && ((zi->flags & ZIP_WRITE_DATA_DESCRIPTOR) != 0
                 || (zi->flags & ZIP_SEQUENTIAL) != 0))
       zi->ci.flag |= 8;
 
     zi->ci.crc32 = raw ? zipfi->crc : 0;
-    zi->ci.method = zipfi->method;
+    zi->ci.method = method;
     zi->ci.encrypt = 0;
     zi->ci.stream_initialised = 0;
     zi->ci.pos_in_buffered_data = 0;
@@ -1240,15 +1243,9 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     zip64local_putValue_inmemory(zi->ci.central_header+32,(uLong)size_comment,2);
     zip64local_putValue_inmemory(zi->ci.central_header+34,(uLong)0,2); /*disk nm start*/
 
-    if (zipfi==NULL)
-        zip64local_putValue_inmemory(zi->ci.central_header+36,(uLong)0,2);
-    else
-        zip64local_putValue_inmemory(zi->ci.central_header+36,(uLong)zipfi->internal_fa,2);
+    zip64local_putValue_inmemory(zi->ci.central_header+36,(uLong)zipfi->internal_fa,2);
 
-    if (zipfi==NULL)
-        zip64local_putValue_inmemory(zi->ci.central_header+38,(uLong)0,4);
-    else
-        zip64local_putValue_inmemory(zi->ci.central_header+38,(uLong)zipfi->external_fa,4);
+    zip64local_putValue_inmemory(zi->ci.central_header+38,(uLong)zipfi->external_fa,4);
 
     if(zi->ci.pos_local_header >= 0xffffffff)
       zip64local_putValue_inmemory(zi->ci.central_header+42,(uLong)0xffffffff,4);
@@ -1276,16 +1273,6 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     err = Write_LocalFileHeader(zi, filename, zipfi->size_extrafield_local,
                                 zipfi->extrafield_local, version_to_extract);
 
-#ifdef HAVE_BZIP2
-    zi->ci.bstream.avail_in = (uInt)0;
-    zi->ci.bstream.avail_out = (uInt)Z_BUFSIZE;
-    zi->ci.bstream.next_out = (char*)zi->ci.buffered_data;
-    zi->ci.bstream.total_in_hi32 = 0;
-    zi->ci.bstream.total_in_lo32 = 0;
-    zi->ci.bstream.total_out_hi32 = 0;
-    zi->ci.bstream.total_out_lo32 = 0;
-#endif
-
     zi->ci.stream.avail_in = (uInt)0;
     zi->ci.stream.avail_out = (uInt)Z_BUFSIZE;
     zi->ci.stream.next_out = zi->ci.buffered_data;
@@ -1294,43 +1281,48 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     zi->ci.stream.data_type = Z_BINARY;
     zi->ci.stream_initialised =  0;
 
-
-#ifdef HAVE_BZIP2
-    if (err==ZIP_OK && (zi->ci.method == Z_DEFLATED || zi->ci.method == Z_BZIP2ED) && !raw)
-#else
-    if (err==ZIP_OK && zi->ci.method == Z_DEFLATED && !raw)
-#endif
+    if (err==ZIP_OK && !raw)
     {
-        if(zi->ci.method == Z_DEFLATED)
+        switch (zi->ci.method)
         {
-          zi->ci.stream.zalloc = (alloc_func)0;
-          zi->ci.stream.zfree = (free_func)0;
-          zi->ci.stream.opaque = (voidpf)0;
+        case Z_NO_COMPRESSION:
+            break;
+        case Z_DEFLATED:
+            zi->ci.stream.zalloc = (alloc_func)0;
+            zi->ci.stream.zfree = (free_func)0;
+            zi->ci.stream.opaque = (voidpf)0;
 
-          int windowBits = zipfi->windowBits;
-          if (windowBits>0)
-              windowBits = -windowBits;
+            int windowBits = zipfi->windowBits;
+            if (windowBits>0)
+                windowBits = -windowBits;
 
-          err = deflateInit2(&zi->ci.stream, level, Z_DEFLATED,
-                             windowBits, zipfi->memLevel, zipfi->strategy);
+            err = deflateInit2(&zi->ci.stream, level, Z_DEFLATED,
+                               windowBits, zipfi->memLevel, zipfi->strategy);
 
-          if (err==Z_OK)
-              zi->ci.stream_initialised = Z_DEFLATED;
-        }
-        else if(zi->ci.method == Z_BZIP2ED)
-        {
+            if (err==Z_OK)
+                zi->ci.stream_initialised = Z_DEFLATED;
+            break;
+        case Z_BZIP2ED:
 #ifdef HAVE_BZIP2
+            zi->ci.bstream.avail_in = (uInt)0;
+            zi->ci.bstream.avail_out = (uInt)Z_BUFSIZE;
+            zi->ci.bstream.next_out = (char*)zi->ci.buffered_data;
+            zi->ci.bstream.total_in_hi32 = 0;
+            zi->ci.bstream.total_in_lo32 = 0;
+            zi->ci.bstream.total_out_hi32 = 0;
+            zi->ci.bstream.total_out_lo32 = 0;
             /* Init BZip stuff here */
-          zi->ci.bstream.bzalloc = 0;
-          zi->ci.bstream.bzfree = 0;
-          zi->ci.bstream.opaque = (voidpf)0;
+            zi->ci.bstream.bzalloc = 0;
+            zi->ci.bstream.bzfree = 0;
+            zi->ci.bstream.opaque = (voidpf)0;
 
-          err = BZ2_bzCompressInit(&zi->ci.bstream, level, 0,35);
-          if(err == BZ_OK)
-            zi->ci.stream_initialised = Z_BZIP2ED;
+            err = BZ2_bzCompressInit(&zi->ci.bstream, level, 0,35);
+            if(err == BZ_OK)
+                zi->ci.stream_initialised = Z_BZIP2ED;
+#else
+            return ZIP_PARAMERROR;
 #endif
         }
-
     }
 
     zi->ci.crypt_header_size = 0;
@@ -1358,6 +1350,11 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
             err = ZIP_ERRNO;
     }
 #endif
+
+    if (!raw && encrypt && !zi->ci.encrypt)
+    {
+        err = ZIP_PARAMERROR;
+    }
 
     if (err==Z_OK)
         zi->in_opened_file_inzip = 1;
@@ -1388,15 +1385,15 @@ local int zip64FlushWriteBuffer(zip64_internal* zi)
 {
     int err=ZIP_OK;
 
+#ifndef NOCRYPT
     if (zi->ci.encrypt != 0)
     {
-#ifndef NOCRYPT
         uInt i;
         int t;
         for (i=0;i<zi->ci.pos_in_buffered_data;i++)
             zi->ci.buffered_data[i] = (Byte) zencode(zi->ci.keys, zi->ci.pcrc_32_tab, zi->ci.buffered_data[i],t);
-#endif
     }
+#endif
 
     if (ZWRITE64(zi->z_filefunc,zi->filestream,zi->ci.buffered_data,zi->ci.pos_in_buffered_data) != zi->ci.pos_in_buffered_data)
       err = ZIP_ERRNO;
@@ -1440,45 +1437,42 @@ extern int ZEXPORT zipWriteInFileInZip (zipFile file,const void* buf,unsigned in
     if (zi->in_opened_file_inzip == 0)
         return ZIP_PARAMERROR;
 
-    if (!zi->ci.raw){
+    int raw = zi->ci.raw;
+    if (!raw){
         const Bytef*charBuf = (const Bytef*)buf;
         zi->ci.crc32 = crc32(zi->ci.crc32,charBuf,len);
     }
 
-
 #ifdef HAVE_BZIP2
-    if(zi->ci.method == Z_BZIP2ED && (!zi->ci.raw))
+    if(zi->ci.method == Z_BZIP2ED && !raw)
     {
-      zi->ci.bstream.next_in = (void*)buf;
-      zi->ci.bstream.avail_in = len;
-      err = BZ_RUN_OK;
+        zi->ci.bstream.next_in = (void*)buf;
+        zi->ci.bstream.avail_in = len;
+        err = BZ_RUN_OK;
 
-      while ((err==BZ_RUN_OK) && (zi->ci.bstream.avail_in>0))
-      {
-        if (zi->ci.bstream.avail_out == 0)
+        while ((err==BZ_RUN_OK) && (zi->ci.bstream.avail_in>0))
         {
-          if (zip64FlushWriteBuffer(zi) == ZIP_ERRNO)
-            err = ZIP_ERRNO;
-          zi->ci.bstream.avail_out = (uInt)Z_BUFSIZE;
-          zi->ci.bstream.next_out = (char*)zi->ci.buffered_data;
+            if (zi->ci.bstream.avail_out == 0)
+            {
+                if (zip64FlushWriteBuffer(zi) == ZIP_ERRNO)
+                    err = ZIP_ERRNO;
+                zi->ci.bstream.avail_out = (uInt)Z_BUFSIZE;
+                zi->ci.bstream.next_out = (char*)zi->ci.buffered_data;
+            }
+
+
+            if(err != BZ_RUN_OK)
+              break;
+
+            uLong uTotalOutBefore_lo = zi->ci.bstream.total_out_lo32;
+            /*          uLong uTotalOutBefore_hi = zi->ci.bstream.total_out_hi32; */
+            err=BZ2_bzCompress(&zi->ci.bstream,  BZ_RUN);
+
+            zi->ci.pos_in_buffered_data += (uInt)(zi->ci.bstream.total_out_lo32 - uTotalOutBefore_lo);
         }
 
-
-        if(err != BZ_RUN_OK)
-          break;
-
-        if ((zi->ci.method == Z_BZIP2ED) && (!zi->ci.raw))
-        {
-          uLong uTotalOutBefore_lo = zi->ci.bstream.total_out_lo32;
-/*          uLong uTotalOutBefore_hi = zi->ci.bstream.total_out_hi32; */
-          err=BZ2_bzCompress(&zi->ci.bstream,  BZ_RUN);
-
-          zi->ci.pos_in_buffered_data += (uInt)(zi->ci.bstream.total_out_lo32 - uTotalOutBefore_lo) ;
-        }
-      }
-
-      if(err == BZ_RUN_OK)
-        err = ZIP_OK;
+        if(err == BZ_RUN_OK)
+            err = ZIP_OK;
     }
     else
 #endif
@@ -1500,7 +1494,7 @@ extern int ZEXPORT zipWriteInFileInZip (zipFile file,const void* buf,unsigned in
           if(err != ZIP_OK)
               break;
 
-          if ((zi->ci.method == Z_DEFLATED) && (!zi->ci.raw))
+          if (zi->ci.method == Z_DEFLATED && !raw)
           {
               uInt uAvailOutBefore = zi->ci.stream.avail_out;
               err=deflate(&zi->ci.stream,  Z_NO_FLUSH);
@@ -1547,84 +1541,96 @@ extern int ZEXPORT zipCloseFileInZip (zipFile file)
         return ZIP_PARAMERROR;
     zi->ci.stream.avail_in = 0;
 
-    if ((zi->ci.method == Z_DEFLATED) && (!zi->ci.raw))
-                {
-                        while (err==ZIP_OK)
-                        {
-                                uLong uAvailOutBefore;
-                                if (zi->ci.stream.avail_out == 0)
-                                {
-                                        if (zip64FlushWriteBuffer(zi) == ZIP_ERRNO)
-                                                err = ZIP_ERRNO;
-                                        zi->ci.stream.avail_out = (uInt)Z_BUFSIZE;
-                                        zi->ci.stream.next_out = zi->ci.buffered_data;
-                                }
-                                uAvailOutBefore = zi->ci.stream.avail_out;
-                                err=deflate(&zi->ci.stream,  Z_FINISH);
-                                zi->ci.pos_in_buffered_data += uAvailOutBefore - zi->ci.stream.avail_out;
-                        }
-                }
-    else if ((zi->ci.method == Z_BZIP2ED) && (!zi->ci.raw))
+    int raw = zi->ci.raw;
+
+    if (!raw)
     {
-#ifdef HAVE_BZIP2
-      err = BZ_FINISH_OK;
-      while (err==BZ_FINISH_OK)
-      {
-        uLong uTotalOutBefore;
-        if (zi->ci.bstream.avail_out == 0)
+        switch (zi->ci.method)
         {
-          if (zip64FlushWriteBuffer(zi) == ZIP_ERRNO)
-            err = ZIP_ERRNO;
-          zi->ci.bstream.avail_out = (uInt)Z_BUFSIZE;
-          zi->ci.bstream.next_out = (char*)zi->ci.buffered_data;
-        }
-        uTotalOutBefore = zi->ci.bstream.total_out_lo32;
-        err=BZ2_bzCompress(&zi->ci.bstream,  BZ_FINISH);
-        if(err == BZ_STREAM_END)
-          err = Z_STREAM_END;
+        case Z_DEFLATED:
+            while (err==ZIP_OK)
+            {
+                uLong uAvailOutBefore;
+                if (zi->ci.stream.avail_out == 0)
+                {
+                    if (zip64FlushWriteBuffer(zi) == ZIP_ERRNO)
+                        err = ZIP_ERRNO;
+                    zi->ci.stream.avail_out = (uInt)Z_BUFSIZE;
+                    zi->ci.stream.next_out = zi->ci.buffered_data;
+                }
+                uAvailOutBefore = zi->ci.stream.avail_out;
+                err=deflate(&zi->ci.stream,  Z_FINISH);
+                zi->ci.pos_in_buffered_data += uAvailOutBefore - zi->ci.stream.avail_out;
+            }
+            break;
+        case Z_BZIP2ED:
+#ifdef HAVE_BZIP2
+            err = BZ_FINISH_OK;
+            while (err==BZ_FINISH_OK)
+            {
+                uLong uTotalOutBefore;
+                if (zi->ci.bstream.avail_out == 0)
+                {
+                    if (zip64FlushWriteBuffer(zi) == ZIP_ERRNO)
+                        err = ZIP_ERRNO;
+                    zi->ci.bstream.avail_out = (uInt)Z_BUFSIZE;
+                    zi->ci.bstream.next_out = (char*)zi->ci.buffered_data;
+                }
+                uTotalOutBefore = zi->ci.bstream.total_out_lo32;
+                err=BZ2_bzCompress(&zi->ci.bstream,  BZ_FINISH);
+                if(err == BZ_STREAM_END)
+                    err = Z_STREAM_END;
 
-        zi->ci.pos_in_buffered_data += (uInt)(zi->ci.bstream.total_out_lo32 - uTotalOutBefore);
-      }
+                zi->ci.pos_in_buffered_data += (uInt)(zi->ci.bstream.total_out_lo32 - uTotalOutBefore);
+            }
 
-      if(err == BZ_FINISH_OK)
-        err = ZIP_OK;
+            if(err == BZ_FINISH_OK)
+            err = ZIP_OK;
 #endif
+            break;
+        }
     }
 
     if (err==Z_STREAM_END)
         err=ZIP_OK; /* this is normal */
 
     if ((zi->ci.pos_in_buffered_data>0) && (err==ZIP_OK))
-                {
+    {
         if (zip64FlushWriteBuffer(zi)==ZIP_ERRNO)
             err = ZIP_ERRNO;
-                }
+    }
 
-    if ((zi->ci.method == Z_DEFLATED) && (!zi->ci.raw))
+    if (!raw)
     {
-        int tmp_err = deflateEnd(&zi->ci.stream);
-        if (err == ZIP_OK)
-            err = tmp_err;
-        zi->ci.stream_initialised = 0;
-    }
+        switch (zi->ci.method)
+        {
+        case Z_DEFLATED:
+        {
+            int tmp_err = deflateEnd(&zi->ci.stream);
+            if (err == ZIP_OK)
+                err = tmp_err;
+            zi->ci.stream_initialised = 0;
+            break;
+        }
+        case Z_BZIP2ED:
+        {
 #ifdef HAVE_BZIP2
-    else if((zi->ci.method == Z_BZIP2ED) && (!zi->ci.raw))
-    {
-      int tmperr = BZ2_bzCompressEnd(&zi->ci.bstream);
-                        if (err==ZIP_OK)
-                                err = tmperr;
-                        zi->ci.stream_initialised = 0;
-    }
+            int tmperr = BZ2_bzCompressEnd(&zi->ci.bstream);
+                            if (err==ZIP_OK)
+                                    err = tmperr;
+                            zi->ci.stream_initialised = 0;
 #endif
+            break;
+        }
+        }
+    }
 
     uLong crc32 = (uLong)zi->ci.crc32;
     ZPOS64_T uncompressed_size = zi->ci.totalUncompressedData;
 
     compressed_size = zi->ci.totalCompressedData;
-
-#    ifndef NOCRYPT
     compressed_size += zi->ci.crypt_header_size;
-#    endif
+    zi->ci.totalCompressedData = compressed_size;
 
     /* update Current Item crc and sizes, */
     if(compressed_size >= 0xffffffff || uncompressed_size >= 0xffffffff || zi->ci.pos_local_header >= 0xffffffff)

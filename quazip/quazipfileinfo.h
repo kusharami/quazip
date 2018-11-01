@@ -173,6 +173,8 @@ public:
     int compressionLevel() const;
     void setCompressionLevel(int level);
 
+    int detectCompressionLevel() const;
+
     ZipOptions zipOptions() const;
     void setZipOptions(ZipOptions options);
 
@@ -220,6 +222,9 @@ public:
 
     const QuaZipKeysGenerator::Keys &cryptKeys() const;
     void setCryptKeys(const QuaZipKeysGenerator::Keys &keys);
+
+    bool hasCryptKeys() const;
+    void clearCryptKeys();
 
     /// The password will be erased from memory after
     /// cryptHeader and cryptKeys generation

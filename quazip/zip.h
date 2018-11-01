@@ -119,6 +119,7 @@ typedef struct zip_fileinfo_s
     int         memLevel;
     int         strategy;
     int         versionMadeBy;
+    int         versionNeeded;
     int         zip64;
     uLong       crc;
     ZPOS64_T    uncompressed_size;

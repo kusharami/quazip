@@ -340,15 +340,18 @@ public:
     /// Returns \c true in read mode when ZIP archive is sequential.
     /// Returns \c false in read mode when ZIP archive is not sequential.
     virtual bool isSequential() const override;
-    /// Returns true if the end of the compressed stream is reached.
+    /// @returns true if no bytes available to read.
+    /// @returns true when writing
+    /// @returns true when not open
     virtual bool atEnd() const override;
-    /// Returns the number of the bytes buffered.
+    /// Returns the number of bytes left for reading.
     virtual qint64 bytesAvailable() const override;
     /// Returns file size.
-    /** Returns uncompressed size if the file is open for reading.
+    /** Returns uncompressedSize() if the file is open for reading.
      * Returns number of uncompressed bytes written if it is open for writing.
-     * Returns compressed size if isRaw().
-     * Returns -1 on error, call getZipError() to get error code.
+     * When password not provided for encrypted raw data returns compressedSize()
+     * When password provided for encrypted raw data returns
+     * (compressedSize() - RAND_HEAD_LEN
      * \sa uncompressedSize(), compressedSize()
      **/
     virtual qint64 size() const override;
@@ -357,15 +360,13 @@ public:
      * \note When open for reading returns compressed size stored in archive.
      * \note When open for writing returns how much compressed bytes
      * was written in archive so far
-     * Returns -1 on error, call getZipError() to get error code.
      **/
     qint64 compressedSize() const;
     /// Returns uncompressed file size.
     /**
      * \note When open for reading returns uncompressed size stored in archive.
-     * \noteWhen open for writing returns how much original data
+     * \note When open for writing returns how much original data
      * was compressed so far
-     * Returns -1 on error, call getZipError() to get error code.
      **/
     qint64 uncompressedSize() const;
 

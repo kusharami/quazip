@@ -1,8 +1,8 @@
 #ifndef QUAZIP_GLOBAL_H
 #define QUAZIP_GLOBAL_H
-
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -46,12 +46,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #define QUAZIP_EXPORT Q_DECL_IMPORT
 #endif
 #endif // QUAZIP_STATIC
-
-#ifdef __GNUC__
-#define UNUSED __attribute__((__unused__))
-#else
-#define UNUSED
-#endif
 
 #ifndef Q_FALLTHROUGH
 #define Q_FALLTHROUGH()

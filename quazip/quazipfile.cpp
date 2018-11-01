@@ -242,8 +242,11 @@ bool QuaZipFile::open(OpenMode mode)
         mode = p->initRead(mode);
     } else if (mode & WriteOnly) {
         mode = p->initWrite(mode);
+    } else {
+        Q_UNREACHABLE();
     }
 
+    p->fetchFileInfo = true; // for next initFileInfo()
     if (mode == NotOpen)
         return false;
 
@@ -259,7 +262,7 @@ void QuaZipFile::setPassword(QString *password)
     }
 
     if (!password || password->isNull()) {
-        p->fileInfo.setIsEncrypted(false);
+        p->fileInfo.setPassword(nullptr);
         return;
     }
 
@@ -298,8 +301,18 @@ qint64 QuaZipFile::bytesAvailable() const
 
 qint64 QuaZipFile::size() const
 {
-    if (isReadable())
-        return isRaw() ? compressedSize() : uncompressedSize();
+    if (isReadable()) {
+        const auto &fileInfo = p->fileInfo;
+        if (isRaw()) {
+            qint64 compressedSize = fileInfo.compressedSize();
+            if (fileInfo.isEncrypted() && fileInfo.hasCryptKeys()) {
+                compressedSize -= RAND_HEAD_LEN;
+            }
+            return compressedSize;
+        }
+
+        return fileInfo.uncompressedSize();
+    }
 
     if (isWritable()) {
         return qint64(p->writePos);
@@ -320,11 +333,10 @@ qint64 QuaZipFile::compressedSize() const
 
 qint64 QuaZipFile::uncompressedSize() const
 {
-    auto &fileInfo = this->fileInfo();
-    if (isWritable() && !isRaw())
+    if (isWritable() && !p->fileInfo.isRaw())
         return qint64(p->writePos);
 
-    return fileInfo.uncompressedSize();
+    return fileInfo().uncompressedSize();
 }
 
 QDateTime QuaZipFile::creationTime() const
@@ -419,7 +431,12 @@ void QuaZipFile::setFileInfo(const QuaZipFileInfo &info)
         return;
     }
 
+    if (info == p->fileInfo)
+        return;
+
+    p->fetchFileInfo = true;
     p->fileInfo = info;
+    p->useFilePath = info.filePath();
 }
 
 void QuaZipFile::close()
@@ -431,14 +448,21 @@ void QuaZipFile::close()
     int error = ZIP_OK;
     if (isReadable())
         error = unzCloseCurrentFile(p->zip->getUnzFile());
-    else if (isWritable())
-        error = zipCloseFileInZip(p->zip->getZipFile());
+    else if (isWritable()) {
+        auto zipFile = p->zip->getZipFile();
+        error = zipCloseFileInZip(zipFile);
+        if (!p->fileInfo.isRaw()) {
+            p->fileInfo.setCompressedSize(zipTotalCompressedBytes(zipFile));
+            p->fileInfo.setUncompressedSize(p->writePos);
+        }
+    }
 
     if (p->internal) {
         p->zip->close();
         error = p->zip->zipError();
     }
 
+    p->fetchFileInfo = true;
     p->seekBuffer.clear();
     QIODevice::close();
     if (error != ZIP_OK) {
@@ -672,16 +696,20 @@ QuaZipFilePrivate::~QuaZipFilePrivate()
 
 bool QuaZipFilePrivate::initFileInfo()
 {
-    if (fetchFileInfo) {
+    if (fetchFileInfo && zip && zip->openMode() == QuaZip::mdUnzip) {
+        fetchFileInfo = false;
         if (!useFilePath.isEmpty()) {
             zip->setCurrentFile(useFilePath, caseSensitivity);
             setZipError(zip->zipError());
             if (zipError != UNZ_OK)
                 return false;
+        } else {
+            if (!zip->hasCurrentFile())
+                setZipError(zip->goToFirstFile());
         }
+
         zip->getCurrentFileInfo(fileInfo);
         setZipError(zip->zipError());
-        fetchFileInfo = false;
 
         if (fileInfo.uncompressedSize() < 0)
             setZipError(UNZ_BADZIPFILE);
@@ -729,7 +757,8 @@ QIODevice::OpenMode QuaZipFilePrivate::initRead(QIODevice::OpenMode mode)
         }
 
         setZipError(unzOpenCurrentFile4(zip->getUnzFile(), NULL, NULL,
-            int(fileInfo.isRaw()), fileInfo.cryptKeys()));
+            int(fileInfo.isRaw()),
+            fileInfo.hasCryptKeys() ? fileInfo.cryptKeys() : NULL));
 
         if (zipError == UNZ_OK) {
             return mode;
@@ -796,8 +825,8 @@ QIODevice::OpenMode QuaZipFilePrivate::initWrite(QIODevice::OpenMode mode)
         info_z.extrafield_global = localExtra.data();
         info_z.size_extrafield_global = uInt(localExtra.length());
 
-        setZipError(zipOpenNewFileInZipKeys(
-            zip->getZipFile(), &info_z, fileInfo.cryptKeys()));
+        setZipError(zipOpenNewFileInZipKeys(zip->getZipFile(), &info_z,
+            fileInfo.hasCryptKeys() ? fileInfo.cryptKeys() : NULL));
 
         if (zipError == ZIP_OK) {
             writePos = 0;
