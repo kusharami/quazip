@@ -1126,6 +1126,10 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     uInt i;
     int err = ZIP_OK;
 
+    const char* filename = zipfi->filename;
+    if (filename==NULL || filename[0] == 0)
+        return ZIP_PARAMERROR;
+
     if (password != NULL && keys != NULL)
         return ZIP_PARAMERROR;
 
@@ -1151,7 +1155,6 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
             return ZIP_PARAMERROR;
 #endif
     }
-    int version_to_extract = zipfi->versionNeeded;
 
     zi = (zip64_internal*)file;
 
@@ -1162,7 +1165,8 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
             return err;
     }
 
-    if (!raw || version_to_extract < 10)
+    int version_to_extract = zipfi->versionNeeded;
+    if (!raw || version_to_extract < 20)
     {
         if (zipfi->method == 0
                 && (zipfi->level == 0 || (zi->flags & ZIP_WRITE_DATA_DESCRIPTOR) == 0)
@@ -1176,10 +1180,7 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
         }
     }
 
-    const char* filename = zipfi->filename;
     const char* comment = zipfi->comment;
-    if (filename==NULL)
-        filename="-";
 
     if (comment==NULL)
         size_comment = 0;
@@ -1198,13 +1199,15 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     zi->ci.flag &= 6;
     if (method == Z_DEFLATED)
     {
-        if (level > 9)
-            level = 9;
-        if ((level==8) || (level==9))
+        if (level < 0)
+            level = Z_DEFAULT_COMPRESSION;
+        if (level > Z_BEST_COMPRESSION)
+            level = Z_BEST_COMPRESSION;
+        if ((level==Z_BEST_COMPRESSION-1) || (level==Z_BEST_COMPRESSION))
           zi->ci.flag |= 2;
-        if (level > 1 && level < 5)
+        if (level > Z_BEST_SPEED && level <= Z_BEST_COMPRESSION/2)
           zi->ci.flag |= 4;
-        if (level==1)
+        if (level==Z_BEST_SPEED||level==Z_NO_COMPRESSION)
           zi->ci.flag |= 6;
     }
     if (!raw && (password != NULL || keys != NULL))

@@ -185,7 +185,7 @@ extern zipFile ZEXPORT zipOpen3 (voidpf file,
 
 /*
   Open a file in the ZIP for writing.
-  filename : the filename in zip (if NULL, '-' without quote will be used
+  filename : the filename in zip
   *zipfi contain supplemental information
   if extrafield_local!=NULL and size_extrafield_local>0, extrafield_local
     contains the extrafield data the the local header
