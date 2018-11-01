@@ -28,8 +28,16 @@
 */
 
 #include "quazip_global.h"
-#include "zlib.h"
-#include <ctime>
+#include <zlib.h>
+#include <time.h>
+
+#ifndef MINIZIP_INLINE
+#ifdef _MSC_VER
+#define MINIZIP_INLINE __inline
+#else
+#define MINIZIP_INLINE inline
+#endif
+#endif
 
 #if ZLIB_VERNUM < 0x1270
 typedef uLong z_crc_t;
@@ -41,7 +49,7 @@ typedef uLong z_crc_t;
 /***********************************************************************
  * Return the next byte in the pseudo-random sequence
  */
-inline int decrypt_byte(unsigned long *pkeys)
+MINIZIP_INLINE int decrypt_byte(unsigned long *pkeys)
 {
     unsigned temp;
     temp = ((unsigned) (*(pkeys + 2)) & 0xffff) | 2;
@@ -51,7 +59,7 @@ inline int decrypt_byte(unsigned long *pkeys)
 /***********************************************************************
  * Update the encryption keys with the next byte of plain text
  */
-inline int update_keys(
+MINIZIP_INLINE int update_keys(
     unsigned long *pkeys, const z_crc_t FAR *pcrc_32_tab, int c)
 {
     (*(pkeys + 0)) = CRC32((*(pkeys + 0)), c);
@@ -68,14 +76,14 @@ inline int update_keys(
  * Initialize the encryption keys and the random header according to
  * the given password.
  */
-inline void reset_keys(unsigned long *pkeys)
+MINIZIP_INLINE void reset_keys(unsigned long *pkeys)
 {
     *(pkeys + 0) = 305419896L;
     *(pkeys + 1) = 591751049L;
     *(pkeys + 2) = 878082192L;
 }
 
-inline void update_keys_pwd(
+MINIZIP_INLINE void update_keys_pwd(
     const char *passwd, unsigned long *pkeys, const z_crc_t FAR *pcrc_32_tab)
 {
     while (*passwd != '\0') {
@@ -84,7 +92,7 @@ inline void update_keys_pwd(
     }
 }
 
-inline void init_keys(
+MINIZIP_INLINE void init_keys(
     const char *passwd, unsigned long *pkeys, const z_crc_t FAR *pcrc_32_tab)
 {
     reset_keys(pkeys);
@@ -102,7 +110,7 @@ inline void init_keys(
 #define ZCR_SEED2 3141592654UL /* use PI as default pattern */
 #endif
 
-inline void crypthead_keys(unsigned char *buf, unsigned long *pkeys,
+MINIZIP_INLINE void crypthead_keys(unsigned char *buf, unsigned long *pkeys,
     const z_crc_t FAR *pcrc_32_tab, unsigned long crcForCrypting)
 {
     int n; /* index in random header */
@@ -136,7 +144,7 @@ inline void crypthead_keys(unsigned char *buf, unsigned long *pkeys,
         pkeys, pcrc_32_tab, (int) (crcForCrypting >> 24) & 0xff, t);
 }
 
-inline void crypthead(const char *passwd, unsigned char *buf,
+MINIZIP_INLINE void crypthead(const char *passwd, unsigned char *buf,
     unsigned long *pkeys, const z_crc_t FAR *pcrc_32_tab,
     unsigned long crcForCrypting)
 {

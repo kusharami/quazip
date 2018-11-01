@@ -163,21 +163,22 @@ void TestQuaGzipDevice::read()
 
 void TestQuaGzipDevice::write_data()
 {
-    QADD_COLUMN(QByteArray, fileName);
+    QADD_COLUMN(QString, fileName);
     QADD_COLUMN(QByteArray, data);
-    QADD_COLUMN(QByteArray, comment);
+    QADD_COLUMN(QString, comment);
     QADD_COLUMN(QuaZExtraField::Map, extra);
     QADD_COLUMN(int, compressionLevel);
     QADD_COLUMN(bool, isText);
+    QADD_COLUMN(QByteArray, textCodec);
 
     {
         QuaZExtraField::Map extra;
         extra[QuaZExtraField::Key("T0")] = QByteArrayLiteral("Test me");
 
         QTest::newRow("text")
-            << QByteArray("test.txt") << QByteArray("Test write\ntext file")
+            << QString("test.txt") << QByteArray("Test write\ntext file")
             << QByteArray("This is a text file") << extra << Z_BEST_COMPRESSION
-            << true;
+            << true << QByteArray();
     }
 
     {
@@ -187,24 +188,25 @@ void TestQuaGzipDevice::write_data()
             QByteArrayLiteral("I am not aa, I am bB");
 
         QTest::newRow("binary")
-            << QByteArray("test.bin") << QByteArray(8, 'b') + QByteArray(3, 'c')
-            << QByteArray("This is binary file") << extra << Z_BEST_SPEED
-            << false;
+            << QString("test.bin") << QByteArray(8, 'b') + QByteArray(3, 'c')
+            << QString("This is binary file") << extra << Z_BEST_SPEED << false
+            << QByteArray();
     }
 
-    QTest::newRow("empty") << QByteArray("empty.dat") << QByteArray()
-                           << QByteArray() << QuaZExtraField::Map()
-                           << Z_NO_COMPRESSION << false;
+    QTest::newRow("empty") << QString("empty.dat") << QByteArray() << QString()
+                           << QuaZExtraField::Map() << Z_NO_COMPRESSION << false
+                           << QByteArray();
 }
 
 void TestQuaGzipDevice::write()
 {
-    QFETCH(QByteArray, fileName);
+    QFETCH(QString, fileName);
     QFETCH(QByteArray, data);
-    QFETCH(QByteArray, comment);
+    QFETCH(QString, comment);
     QFETCH(QuaZExtraField::Map, extra);
     QFETCH(int, compressionLevel);
     QFETCH(bool, isText);
+    QFETCH(QByteArray, textCodec);
 
     quint32 savedTime = quint32(QDateTime::currentMSecsSinceEpoch() / 1000);
 
@@ -217,6 +219,10 @@ void TestQuaGzipDevice::write()
     if (isText)
         writeMode |= QIODevice::Text;
 
+    gzDevice.setFileNameCodec(textCodec);
+    QCOMPARE(gzDevice.fileNameCodec(), QTextCodec::codecForName(textCodec));
+    gzDevice.setCommentCodec(textCodec);
+    QCOMPARE(gzDevice.commentCodec(), QTextCodec::codecForName(textCodec));
     gzDevice.setCompressionLevel(compressionLevel);
     QCOMPARE(gzDevice.compressionLevel(), compressionLevel);
     gzDevice.setIODevice(&fileGZ);
@@ -265,8 +271,8 @@ void TestQuaGzipDevice::write()
     expectedUncompressedData = isText ? fromNativeSeparatedText(data) : data;
     QCOMPARE(gzDevice.readAll(), expectedUncompressedData);
     QVERIFY(gzDevice.headerIsProcessed());
-    QCOMPARE(gzDevice.originalFileName(), QString::fromLatin1(fileName));
-    QCOMPARE(gzDevice.comment(), QString::fromLatin1(comment));
+    QCOMPARE(gzDevice.originalFileName(), fileName);
+    QCOMPARE(gzDevice.comment(), comment);
     QCOMPARE(gzDevice.extraFields(), extra);
     QCOMPARE(gzDevice.modificationTime(), savedTime);
 
@@ -314,8 +320,10 @@ void TestQuaGzipDevice::write()
     QCOMPARE(zins.avail_out, uInt(0));
     QCOMPARE(uncompressedData, expectedUncompressedData);
     QVERIFY(gzHeader.done);
-    QCOMPARE(QByteArray(reinterpret_cast<char *>(temp_name)), fileName);
-    QCOMPARE(QByteArray(reinterpret_cast<char *>(temp_comment)), comment);
+    QCOMPARE(QByteArray(reinterpret_cast<char *>(temp_name)),
+        gzDevice.fileNameCodec()->fromUnicode(fileName));
+    QCOMPARE(QByteArray(reinterpret_cast<char *>(temp_comment)),
+        gzDevice.fileNameCodec()->fromUnicode(comment));
     QVERIFY(extra.isEmpty() || gzHeader.extra_len > 0);
     QCOMPARE(gzHeader.text != 0, isText);
     QCOMPARE(gzHeader.time, uLong(savedTime));

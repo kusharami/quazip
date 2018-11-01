@@ -76,12 +76,13 @@ void TestQuaZip::create_data()
     auto unicodeComment =
         QString::fromUtf8("SUPER COMMENT わたしはジップファイル פתח תקווה");
 
-    QTest::newRow("default") << QuaZip::DefaultCompatibility << testFiles
-                             << testFiles << unicodeComment << unicodeComment;
+    QTest::newRow("default")
+        << QuaZip::Compatibility(QuaZip::DefaultCompatibility) << testFiles
+        << testFiles << unicodeComment << unicodeComment;
 
     QTest::newRow("dos only")
-        << QuaZip::DosCompatible << QByteArray() << testFiles << dosFiles
-        << unicodeComment
+        << QuaZip::Compatibility(QuaZip::DosCompatible) << QByteArray()
+        << testFiles << dosFiles << unicodeComment
         << QString::fromLatin1(
                QTextCodec::codecForMib(QuaZipTextCodec::IANA_IBM850)
                    ->fromUnicode(unicodeComment));
@@ -91,20 +92,22 @@ void TestQuaZip::create_data()
         << QByteArray(16, Qt::Uninitialized) << testFiles << dosFiles
         << latinComment << latinComment;
 
-    QTest::newRow("unix") << QuaZip::UnixCompatible << QByteArray() << testFiles
-                          << testFiles << unicodeComment << unicodeComment;
+    QTest::newRow("unix") << QuaZip::Compatibility(QuaZip::UnixCompatible)
+                          << QByteArray() << testFiles << testFiles
+                          << unicodeComment << unicodeComment;
 
     QTest::newRow("windows+append")
-        << QuaZip::WindowsCompatible << QByteArray() << testFiles << testFiles
-        << unicodeComment << unicodeComment;
+        << QuaZip::Compatibility(QuaZip::WindowsCompatible) << QByteArray()
+        << testFiles << testFiles << unicodeComment << unicodeComment;
 
     QTest::newRow("custom compatibility")
-        << QuaZip::CustomCompatibility << QByteArray() << testFiles << testFiles
-        << unicodeComment << unicodeComment;
+        << QuaZip::Compatibility(QuaZip::CustomCompatibility) << QByteArray()
+        << testFiles << testFiles << unicodeComment << unicodeComment;
 
     QTest::newRow("full compatibility+append")
-        << QuaZip::FullCompatibility << QByteArray(16, Qt::Uninitialized)
-        << testFiles << testFiles << unicodeComment << unicodeComment;
+        << QuaZip::Compatibility(QuaZip::FullCompatibility)
+        << QByteArray(16, Qt::Uninitialized) << testFiles << testFiles
+        << unicodeComment << unicodeComment;
 }
 
 void TestQuaZip::create()

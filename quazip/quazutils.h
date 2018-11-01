@@ -27,7 +27,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quazip_global.h"
 
 class QString;
-class QuaZUtils {
+class QUAZIP_EXPORT QuaZUtils {
 public:
     /// Returns max block size for zlib io operation
     template<typename T>

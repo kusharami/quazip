@@ -442,9 +442,13 @@ QString QuaZipPrivate::decodeSymLinkTarget(
     localReader.setByteOrder(QDataStream::LittleEndian);
 
     qint32 accTime;
+    Q_UNUSED(accTime);
     qint32 modTime;
+    Q_UNUSED(modTime);
     quint16 uid;
+    Q_UNUSED(uid);
     quint16 gid;
+    Q_UNUSED(gid);
     int skipCount =
         sizeof(accTime) + sizeof(modTime) + sizeof(uid) + sizeof(gid);
 
@@ -1024,8 +1028,9 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
         return QString();
 
     int fileNameLength = size;
-    quint32 commentCodePage;
     if (flags & WINZIP_COMMENT_CODEPAGE_FLAG) {
+        quint32 commentCodePage;
+        Q_UNUSED(commentCodePage);
         fileNameLength -= sizeof(commentCodePage);
     }
 
@@ -1086,6 +1091,7 @@ QString QuaZipPrivate::getWinZipUnicodeComment(
 
     if (flags & WINZIP_FILENAME_CODEPAGE_FLAG) {
         quint32 fileNameCodePage;
+        Q_UNUSED(fileNameCodePage);
         if (sizeof(fileNameCodePage) !=
             fieldReader.skipRawData(sizeof(fileNameCodePage))) {
             return QString();

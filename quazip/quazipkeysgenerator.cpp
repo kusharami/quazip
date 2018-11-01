@@ -170,6 +170,12 @@ QuaZipKeysGenerator::Private::Private(
     keyStack.emplace_back(keys);
 }
 
+QuaZipKeysGenerator::Private::Private(const Private &other)
+    : keyStack(other.keyStack)
+    , passwordCodec(other.passwordCodec)
+{
+}
+
 bool QuaZipKeysGenerator::Private::equals(const Private &other) const
 {
     return passwordCodec == other.passwordCodec && keyStack == other.keyStack;

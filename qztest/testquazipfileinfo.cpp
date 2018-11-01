@@ -162,14 +162,14 @@ void TestQuaZipFileInfo::fromDir_data()
         << QuaZipFileInfo::Attributes(
                QuaZipFileInfo::Archived | winFileSystemAttr());
 
-    QTest::newRow("hidden") << QStringLiteral(".hidden") << defaultReadWrite
-                            << QuaZipFileInfo::Attributes(winFileNotArchived() |
-                                   QuaZipFileInfo::Hidden);
+    QTest::newRow("hidden")
+        << QStringLiteral(".hidden") << defaultReadWrite
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Hidden);
 
     QTest::newRow("readonly")
         << QStringLiteral("readonly") << defaultRead
         << QuaZipFileInfo::Attributes(
-               QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
+               winFileArchivedAttr() | QuaZipFileInfo::ReadOnly);
 }
 
 void TestQuaZipFileInfo::fromDir()
@@ -259,12 +259,12 @@ void TestQuaZipFileInfo::fromLink_data()
         << false << QStringLiteral("file_link") << QStringLiteral("file.txt")
         << defaultReadWrite
         << QuaZipFileInfo::Attributes(
-               QuaZipFileInfo::Archived | winFileSystemAttr());
+               winFileArchivedAttr() | winFileSystemAttr());
 
     QTest::newRow("dir_link")
         << true << QStringLiteral(".hidden_dir_link") << QStringLiteral("dir")
         << defaultRead
-        << QuaZipFileInfo::Attributes(winFileNotArchived() |
+        << QuaZipFileInfo::Attributes(
                QuaZipFileInfo::Hidden | QuaZipFileInfo::ReadOnly);
 }
 
@@ -359,19 +359,22 @@ void TestQuaZipFileInfo::fromZipFile_data()
     QADD_COLUMN(QString, password);
     QADD_COLUMN(QuaZip::Compatibility, compatibility);
 
-    QTest::newRow("simple") << QStringLiteral("simple.bin") << 10 << QString()
-                            << QuaZip::CustomCompatibility;
+    QTest::newRow("simple")
+        << QStringLiteral("simple.bin") << 10 << QString()
+        << QuaZip::Compatibility(QuaZip::CustomCompatibility);
 
     QTest::newRow("unix_windows")
         << QString::fromUtf8("факел.bin") << 9 << QString()
         << QuaZip::Compatibility(
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
-    QTest::newRow("text_unix_only") << QString::fromUtf8("бублик.txt") << -1
-                                    << QString() << QuaZip::UnixCompatible;
+    QTest::newRow("text_unix_only")
+        << QString::fromUtf8("бублик.txt") << -1 << QString()
+        << QuaZip::Compatibility(QuaZip::UnixCompatible);
 
-    QTest::newRow("text_dos_only") << QStringLiteral("dos.txt") << -1
-                                   << QString() << QuaZip::DosCompatible;
+    QTest::newRow("text_dos_only")
+        << QStringLiteral("dos.txt") << -1 << QString()
+        << QuaZip::Compatibility(QuaZip::DosCompatible);
 
     QTest::newRow("text_dos_compatible")
         << QString::fromUtf8("бублик.txt") << -1 << QString()
@@ -381,7 +384,7 @@ void TestQuaZipFileInfo::fromZipFile_data()
     QTest::newRow("encrypted_windows_only")
         << QStringLiteral("encrypted.bin") << 12
         << QStringLiteral("My babushka's birthday")
-        << QuaZip::WindowsCompatible;
+        << QuaZip::Compatibility(QuaZip::WindowsCompatible);
 }
 
 void TestQuaZipFileInfo::fromZipFile()

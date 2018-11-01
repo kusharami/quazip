@@ -149,12 +149,11 @@ void TestQuaZIODevice::write_data()
     QADD_COLUMN(int, compressionStrategy);
 
     QTest::newRow("truncate_false")
-        << false << QByteArray(50, 0) << Z_BEST_SPEED << Z_DEFAULT_STRATEGY;
+        << false << QByteArray(50, 0) << Z_BEST_SPEED << Z_HUFFMAN_ONLY;
     QTest::newRow("truncate_true")
         << true << QByteArray(10000, Qt::Uninitialized) << Z_BEST_COMPRESSION
-        << Z_HUFFMAN_ONLY;
-    QTest::newRow("empty") << true << QByteArray() << Z_NO_COMPRESSION
-                           << Z_DEFAULT_STRATEGY;
+        << Z_DEFAULT_STRATEGY;
+    QTest::newRow("empty") << true << QByteArray() << Z_NO_COMPRESSION << Z_RLE;
 }
 
 void TestQuaZIODevice::write()

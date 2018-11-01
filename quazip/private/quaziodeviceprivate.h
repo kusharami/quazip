@@ -25,7 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #pragma once
 
-#include "quazutils.h"
+#include "../quazutils.h"
 
 #include <QByteArray>
 #include <zlib.h>
