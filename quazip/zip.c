@@ -1196,12 +1196,17 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     int level = zipfi->level;
     zi->ci.flag = zipfi->flag;
     zi->ci.flag &= 6;
-    if ((level==8) || (level==9))
-      zi->ci.flag |= 2;
-    if (level > 1 && level < 5)
-      zi->ci.flag |= 4;
-    if (level==1)
-      zi->ci.flag |= 6;
+    if (method == Z_DEFLATED)
+    {
+        if (level > 9)
+            level = 9;
+        if ((level==8) || (level==9))
+          zi->ci.flag |= 2;
+        if (level > 1 && level < 5)
+          zi->ci.flag |= 4;
+        if (level==1)
+          zi->ci.flag |= 6;
+    }
     if (!raw && (password != NULL || keys != NULL))
       zi->ci.flag |= 1;
     int encrypt = zi->ci.flag & 1;
