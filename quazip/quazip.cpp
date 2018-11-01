@@ -68,7 +68,7 @@ private:
     /// The global comment.
     QString comment;
     /// The open mode.
-    QuaZip::Mode mode;
+    QuaZip::OpenMode mode;
     union
     {
         /// The internal handle for UNZIP modes.
@@ -76,7 +76,7 @@ private:
         /// The internal handle for ZIP modes.
         zipFile zipFile_f;
     };
-    QuaZip::CompatibilityFlags compatibility;
+    QuaZip::Compatibility compatibility;
     /// The last error.
     int zipError;
     /// Whether a current file is set.
@@ -187,13 +187,13 @@ private:
     QHash<QString, unz64_file_pos> directoryCaseSensitive;
     QHash<QString, unz64_file_pos> directoryCaseInsensitive;
     unz64_file_pos lastMappedDirectoryEntry;
-    static QuaZip::CompatibilityFlags defaultCompatibility;
+    static QuaZip::Compatibility defaultCompatibility;
     static QTextCodec *defaultFileNameCodec;
     static QTextCodec *defaultCommentCodec;
     static QScopedPointer<QuaZipTextCodec> legacyTextCodec;
 };
 
-QuaZip::CompatibilityFlags QuaZipPrivate::defaultCompatibility(
+QuaZip::Compatibility QuaZipPrivate::defaultCompatibility(
     QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 QTextCodec *QuaZipPrivate::defaultFileNameCodec = nullptr;
 QTextCodec *QuaZipPrivate::defaultCommentCodec = nullptr;
@@ -1169,7 +1169,7 @@ QString QuaZipPrivate::compatibleFilePath(
 
         quint32 crc = zChecksum<QuaCrc32>(
             name.constData(), name.length() * sizeof(QChar));
-        sec = QString::number(crc, 16) + extension;
+        sec = QStringLiteral("%1%2").arg(crc, 8, 16, QChar('0')).arg(extension);
     }
 
     return split.join('/');
@@ -1197,7 +1197,7 @@ QuaZip::~QuaZip()
     delete p;
 }
 
-bool QuaZip::open(Mode mode)
+bool QuaZip::open(OpenMode mode)
 {
     p->zipError = UNZ_OK;
     if (isOpen()) {
@@ -1678,7 +1678,7 @@ QIODevice *QuaZip::ioDevice() const
     return p->ioDevice;
 }
 
-QuaZip::Mode QuaZip::openMode() const
+QuaZip::OpenMode QuaZip::openMode() const
 {
     return p->mode;
 }
@@ -1792,14 +1792,14 @@ QList<QuaZipFileInfo> QuaZip::fileInfoList() const
     return QList<QuaZipFileInfo>();
 }
 
-QuaZip::CompatibilityFlags QuaZip::compatibilityFlags() const
+QuaZip::Compatibility QuaZip::compatibility() const
 {
     return p->compatibility;
 }
 
-void QuaZip::setCompatibilityFlags(CompatibilityFlags flags)
+void QuaZip::setCompatibility(Compatibility value)
 {
-    p->compatibility = flags;
+    p->compatibility = value;
 }
 
 Qt::CaseSensitivity QuaZip::convertCaseSensitivity(QuaZip::CaseSensitivity cs)
@@ -1849,12 +1849,12 @@ void QuaZip::setDefaultPasswordCodec(QTextCodec *codec)
     QuaZipKeysGenerator::setDefaultPasswordCodec(codec);
 }
 
-void QuaZip::setDefaultCompatibilityFlags(CompatibilityFlags flags)
+void QuaZip::setDefaultCompatibility(Compatibility flags)
 {
     QuaZipPrivate::defaultCompatibility = flags;
 }
 
-QuaZip::CompatibilityFlags QuaZip::defaultCompatibilityFlags()
+QuaZip::Compatibility QuaZip::defaultCompatibility()
 {
     return QuaZipPrivate::defaultCompatibility;
 }

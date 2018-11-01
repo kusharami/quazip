@@ -33,6 +33,14 @@ class QTemporaryDir;
 
 #define QADD_COLUMN(type, name) QTest::addColumn<type>(#name);
 
+extern const QFile::Permissions defaultRead;
+extern const QFile::Permissions defaultWrite;
+extern const QFile::Permissions defaultReadWrite;
+
+extern QuaZipFileInfo::Attribute winFileSystemAttr();
+extern QuaZipFileInfo::Attribute winFileArchivedAttr();
+extern QFile::Permissions execPermissions();
+
 extern QString tempZipPath(const QTemporaryDir &tempDir, int num = 0);
 extern QString tempFilesPath(const QTemporaryDir &tempDir, int num = 0);
 
@@ -53,7 +61,7 @@ extern bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
     QTextCodec *codec, const QString &password, const QString &filesPath);
 
 struct SaveDefaultZipOptions {
-    QuaZip::CompatibilityFlags compatibility;
+    QuaZip::Compatibility compatibility;
     QTextCodec *defaultFilePathCodec;
     QTextCodec *defaultCommentCodec;
     QTextCodec *defaultPasswordCodec;
@@ -63,5 +71,5 @@ struct SaveDefaultZipOptions {
 };
 
 Q_DECLARE_METATYPE(QuaZip::CaseSensitivity)
-Q_DECLARE_METATYPE(QuaZip::CompatibilityFlags)
+Q_DECLARE_METATYPE(QuaZip::Compatibility)
 Q_DECLARE_METATYPE(QuaZipFileInfo::Attributes)

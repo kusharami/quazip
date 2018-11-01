@@ -48,16 +48,14 @@ void TestQuaZipFile::zipUnzip_data()
     QADD_COLUMN(QByteArray, commentCodec);
     QADD_COLUMN(QByteArray, passwordCodec);
     QADD_COLUMN(bool, zip64);
-    QADD_COLUMN(bool, append);
     QADD_COLUMN(int, size);
 
-    QTest::newRow("simple")
-        << (QStringList() << "test0.txt"
-                          << "testdir1/test1.txt"
-                          << "testdir2/test2.txt"
-                          << "testdir2/subdir/test2sub.txt")
-        << QString() << QString() << QByteArray() << QByteArray()
-        << QByteArray() << false << false << -1;
+    QTest::newRow("simple") << (QStringList() << "test0.txt"
+                                              << "testdir1/test1.txt"
+                                              << "testdir2/test2.txt"
+                                              << "testdir2/subdir/test2sub.txt")
+                            << QString() << QString() << QByteArray()
+                            << QByteArray() << QByteArray() << false << -1;
 
     QTest::newRow("dos only")
         << (QStringList() << QString::fromUtf8("dos_имя1.txt")
@@ -66,7 +64,7 @@ void TestQuaZipFile::zipUnzip_data()
         << QString::fromUtf8("DOS Комментарий")
         << QString::fromUtf8("dos Пароль") << QByteArrayLiteral("IBM866")
         << QByteArrayLiteral("IBM866") << QByteArrayLiteral("IBM866") << false
-        << false << -1;
+        << -1;
 
     QTest::newRow("codecs+append")
         << (QStringList() << QString::fromUtf8(
@@ -74,19 +72,18 @@ void TestQuaZipFile::zipUnzip_data()
         << QString::fromUtf8("わたしはジップファイル")
         << QString::fromUtf8("password Юникод ユニコード")
         << QByteArrayLiteral("IBM866") << QByteArrayLiteral("EUC-JP")
-        << QByteArrayLiteral("Shift_JIS") << false << true << -1;
+        << QByteArrayLiteral("Shift_JIS") << false << -1;
 
     QTest::newRow("zip64+append")
         << (QStringList() << "test64.txt")
         << QString::fromUtf8("わたしはジップファイル") << QString("")
-        << QByteArray() << QByteArray() << QByteArray() << true << true << false
-        << -1;
+        << QByteArray() << QByteArray() << QByteArray() << true << -1;
     QTest::newRow("large enough to flush")
         << (QStringList() << QString::fromUtf8(
                 "BAD CODEC FILE NAME わたしはジップファイル.txt"))
         << QString::fromUtf8("BAD CODEC COMMENT わたしはジップファイル")
         << QString() << QByteArrayLiteral("windows-1251")
-        << QByteArrayLiteral("windows-1252") << QByteArray() << true << false
+        << QByteArrayLiteral("windows-1252") << QByteArray() << true
         << 65536 * 2;
 }
 
@@ -99,7 +96,6 @@ void TestQuaZipFile::zipUnzip()
     QFETCH(QByteArray, commentCodec);
     QFETCH(QByteArray, passwordCodec);
     QFETCH(bool, zip64);
-    QFETCH(bool, append);
     QFETCH(int, size);
 
     QTemporaryDir tempDir;
@@ -110,13 +106,7 @@ void TestQuaZipFile::zipUnzip()
     QVERIFY2(createTestFiles(fileNames, size, filesPath),
         "Couldn't create test files for zipping");
 
-    QByteArray garbageData;
     QFile zip(zipPath);
-    if (append) {
-        QVERIFY(zip.open(QFile::ReadWrite | QFile::Truncate));
-        garbageData = QByteArray(256, Qt::Uninitialized);
-        QCOMPARE(zip.write(garbageData), qint64(garbageData.length()));
-    }
 
     QuaZip testZip(&zip);
     testZip.setZip64Enabled(zip64);
@@ -129,8 +119,8 @@ void TestQuaZipFile::zipUnzip()
     if (!passwordCodec.isEmpty())
         testZip.setPasswordCodec(passwordCodec);
 
-    QCOMPARE(testZip.compatibilityFlags(), QuaZip::DefaultCompatibility);
-    QuaZip::CompatibilityFlags compatibility;
+    QCOMPARE(testZip.compatibility(), QuaZip::DefaultCompatibility);
+    QuaZip::Compatibility compatibility;
     if (QLocale().language() == QLocale::Russian && filePathCodec == "IBM866" &&
         passwordCodec == commentCodec && commentCodec == filePathCodec) {
         compatibility = QuaZip::DosCompatible;
@@ -139,20 +129,10 @@ void TestQuaZipFile::zipUnzip()
     } else {
         compatibility |= QuaZip::DefaultCompatibility;
     }
-    testZip.setCompatibilityFlags(compatibility);
-    QCOMPARE(testZip.compatibilityFlags(), compatibility);
-
-    QVERIFY(testZip.globalComment().isNull());
+    testZip.setCompatibility(compatibility);
     testZip.setGlobalComment(comment);
-    QCOMPARE(testZip.globalComment(), comment);
 
-    if (append) {
-        QVERIFY(testZip.open(QuaZip::mdAppend));
-        QCOMPARE(testZip.openMode(), QuaZip::mdAppend);
-    } else {
-        QVERIFY(testZip.open(QuaZip::mdCreate));
-        QCOMPARE(testZip.openMode(), QuaZip::mdCreate);
-    }
+    QVERIFY(testZip.open(QuaZip::mdCreate));
     for (const QString &fileName : fileNames) {
         QFile inFile(dir.filePath(fileName));
         QVERIFY2(inFile.open(QIODevice::ReadOnly), "Couldn't open input file");
@@ -191,9 +171,7 @@ void TestQuaZipFile::zipUnzip()
 
     QVERIFY(!zip.isOpen());
     QVERIFY(zip.open(QFile::ReadOnly));
-    if (append) {
-        zip.seek(garbageData.length());
-    }
+
     QVERIFY(testZip.open(QuaZip::mdUnzip));
     QCOMPARE(testZip.openMode(), QuaZip::mdUnzip);
     QCOMPARE(testZip.globalComment(), comment);
@@ -480,8 +458,41 @@ void TestQuaZipFile::construct()
 
 void TestQuaZipFile::fileAttributes_data()
 {
+    QADD_COLUMN(QuaZip::Compatibility, compatibility);
     QADD_COLUMN(QFile::Permissions, permissions);
     QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
+
+    QTest::newRow("readonly")
+        << QuaZip::Compatibility(QuaZip::DefaultCompatibility) << defaultRead
+        << QuaZipFileInfo::Attributes(
+               winFileArchivedAttr() | QuaZipFileInfo::ReadOnly);
+
+    QTest::newRow("hidden")
+        << QuaZip::Compatibility(QuaZip::DefaultCompatibility)
+        << defaultReadWrite
+        << QuaZipFileInfo::Attributes(
+               winFileArchivedAttr() | QuaZipFileInfo::Hidden);
+
+    QTest::newRow("dos/windows system hidden")
+        << QuaZip::Compatibility(
+               QuaZip::DosCompatible | QuaZip::WindowsCompatible)
+        << defaultReadWrite
+        << QuaZipFileInfo::Attributes(winFileArchivedAttr() |
+               winFileSystemAttr() | QuaZipFileInfo::Hidden);
+
+    QTest::newRow("windows hidden")
+        << QuaZip::Compatibility(QuaZip::WindowsCompatible) << defaultReadWrite
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Hidden);
+
+    QTest::newRow("unix hidden readonly")
+        << QuaZip::Compatibility(QuaZip::UnixCompatible) << defaultRead
+        << QuaZipFileInfo::Attributes(
+               QuaZipFileInfo::Hidden | QuaZipFileInfo::ReadOnly);
+
+    QTest::newRow("unix executable readonly")
+        << QuaZip::Compatibility(QuaZip::UnixCompatible)
+        << QFile::Permissions(defaultRead | execPermissions())
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::ReadOnly);
 }
 
 void TestQuaZipFile::fileAttributes()
@@ -496,8 +507,8 @@ void TestQuaZipFile::fileAttributes()
 
     QStringList testFiles;
     testFiles << "testZipName.txt";
-    testFiles << "test/dir/папка/";
-    testFiles << "папка/file.экс";
+    testFiles << QString::fromUtf8("test/dir/папка/");
+    testFiles << QString::fromUtf8("папка/file.экс");
 
     if (attributes & QuaZipFileInfo::Hidden) {
         for (auto &fileName : testFiles) {
@@ -545,7 +556,7 @@ void TestQuaZipFile::fileAttributes()
         QCOMPARE(zipFile.permissions(), zipFile.fileInfo().permissions());
         QCOMPARE(zipFile.attributes(), zipFile.fileInfo().attributes());
         QCOMPARE(zipFile.permissions(), permissions);
-        QCOMPARE(zipFile.fileInfo().attributes(), attributes);
+        QCOMPARE(zipFile.attributes(), attributes);
     }
 }
 

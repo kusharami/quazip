@@ -206,7 +206,7 @@ void TestQuaGzipDevice::write()
     QFETCH(int, compressionLevel);
     QFETCH(bool, isText);
 
-    time_t savedTime = QDateTime::currentMSecsSinceEpoch() / 1000;
+    quint32 savedTime = quint32(QDateTime::currentMSecsSinceEpoch() / 1000);
 
     QTemporaryDir tempDir;
     auto gzFilePath = QDir(tempDir.path()).filePath(fileName + ".gz");
@@ -218,11 +218,17 @@ void TestQuaGzipDevice::write()
         writeMode |= QIODevice::Text;
 
     gzDevice.setCompressionLevel(compressionLevel);
+    QCOMPARE(gzDevice.compressionLevel(), compressionLevel);
     gzDevice.setIODevice(&fileGZ);
+    QCOMPARE(gzDevice.ioDevice(), &fileGZ);
     gzDevice.setOriginalFileName(fileName);
+    QCOMPARE(gzDevice.originalFileName(), fileName);
     gzDevice.setComment(comment);
+    QCOMPARE(gzDevice.comment(), comment);
     gzDevice.setExtraFields(extra);
+    QCOMPARE(gzDevice.extraFields(), extra);
     gzDevice.setModificationTime(savedTime);
+    QCOMPARE(gzDevice.modificationTime(), savedTime);
     QVERIFY(gzDevice.open(writeMode));
     QVERIFY(gzDevice.isOpen());
     QVERIFY(gzDevice.isWritable());
@@ -247,7 +253,6 @@ void TestQuaGzipDevice::write()
     if (isText)
         readMode |= QIODevice::Text;
     QVERIFY(fileGZ.open(readMode));
-    gzDevice.setIODevice(&fileGZ);
     if (isText) {
         QVERIFY(!gzDevice.open(readMode));
         QVERIFY2(gzDevice.hasError(),

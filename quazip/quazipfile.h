@@ -281,11 +281,13 @@ public:
      **/
     virtual bool open(OpenMode mode) override;
 
+    /// Tells if the input data is encrypted or if output data will be encrypted
     bool isEncrypted() const;
-    /// Set the password to use for file data encryption/decryption
+    /// Set the password to use for zip file data encryption/decryption
     /**
      * \param password Password will be encoded with QuaZip::passwordCodec()
-     * It is removed from memory after this call for security reasons
+     * It is removed from memory after this call for security reasons.
+     * When password is null, encryption is turned off
      *
      * \note Nothing is changed when QuaZipFile is already open
      * \sa open()

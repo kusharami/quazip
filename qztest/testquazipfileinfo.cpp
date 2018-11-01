@@ -31,8 +31,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <QFileInfo>
 #include <QTemporaryDir>
 
-#include <QtTest/QtTest>
-
 #include "quazip/quazip.h"
 #include "quazip/quazipfile.h"
 #include "quazip/quazipfileinfo.h"
@@ -47,70 +45,39 @@ TestQuaZipFileInfo::TestQuaZipFileInfo(QObject *parent)
 {
 }
 
-static Q_DECL_CONSTEXPR inline QuaZipFileInfo::Attribute sysAttr()
-{
-#ifdef Q_OS_WIN
-    return QuaZipFileInfo::System;
-#else
-    return QuaZipFileInfo::Attribute(0);
-#endif
-}
-
-static Q_DECL_CONSTEXPR inline QuaZipFileInfo::Attribute notArchived()
-{
-#ifdef Q_OS_WIN
-    return QuaZipFileInfo::Attribute(0);
-#else
-    return QuaZipFileInfo::Archived;
-#endif
-}
-
-static Q_DECL_CONSTEXPR inline QFile::Permissions execPermissions()
-{
-#ifdef Q_OS_WIN
-    return QFile::Permissions();
-#else
-    return QFile::Permissions(QFile::ExeUser | QFile::ExeOwner);
-#endif
-}
-
-static Q_CONSTEXPR QFile::Permissions defaultRead(
-    QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
-static Q_CONSTEXPR QFile::Permissions defaultWrite(
-    QFile::WriteUser | QFile::WriteOwner);
-static Q_CONSTEXPR auto defaultReadWrite =
-    QFile::Permissions(defaultRead | defaultWrite);
-
 void TestQuaZipFileInfo::fromFile_data()
 {
-    QADD_COLUMN(QString, fileName);
     QADD_COLUMN(QFile::Permissions, permissions);
     QADD_COLUMN(QuaZipFileInfo::Attributes, attributes);
 
-    QTest::newRow("writable")
-        << QStringLiteral("writable.bin") << defaultReadWrite
-        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
+    QTest::newRow("system")
+        << defaultReadWrite << QuaZipFileInfo::Attributes(winFileSystemAttr());
 
     QTest::newRow("hidden")
-        << QStringLiteral(".hidden") << defaultReadWrite
-        << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden);
+        << defaultReadWrite
+        << QuaZipFileInfo::Attributes(
+               winFileArchivedAttr() | QuaZipFileInfo::Hidden);
 
     QTest::newRow("readonly")
-        << QStringLiteral("readonly.bin") << defaultRead
+        << defaultRead
         << QuaZipFileInfo::Attributes(
-               QuaZipFileInfo::Archived | QuaZipFileInfo::ReadOnly);
+               winFileArchivedAttr() | QuaZipFileInfo::ReadOnly);
 
     QTest::newRow("executable")
-        << QStringLiteral("executable")
-        << QFile::Permissions(defaultReadWrite | execPermissions())
-        << QuaZipFileInfo::Attributes(notArchived());
+        << QFile::Permissions(defaultRead | execPermissions())
+        << QuaZipFileInfo::Attributes(QuaZipFileInfo::ReadOnly);
 }
 
 void TestQuaZipFileInfo::fromFile()
 {
-    QFETCH(QString, fileName);
     QFETCH(QFile::Permissions, permissions);
     QFETCH(QuaZipFileInfo::Attributes, attributes);
+
+    QString fileName("temp.bin");
+    if (attributes & QuaZipFileInfo::Hidden)
+        fileName = '.' + fileName;
+
+    SaveDefaultZipOptions saveCompatibility;
 
     QTemporaryDir tempDir;
     auto filesPath = tempFilesPath(tempDir);
@@ -192,11 +159,12 @@ void TestQuaZipFileInfo::fromDir_data()
 
     QTest::newRow("writable")
         << QStringLiteral("writable") << defaultReadWrite
-        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
+        << QuaZipFileInfo::Attributes(
+               QuaZipFileInfo::Archived | winFileSystemAttr());
 
-    QTest::newRow("hidden")
-        << QStringLiteral(".hidden") << defaultReadWrite
-        << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden);
+    QTest::newRow("hidden") << QStringLiteral(".hidden") << defaultReadWrite
+                            << QuaZipFileInfo::Attributes(winFileNotArchived() |
+                                   QuaZipFileInfo::Hidden);
 
     QTest::newRow("readonly")
         << QStringLiteral("readonly") << defaultRead
@@ -290,13 +258,14 @@ void TestQuaZipFileInfo::fromLink_data()
     QTest::newRow("file_link")
         << false << QStringLiteral("file_link") << QStringLiteral("file.txt")
         << defaultReadWrite
-        << QuaZipFileInfo::Attributes(QuaZipFileInfo::Archived | sysAttr());
+        << QuaZipFileInfo::Attributes(
+               QuaZipFileInfo::Archived | winFileSystemAttr());
 
     QTest::newRow("dir_link")
         << true << QStringLiteral(".hidden_dir_link") << QStringLiteral("dir")
         << defaultRead
-        << QuaZipFileInfo::Attributes(notArchived() | QuaZipFileInfo::Hidden |
-               QuaZipFileInfo::ReadOnly);
+        << QuaZipFileInfo::Attributes(winFileNotArchived() |
+               QuaZipFileInfo::Hidden | QuaZipFileInfo::ReadOnly);
 }
 
 void TestQuaZipFileInfo::fromLink()
@@ -388,14 +357,14 @@ void TestQuaZipFileInfo::fromZipFile_data()
     QADD_COLUMN(QString, fileName);
     QADD_COLUMN(int, fileSize);
     QADD_COLUMN(QString, password);
-    QADD_COLUMN(QuaZip::CompatibilityFlags, compatibility);
+    QADD_COLUMN(QuaZip::Compatibility, compatibility);
 
     QTest::newRow("simple") << QStringLiteral("simple.bin") << 10 << QString()
                             << QuaZip::CustomCompatibility;
 
     QTest::newRow("unix_windows")
         << QString::fromUtf8("факел.bin") << 9 << QString()
-        << QuaZip::CompatibilityFlags(
+        << QuaZip::Compatibility(
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
     QTest::newRow("text_unix_only") << QString::fromUtf8("бублик.txt") << -1
@@ -406,7 +375,7 @@ void TestQuaZipFileInfo::fromZipFile_data()
 
     QTest::newRow("text_dos_compatible")
         << QString::fromUtf8("бублик.txt") << -1 << QString()
-        << QuaZip::CompatibilityFlags(QuaZip::DosCompatible |
+        << QuaZip::Compatibility(QuaZip::DosCompatible |
                QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 
     QTest::newRow("encrypted_windows_only")
@@ -420,11 +389,11 @@ void TestQuaZipFileInfo::fromZipFile()
     QFETCH(QString, fileName);
     QFETCH(int, fileSize);
     QFETCH(QString, password);
-    QFETCH(QuaZip::CompatibilityFlags, compatibility);
+    QFETCH(QuaZip::Compatibility, compatibility);
     bool isText = fileName.endsWith(".txt");
 
     SaveDefaultZipOptions saveCompatibility;
-    QuaZip::setDefaultCompatibilityFlags(compatibility);
+    QuaZip::setDefaultCompatibility(compatibility);
 
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);

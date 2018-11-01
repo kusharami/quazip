@@ -75,7 +75,7 @@ public:
       */
     void setIODevice(QIODevice *device);
     /// Returns the underlying device.
-    QIODevice *getIODevice() const;
+    QIODevice *ioDevice() const;
     /// Returns true if the end of the compressed stream is reached.
     virtual bool atEnd() const override;
     /// Returns if device is sequential.

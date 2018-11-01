@@ -105,8 +105,7 @@ QTextCodec *QuaGzipDevice::fileNameCodec() const
 
 void QuaGzipDevice::setFileNameCodec(QTextCodec *codec)
 {
-    Q_ASSERT(codec);
-    d()->fileNameCodec = codec;
+    d()->fileNameCodec = codec ? codec : QTextCodec::codecForLocale();
 }
 
 void QuaGzipDevice::setFileNameCodec(const char *codecName)
@@ -121,8 +120,7 @@ QTextCodec *QuaGzipDevice::commentCodec() const
 
 void QuaGzipDevice::setCommentCodec(QTextCodec *codec)
 {
-    Q_ASSERT(codec);
-    d()->commentCodec = codec;
+    d()->commentCodec = codec ? codec : QTextCodec::codecForLocale();
 }
 
 void QuaGzipDevice::setCommentCodec(const char *codecName)
@@ -189,14 +187,14 @@ void QuaGzipDevice::setComment(const QString &text)
     d()->comment[length] = 0;
 }
 
-time_t QuaGzipDevice::modificationTime() const
+quint32 QuaGzipDevice::modificationTime() const
 {
-    return d()->gzHeader.time;
+    return quint32(d()->gzHeader.time);
 }
 
-void QuaGzipDevice::setModificationTime(time_t time)
+void QuaGzipDevice::setModificationTime(quint32 time)
 {
-    d()->gzHeader.time = uLong(time);
+    d()->gzHeader.time = time;
 }
 
 QuaZExtraField::Map QuaGzipDevice::extraFields() const

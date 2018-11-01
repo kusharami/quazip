@@ -95,7 +95,7 @@ class QUAZIP_EXPORT QuaZip {
 
 public:
     /// Open mode of the ZIP file.
-    enum Mode
+    enum OpenMode
     {
         mdNotOpen, ///< ZIP file is not open. This is the initial mode.
         mdUnzip, ///< ZIP file is open for reading files inside it.
@@ -161,9 +161,11 @@ public:
          */
         WindowsCompatible = 0x04,
         /// By default Unix and Windows compatibility is ON.
-        DefaultCompatibility = UnixCompatible | WindowsCompatible
+        DefaultCompatibility = UnixCompatible | WindowsCompatible,
+        /// Compatible with every supported platform
+        FullCompatibility = DosCompatible | UnixCompatible | WindowsCompatible
     };
-    Q_DECLARE_FLAGS(CompatibilityFlags, CompatibilityFlag)
+    Q_DECLARE_FLAGS(Compatibility, CompatibilityFlag)
 
     /// Returns the actual case sensitivity for the specified QuaZIP one.
     /**
@@ -212,7 +214,7 @@ public:
      * UNZ_ERROROPEN and getZipError() will return it if the open call
      * of the ZIP/UNZIP API returns \c NULL.
      **/
-    bool open(Mode mode);
+    bool open(OpenMode mode);
     /// Closes ZIP file.
     /** Call getZipError() to determine if the close was successful.
      *
@@ -230,7 +232,7 @@ public:
     void close();
     /// Sets the codec used to encode/decode file names inside archive.
     /** \note This codec is used only when
-     * compatibilityFlags() equals to CustomCompatibility.
+     * compatibility() equals to CustomCompatibility.
      **/
     void setFilePathCodec(QTextCodec *filePathCodec);
     /// Sets the codec used to encode/decode file names inside archive.
@@ -239,7 +241,7 @@ public:
      **/
     void setFilePathCodec(const char *filePathCodecName);
     /// Codec to be used to encode/decode comments inside archive when
-    /// compatibilityFlags() equals to CustomCompatibility.
+    /// compatibility() equals to CustomCompatibility.
     /**
      * \note On Windows This codec defaults to current OEM code page
      * if it is not UTF-7 or UTF-8.
@@ -249,7 +251,7 @@ public:
     QTextCodec *filePathCodec() const;
     /// Sets the codec used to encode/decode comments inside archive.
     /** \note This codec is used only when
-     * compatibilityFlags() equals to CustomCompatibility.
+     * compatibility() equals to CustomCompatibility.
      *
      * When writing a global comment with Non-ASCII characters it is encoded
      * with UTF-8 and stored with BOM header
@@ -261,7 +263,7 @@ public:
      **/
     void setCommentCodec(const char *commentCodecName);
     /// Codec to be used to encode/decode comments inside archive when
-    /// compatibilityFlags() equals to CustomCompatibility.
+    /// compatibility() equals to CustomCompatibility.
     /**
     * \note This codec defaults to current locale text codec
     */
@@ -297,7 +299,7 @@ public:
      **/
     void setIODevice(QIODevice *ioDevice);
     /// Returns the mode in which ZIP file was opened.
-    Mode openMode() const;
+    OpenMode openMode() const;
     /// Returns \c true if ZIP file is open, \c false otherwise.
     bool isOpen() const;
     /// Returns the error code of the last operation.
@@ -461,14 +463,14 @@ public:
     QList<QuaZipFileInfo> fileInfoList() const;
 
     /// Compatibility flags for next files to be compressed.
-    /// \sa CompatibilityFlags
-    CompatibilityFlags compatibilityFlags() const;
+    /// \sa Compatibility
+    Compatibility compatibility() const;
     /// Set compatibility flags for next files to be compressed.
     /**
      * @param flags Compatibility flags combined together with logical OR.
-     * \sa CompatibilityFlags
+     * \sa Compatibility
      */
-    void setCompatibilityFlags(CompatibilityFlags flags);
+    void setCompatibility(Compatibility value);
 
     /// Enables the zip64 mode.
     /**
@@ -587,10 +589,10 @@ public:
     static void setDefaultPasswordCodec(QTextCodec *codec = nullptr);
 
     /// QuaZip constructor will set this flags instead of DefaultCompatibility.
-    /// \sa compatibilityFlags(), setDefaultFilePathCodec(),
+    /// \sa Compatibility(), setDefaultFilePathCodec(),
     ///  setDefaultCommentCodec()
-    static void setDefaultCompatibilityFlags(CompatibilityFlags flags);
-    static CompatibilityFlags defaultCompatibilityFlags();
+    static void setDefaultCompatibility(Compatibility flags);
+    static Compatibility defaultCompatibility();
 
 private:
     friend class QuaZipFile;

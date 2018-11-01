@@ -122,13 +122,13 @@ public:
 
     /// Stored modification time in a compressed device.
     /// When reading, check headerIsProcessed() first.
-    time_t modificationTime() const;
+    quint32 modificationTime() const;
     /// Modification time to store in a compressed device
     /**
       \param time Time stamp in UTC.
         If zero, current time is set when opened for write.
      */
-    void setModificationTime(time_t time);
+    void setModificationTime(quint32 time);
 
     /// Stored extra fields in a compressed device.
     /// When reading, check headerIsProcessed() first.

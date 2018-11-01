@@ -145,62 +145,96 @@ void TestQuaZIODevice::write_data()
 {
     QADD_COLUMN(bool, truncate);
     QADD_COLUMN(QByteArray, data);
+    QADD_COLUMN(int, compressionLevel);
+    QADD_COLUMN(int, compressionStrategy);
 
-    QTest::newRow("truncate_false") << false << QByteArrayLiteral("test");
-    QTest::newRow("truncate_true") << true << QByteArrayLiteral("bigTest");
-    QTest::newRow("empty") << true << QByteArray();
+    QTest::newRow("truncate_false")
+        << false << QByteArray(50, 0) << Z_BEST_SPEED << Z_DEFAULT_STRATEGY;
+    QTest::newRow("truncate_true")
+        << true << QByteArray(10000, Qt::Uninitialized) << Z_BEST_COMPRESSION
+        << Z_HUFFMAN_ONLY;
+    QTest::newRow("empty") << true << QByteArray() << Z_NO_COMPRESSION
+                           << Z_DEFAULT_STRATEGY;
 }
 
 void TestQuaZIODevice::write()
 {
     QFETCH(bool, truncate);
     QFETCH(QByteArray, data);
+    QFETCH(int, compressionLevel);
+    QFETCH(int, compressionStrategy);
 
-    QByteArray buf(256, 0);
-    QBuffer testBuffer(&buf);
+    QByteArray expectedCompressedData(32768, 0);
+    z_stream zouts;
+    zouts.zalloc = Z_NULL;
+    zouts.zfree = Z_NULL;
+    zouts.opaque = Z_NULL;
+    deflateInit2(&zouts, compressionLevel, Z_DEFLATED, MAX_WBITS, MAX_MEM_LEVEL,
+        compressionStrategy);
+    zouts.next_in = reinterpret_cast<Bytef *>(data.data());
+    zouts.avail_in = uInt(data.length());
+    zouts.next_out = reinterpret_cast<Bytef *>(expectedCompressedData.data());
+    zouts.avail_out = expectedCompressedData.size();
+    qint64 expectedCompressedSize =
+        qint64(expectedCompressedData.size()) - zouts.avail_out;
+    deflate(&zouts, Z_FINISH);
+    deflateEnd(&zouts);
+    expectedCompressedData.resize(int(expectedCompressedSize));
 
-    QIODevice::OpenMode writeMode = QIODevice::WriteOnly;
+    QByteArray buf(32768, 0);
+    {
+        QBuffer testBuffer(&buf);
 
-    if (truncate) {
-        writeMode |= QIODevice::Truncate;
-    } else {
-        testBuffer.open(writeMode);
+        QIODevice::OpenMode writeMode = QIODevice::WriteOnly;
+
+        if (truncate) {
+            writeMode |= QIODevice::Truncate;
+        } else {
+            testBuffer.open(writeMode);
+        }
+
+        QuaZIODevice testDevice(&testBuffer);
+        testDevice.setCompressionLevel(compressionLevel);
+        QCOMPARE(testDevice.compressionLevel(), compressionLevel);
+        testDevice.setCompressionStrategy(compressionStrategy);
+        QCOMPARE(testDevice.compressionStrategy(), compressionStrategy);
+        QCOMPARE(testDevice.ioDevice(), &testBuffer);
+        QVERIFY(!testDevice.open(QIODevice::ReadWrite));
+        QVERIFY(testDevice.hasError());
+        QVERIFY(!testDevice.open(QIODevice::Append));
+        QVERIFY(testDevice.hasError());
+        QVERIFY(testDevice.open(writeMode));
+        QVERIFY(testDevice.isOpen());
+        QVERIFY(!testDevice.isReadable());
+        QVERIFY(testDevice.isWritable());
+        QVERIFY(testDevice.isSequential());
+        QVERIFY(testDevice.openMode() & QIODevice::Truncate);
+        QCOMPARE(0 != (testBuffer.openMode() & QIODevice::Truncate), truncate);
+        QCOMPARE(testDevice.size(), qint64(0));
+        QVERIFY(!testDevice.hasError());
+        QCOMPARE(testDevice.write(data), qint64(data.length()));
+        QCOMPARE(testDevice.size(), qint64(data.length()));
+        QVERIFY(!testDevice.hasError());
+        testDevice.close();
+        QVERIFY(!testDevice.hasError());
+        QVERIFY(!testDevice.isOpen());
+        z_stream zins;
+        zins.zalloc = Z_NULL;
+        zins.zfree = Z_NULL;
+        zins.opaque = Z_NULL;
+        inflateInit(&zins);
+        zins.next_in = reinterpret_cast<Bytef *>(buf.data());
+        zins.avail_in = uInt(testBuffer.pos());
+        QByteArray outBuf(data.length(), 0);
+        zins.next_out = reinterpret_cast<Bytef *>(outBuf.data());
+        zins.avail_out = outBuf.length();
+        int inflateResult = inflate(&zins, Z_FINISH);
+        inflateEnd(&zins);
+        QCOMPARE(inflateResult, Z_STREAM_END);
+        QCOMPARE(zins.avail_out, uInt(0));
+        QCOMPARE(outBuf, data);
+        QCOMPARE(expectedCompressedSize, testBuffer.pos());
     }
-
-    QuaZIODevice testDevice(&testBuffer);
-    QCOMPARE(testDevice.getIODevice(), &testBuffer);
-    QVERIFY(!testDevice.open(QIODevice::ReadWrite));
-    QVERIFY(testDevice.hasError());
-    QVERIFY(!testDevice.open(QIODevice::Append));
-    QVERIFY(testDevice.hasError());
-    QVERIFY(testDevice.open(writeMode));
-    QVERIFY(testDevice.isOpen());
-    QVERIFY(!testDevice.isReadable());
-    QVERIFY(testDevice.isWritable());
-    QVERIFY(testDevice.isSequential());
-    QVERIFY(testDevice.openMode() & QIODevice::Truncate);
-    QCOMPARE(0 != (testBuffer.openMode() & QIODevice::Truncate), truncate);
-    QCOMPARE(testDevice.size(), qint64(0));
-    QVERIFY(!testDevice.hasError());
-    QCOMPARE(testDevice.write(data), qint64(data.length()));
-    QCOMPARE(testDevice.size(), qint64(data.length()));
-    QVERIFY(!testDevice.hasError());
-    testDevice.close();
-    QVERIFY(!testDevice.hasError());
-    QVERIFY(!testDevice.isOpen());
-    z_stream zins;
-    zins.zalloc = Z_NULL;
-    zins.zfree = Z_NULL;
-    zins.opaque = Z_NULL;
-    inflateInit(&zins);
-    zins.next_in = reinterpret_cast<Bytef *>(buf.data());
-    zins.avail_in = uInt(testBuffer.pos());
-    QByteArray outBuf(data.length(), 0);
-    zins.next_out = reinterpret_cast<Bytef *>(outBuf.data());
-    zins.avail_out = outBuf.length();
-    int inflateResult = inflate(&zins, Z_FINISH);
-    inflateEnd(&zins);
-    QCOMPARE(inflateResult, Z_STREAM_END);
-    QCOMPARE(zins.avail_out, uInt(0));
-    QCOMPARE(outBuf, data);
+    buf.resize(int(expectedCompressedSize));
+    QCOMPARE(buf, expectedCompressedData);
 }

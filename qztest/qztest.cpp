@@ -41,6 +41,39 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <QFileInfo>
 #include <QTextStream>
 
+extern const QFile::Permissions defaultRead(
+    QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
+extern const QFile::Permissions defaultWrite(
+    QFile::WriteUser | QFile::WriteOwner);
+extern const QFile::Permissions defaultReadWrite(defaultRead | defaultWrite);
+
+QuaZipFileInfo::Attribute winFileSystemAttr()
+{
+#ifdef Q_OS_WIN
+    return QuaZipFileInfo::System;
+#else
+    return QuaZipFileInfo::Attribute(0);
+#endif
+}
+
+QuaZipFileInfo::Attribute winFileArchivedAttr()
+{
+#ifdef Q_OS_WIN
+    return QuaZipFileInfo::Archived;
+#else
+    return QuaZipFileInfo::Attribute(0);
+#endif
+}
+
+QFile::Permissions execPermissions()
+{
+#ifdef Q_OS_WIN
+    return QFile::Permissions();
+#else
+    return QFile::Permissions(QFile::ExeUser | QFile::ExeOwner);
+#endif
+}
+
 QString tempZipPath(const QTemporaryDir &tempDir, int num)
 {
     return tempFilesPath(tempDir, num) + QStringLiteral(".zip");
@@ -98,7 +131,7 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
 {
     if (codec != NULL) {
         zip.setFilePathCodec(codec);
-        zip.setCompatibilityFlags(QuaZip::CustomCompatibility);
+        zip.setCompatibility(QuaZip::CustomCompatibility);
     }
     if (!zip.open(QuaZip::mdCreate)) {
         qWarning("Couldn't open %s", zipName.toLocal8Bit().constData());
@@ -202,7 +235,7 @@ bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
 
 SaveDefaultZipOptions::SaveDefaultZipOptions()
 {
-    compatibility = QuaZip::defaultCompatibilityFlags();
+    compatibility = QuaZip::defaultCompatibility();
     defaultFilePathCodec = QuaZip::defaultFilePathCodec();
     defaultCommentCodec = QuaZip::defaultCommentCodec();
     defaultPasswordCodec = QuaZip::defaultPasswordCodec();
@@ -210,7 +243,7 @@ SaveDefaultZipOptions::SaveDefaultZipOptions()
 
 SaveDefaultZipOptions::~SaveDefaultZipOptions()
 {
-    QuaZip::setDefaultCompatibilityFlags(compatibility);
+    QuaZip::setDefaultCompatibility(compatibility);
     QuaZip::setDefaultFilePathCodec(defaultFilePathCodec);
     QuaZip::setDefaultCommentCodec(defaultCommentCodec);
     QuaZip::setDefaultPasswordCodec(defaultPasswordCodec);

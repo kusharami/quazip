@@ -52,7 +52,7 @@ QuaZIODevice::~QuaZIODevice()
     delete d;
 }
 
-QIODevice *QuaZIODevice::getIODevice() const
+QIODevice *QuaZIODevice::ioDevice() const
 {
     return d->io;
 }

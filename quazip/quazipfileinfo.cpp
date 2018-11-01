@@ -569,7 +569,7 @@ void QuaZipFileInfo::setComment(const QString &value)
 void QuaZipFileInfo::setPassword(QByteArray *value)
 {
     if (value == nullptr || value->isNull()) {
-        d->zipOptions &= ~Encryption;
+        setZipOptions(d.constData()->zipOptions & ~Encryption);
         clearCryptKeys();
         return;
     }

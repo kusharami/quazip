@@ -28,6 +28,8 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 class TestQuaZip : public QObject {
     Q_OBJECT
 private slots:
+    void create_data();
+    void create();
     void fileList_data();
     void fileList();
     void addFiles_data();
@@ -38,8 +40,9 @@ private slots:
     void commentCodec();
     void dataDescriptorWritingEnabled();
     void testQIODeviceAPI();
-    void zipFilePath();
-    void ioDevice();
+    void setZipFilePath();
+    void setIODevice();
+    void autoClose_data();
     void autoClose();
-    void testSequential();
+    void sequentialWrite();
 };
