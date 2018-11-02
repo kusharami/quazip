@@ -1008,15 +1008,15 @@ int Write_LocalFileHeader(zip64_internal* zi, const char* filename,
   uInt size_filename = (uInt)strlen(filename);
   uInt size_extrafield = size_extrafield_local;
 
+  if (zi->ci.zip64 && version_to_extract < 45)
+  {
+      version_to_extract = 45;
+  }
+
   err = zip64local_putValue(&zi->z_filefunc,zi->filestream,(uLong)LOCALHEADERMAGIC, 4);
 
   if (err==ZIP_OK)
-  {
-    if(zi->ci.zip64)
-      err = zip64local_putValue(&zi->z_filefunc,zi->filestream,(uLong)45,2);/* version needed to extract */
-    else
       err = zip64local_putValue(&zi->z_filefunc,zi->filestream,(uLong)version_to_extract,2);
-  }
 
   if (err==ZIP_OK)
     err = zip64local_putValue(&zi->z_filefunc,zi->filestream,(uLong)zi->ci.flag,2);
@@ -1172,6 +1172,10 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
     }
 
     int version_to_extract = zipfi->versionNeeded;
+    if (zipfi->zip64 && version_to_extract < 45)
+    {
+        version_to_extract = 45;
+    } else
     if (!raw || version_to_extract < 20)
     {
         if (zipfi->method == 0
