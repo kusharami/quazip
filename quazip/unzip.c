@@ -863,13 +863,13 @@ local void unz64local_DosDateToTmuDate (ZPOS64_T ulDosDate, tm_unz* ptm)
 {
     ZPOS64_T uDate;
     uDate = (ZPOS64_T)(ulDosDate>>16);
-    ptm->tm_mday = (uInt)(uDate&0x1f) ;
-    ptm->tm_mon =  (uInt)((((uDate)&0x1E0)/0x20)-1) ;
-    ptm->tm_year = (uInt)(((uDate&0x0FE00)/0x0200)+1980) ;
+    ptm->tm_mday = 1+(uInt)((uDate&0x1f) - 1) % 31;
+    ptm->tm_mon =  1+(uInt)((((uDate)&0x1E0)/0x20)-1) % 12;
+    ptm->tm_year = (uInt)(((uDate&0x0FE00)/0x0200)+1980);
 
-    ptm->tm_hour = (uInt) ((ulDosDate &0xF800)/0x800);
-    ptm->tm_min =  (uInt) ((ulDosDate&0x7E0)/0x20) ;
-    ptm->tm_sec =  (uInt) (2*(ulDosDate&0x1f)) ;
+    ptm->tm_hour = (uInt) ((ulDosDate &0xF800)/0x800) % 24;
+    ptm->tm_min =  (uInt) ((ulDosDate&0x7E0)/0x20) % 60;
+    ptm->tm_sec =  (uInt) (2*(ulDosDate&0x1f)) % 60;
 }
 
 /*

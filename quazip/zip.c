@@ -340,17 +340,23 @@ local void zip64local_putValue_inmemory (void* dest, ZPOS64_T x, int nbByte)
 
 /****************************************************************************/
 
-
 local uLong zip64local_TmzDateToDosDate(const tm_zip* ptm)
 {
-    uLong year = (uLong)ptm->tm_year;
+    uInt year = ptm->tm_year;
     if (year>=1980)
         year-=1980;
     else if (year>=80)
         year-=80;
+    if (year > 127)
+        year = 127;
+    uInt mon = 1 + (ptm->tm_mon - 1) % 12;
+    uInt day = 1 + (ptm->tm_mday - 1) % 31;
+    uInt hour = ptm->tm_hour % 24;
+    uInt min = ptm->tm_min % 60;
+    uInt sec = ptm->tm_sec % 60;
     return
-      (uLong) (((ptm->tm_mday) + (32 * (ptm->tm_mon+1)) + (512 * year)) << 16) |
-        ((ptm->tm_sec/2) + (32* ptm->tm_min) + (2048 * (uLong)ptm->tm_hour));
+       ((uLong)(day + (32 * mon) + (512 * year)) << 16) |
+        (uLong)((sec/2) + (32 * min) + (2048 * hour));
 }
 
 

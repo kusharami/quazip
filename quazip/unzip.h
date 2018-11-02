@@ -95,8 +95,8 @@ typedef struct tm_unz_s
     uInt tm_min;            /* minutes after the hour - [0,59] */
     uInt tm_hour;           /* hours since midnight - [0,23] */
     uInt tm_mday;           /* day of the month - [1,31] */
-    uInt tm_mon;            /* months since January - [0,11] */
-    uInt tm_year;           /* years - [1980..2044] */
+    uInt tm_mon;            /* months since January - [1,12] */
+    uInt tm_year;           /* years - [1980..2107] */
 } tm_unz;
 
 /* unz_global_info structure contain global data about the ZIPfile

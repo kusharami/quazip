@@ -138,6 +138,7 @@ private:
     static quint64 dateTimeToNTFSTime(const QDateTime &from);
     static qint64 dateTimeToUnixTime(const QDateTime &from, qint32 &time32);
     static QDateTime zInfoToDateTime(const unz_file_info64 &info);
+    static void fillTMZDate(tm_zip &out, const QDateTime &time);
 
     static QDateTime decodeCreationTime(const unz_file_info64 &info,
         const QuaZExtraField::Map &centralExtra,
@@ -795,6 +796,39 @@ QDateTime QuaZipPrivate::zInfoToDateTime(const unz_file_info64 &info)
     QTime time(int(info.tmu_date.tm_hour), int(info.tmu_date.tm_min),
         int(info.tmu_date.tm_sec));
     return QDateTime(date, time);
+}
+
+void QuaZipPrivate::fillTMZDate(tm_zip &out, const QDateTime &dateTime)
+{
+    Q_ASSERT(dateTime.isValid());
+    auto localTime = dateTime.toLocalTime();
+
+    auto date = localTime.date();
+    auto time = localTime.time();
+    int year = date.year();
+
+    if (year < 1980) {
+        out.tm_year = 1980;
+        out.tm_mon = 1;
+        out.tm_mday = 1;
+        out.tm_hour = 0;
+        out.tm_min = 0;
+        out.tm_sec = 0;
+    } else if (year > 2107) {
+        out.tm_year = 2107;
+        out.tm_mon = 12;
+        out.tm_mday = 31;
+        out.tm_hour = 23;
+        out.tm_min = 59;
+        out.tm_sec = 59;
+    } else {
+        out.tm_year = uInt(year);
+        out.tm_mon = uInt(date.month());
+        out.tm_mday = uInt(date.day());
+        out.tm_hour = uInt(time.hour());
+        out.tm_min = uInt(time.minute());
+        out.tm_sec = uInt(time.second());
+    }
 }
 
 QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
@@ -1997,12 +2031,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
         }
     }
 
-    zipInfo.tmz_date.tm_year = uInt(modTime.date().year());
-    zipInfo.tmz_date.tm_mon = uInt(modTime.date().month() - 1);
-    zipInfo.tmz_date.tm_mday = uInt(modTime.date().day());
-    zipInfo.tmz_date.tm_hour = uInt(modTime.time().hour());
-    zipInfo.tmz_date.tm_min = uInt(modTime.time().minute());
-    zipInfo.tmz_date.tm_sec = uInt(modTime.time().second());
+    QuaZipPrivate::fillTMZDate(zipInfo.tmz_date, modTime);
     zipInfo.dosDate = 0;
     zipInfo.internal_fa = fileInfo.internalAttributes();
     zipInfo.external_fa = uLong(fileInfo.externalAttributes());
