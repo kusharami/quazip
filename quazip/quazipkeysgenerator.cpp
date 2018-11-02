@@ -1,8 +1,8 @@
 #include "quazipkeysgenerator.h"
 
-#include "minizip_crypt.h"
+#include "quaziptextcodec.h"
 
-#include <QTextCodec>
+#include "minizip_crypt.h"
 
 #include <deque>
 
@@ -184,7 +184,7 @@ bool QuaZipKeysGenerator::Private::equals(const Private &other) const
 QTextCodec *QuaZipKeysGenerator::Private::getDefaultPasswordCodec()
 {
     if (!defaultPasswordCodec) {
-        defaultPasswordCodec = QTextCodec::codecForLocale();
+        defaultPasswordCodec = QuaZipTextCodec::codecForLocale();
     }
     return defaultPasswordCodec;
 }

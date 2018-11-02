@@ -2,29 +2,110 @@
 
 #ifdef Q_OS_WIN
 #include "Windows.h"
+#undef max
 #include <vector>
 #endif
 
 #include <QLocale>
 
-class QuaZipTextCodecPrivate {
+class QuaZipTextCodec::Private {
 public:
     QTextCodec *customCodec;
     quint32 codepage;
 
-    QuaZipTextCodecPrivate(quint32 codepage);
+    Private(quint32 codepage);
 
+    QByteArray codecName() const;
     void setCodePage(quint32 codepage);
-    bool shouldUseCustomCodec() const;
+    bool shouldUseCustomCodec();
+
+    static QByteArray codecNameForCodePage(quint32 codepage);
 };
 
-QuaZipTextCodec::QuaZipTextCodec()
-    : QuaZipTextCodec(0)
+#ifdef Q_OS_WIN
+inline DWORD getMBtoWCFlagsForCodePage(int codepage)
 {
+    switch (codepage) {
+    case 50220:
+    case 50221:
+    case 50222:
+    case 50225:
+    case 50227:
+    case 50229:
+    case 57002:
+    case 57003:
+    case 57004:
+    case 57005:
+    case 57006:
+    case 57007:
+    case 57008:
+    case 57009:
+    case 57010:
+    case 57011:
+    case CP_UTF7:
+    case CP_SYMBOL:
+        return 0;
+
+    default:
+        break;
+    }
+    return MB_PRECOMPOSED;
 }
 
+inline DWORD getWCtoMBFlagsForCodePage(int codepage)
+{
+    switch (codepage) {
+    case 50220:
+    case 50221:
+    case 50222:
+    case 50225:
+    case 50227:
+    case 50229:
+    case 57002:
+    case 57003:
+    case 57004:
+    case 57005:
+    case 57006:
+    case 57007:
+    case 57008:
+    case 57009:
+    case 57010:
+    case 57011:
+    case CP_UTF7:
+    case CP_SYMBOL:
+        return 0;
+
+    default:
+        break;
+    }
+    return WC_NO_BEST_FIT_CHARS | WC_COMPOSITECHECK | WC_DEFAULTCHAR;
+}
+
+inline DWORD getMBtoWCErrorFlagsForCodePage(int codepage)
+{
+    switch (codepage) {
+    case CP_UTF8:
+    case 54936:
+        return MB_ERR_INVALID_CHARS;
+    }
+
+    return 0;
+}
+
+inline DWORD getWCtoMBErrorFlagsForCodePage(int codepage)
+{
+    switch (codepage) {
+    case CP_UTF8:
+    case 54936:
+        return WC_ERR_INVALID_CHARS;
+    }
+
+    return 0;
+}
+#endif
+
 QuaZipTextCodec::QuaZipTextCodec(quint32 codepage)
-    : d(new QuaZipTextCodecPrivate(codepage))
+    : d(new Private(codepage))
 {
 }
 
@@ -35,23 +116,61 @@ QuaZipTextCodec::~QuaZipTextCodec()
 
 quint32 QuaZipTextCodec::codepage() const
 {
+#ifdef Q_OS_WIN
+    if (d->codepage == 0)
+        return GetOEMCP();
+#endif
+
     return d->codepage;
 }
 
-void QuaZipTextCodec::setCodePage(quint32 codepage)
+QTextCodec *QuaZipTextCodec::codecForCodepage(quint32 codepage)
 {
-    if (d->codepage == codepage)
-        return;
+    int mib = mibForCodepage(codepage);
+    if (mib == 0) {
+        auto codec = codecForName(Private::codecNameForCodePage(codepage));
+        if (!codec)
+            codec = new QuaZipTextCodec(codepage);
+        return codec;
+    }
 
-    d->setCodePage(codepage);
+    return codecForMib(mib);
 }
 
-QTextCodec *QuaZipTextCodec::codecForCodePage(quint32 codepage)
+QTextCodec *QuaZipTextCodec::codecForLocale()
 {
-    return codecForMib(codePageToMib(codepage));
+    auto codec = QTextCodec::codecForLocale();
+    Q_ASSERT(codec);
+#ifdef Q_OS_WIN
+    if (codec->mibEnum() == 0) {
+        return codecForCodepage(GetACP());
+    }
+#endif
+    return codec;
 }
 
-int QuaZipTextCodec::codePageToMib(quint32 codepage)
+quint32 QuaZipTextCodec::codepageForCodec(QTextCodec *codec)
+{
+    if (!codec)
+        codec = 0;
+
+    auto zCodec = dynamic_cast<QuaZipTextCodec *>(codec);
+    if (zCodec) {
+        return zCodec->codepage();
+    }
+
+    int codepage = codepageForMib(codec->mibEnum());
+    if (codepage == 0) {
+#ifdef Q_OS_WIN
+        return GetACP();
+#else
+        return WCP_UTF8;
+#endif
+    }
+    return codepage;
+}
+
+int QuaZipTextCodec::mibForCodepage(quint32 codepage)
 {
     switch (codepage) {
     case WCP_UTF8:
@@ -140,7 +259,7 @@ int QuaZipTextCodec::codePageToMib(quint32 codepage)
     return 0;
 }
 
-quint32 QuaZipTextCodec::mibToCodePage(int mib)
+quint32 QuaZipTextCodec::codepageForMib(int mib)
 {
     switch (mib) {
     case IANA_UTF8:
@@ -228,23 +347,17 @@ quint32 QuaZipTextCodec::mibToCodePage(int mib)
 
 QByteArray QuaZipTextCodec::name() const
 {
-    return d->shouldUseCustomCodec() ? d->customCodec->name()
-#ifdef Q_OS_WIN
-                                     : QByteArrayLiteral("oem");
-#else
-                                     : QByteArray();
-#endif
+    return d->codecName();
 }
 
 QList<QByteArray> QuaZipTextCodec::aliases() const
 {
-    return d->shouldUseCustomCodec() ? d->customCodec->aliases()
-                                     : QList<QByteArray>();
+    return QList<QByteArray>();
 }
 
 int QuaZipTextCodec::mibEnum() const
 {
-    return d->shouldUseCustomCodec() ? d->customCodec->mibEnum() : 0;
+    return std::numeric_limits<int>::max();
 }
 
 QString QuaZipTextCodec::convertToUnicode(
@@ -258,17 +371,16 @@ QString QuaZipTextCodec::convertToUnicode(
         return d->customCodec->toUnicode(in, length, state);
     }
 #ifdef Q_OS_WIN
-    DWORD errorFlags = (state && state->flags.testFlag(ConvertInvalidToNull))
-        ? MB_ERR_INVALID_CHARS
-        : 0;
-    DWORD flags = MB_PRECOMPOSED;
+    static_assert(sizeof(QChar) == sizeof(WCHAR), "WCHAR size mismatch");
 
-    quint32 cp = d->codepage;
-    if (cp == 0)
-        cp = CP_OEMCP;
+    quint32 cp = codepage();
 
-    int resultLength =
-        MultiByteToWideChar(cp, flags | errorFlags, in, length, NULL, 0);
+    DWORD flags = getMBtoWCFlagsForCodePage(cp);
+    bool validate = state && state->flags.testFlag(ConvertInvalidToNull);
+    if (validate)
+        flags |= getMBtoWCErrorFlagsForCodePage(cp);
+
+    int resultLength = MultiByteToWideChar(cp, flags, in, length, NULL, 0);
 
     if (resultLength <= 0) {
         if (state && GetLastError() == ERROR_NO_UNICODE_TRANSLATION) {
@@ -304,25 +416,24 @@ QByteArray QuaZipTextCodec::convertFromUnicode(
     }
 
 #ifdef Q_OS_WIN
-    static_assert(sizeof(QChar) == sizeof(WCHAR), "Not MSVC?");
+    static_assert(sizeof(QChar) == sizeof(WCHAR), "WCHAR size mismatch");
 
     bool validate = state && state->flags.testFlag(ConvertInvalidToNull);
 
-    DWORD errorFlags = validate ? WC_ERR_INVALID_CHARS : 0;
-    DWORD flags = WC_NO_BEST_FIT_CHARS | WC_COMPOSITECHECK | WC_DEFAULTCHAR;
+    auto cp = codepage();
 
-    quint32 cp = d->codepage;
+    DWORD flags = getWCtoMBFlagsForCodePage(cp);
+    if (validate)
+        flags |= getWCtoMBErrorFlagsForCodePage(cp);
 
     BOOL usedDefaultCharacter = false;
     LPBOOL usedDefaultCharacterP = nullptr;
-    if (cp == 0)
-        cp = CP_OEMCP;
-    else if (cp != CP_UTF7 && cp != CP_UTF8) {
+    if (cp != CP_UTF7 && cp != CP_UTF8) {
         usedDefaultCharacterP = &usedDefaultCharacter;
     }
-    int resultLength = WideCharToMultiByte(cp, flags | errorFlags,
-        reinterpret_cast<const WCHAR *>(in), length, NULL, 0, NULL,
-        usedDefaultCharacterP);
+    int resultLength =
+        WideCharToMultiByte(cp, flags, reinterpret_cast<const WCHAR *>(in),
+            length, NULL, 0, NULL, usedDefaultCharacterP);
 
     if (usedDefaultCharacter) {
         if (validate) {
@@ -353,12 +464,18 @@ QByteArray QuaZipTextCodec::convertFromUnicode(
     return result;
 }
 
-QuaZipTextCodecPrivate::QuaZipTextCodecPrivate(quint32 codepage)
+QuaZipTextCodec::Private::Private(quint32 codepage)
+    : customCodec(nullptr)
+    , codepage(codepage)
 {
-    setCodePage(codepage);
 }
 
-void QuaZipTextCodecPrivate::setCodePage(quint32 codepage)
+QByteArray QuaZipTextCodec::Private::codecName() const
+{
+    return codecNameForCodePage(codepage);
+}
+
+void QuaZipTextCodec::Private::setCodePage(quint32 codepage)
 {
     customCodec = nullptr;
     if (codepage == 0) {
@@ -367,33 +484,36 @@ void QuaZipTextCodecPrivate::setCodePage(quint32 codepage)
         case QLocale::Ukrainian:
         case QLocale::Belarusian:
             customCodec =
-                QuaZipTextCodec::codecForCodePage(QuaZipTextCodec::WCP_IBM866);
+                QuaZipTextCodec::codecForCodepage(QuaZipTextCodec::WCP_IBM866);
             break;
         default:
             customCodec =
-                QuaZipTextCodec::codecForCodePage(QuaZipTextCodec::WCP_IBM437);
+                QuaZipTextCodec::codecForCodepage(QuaZipTextCodec::WCP_IBM437);
             if (!customCodec) {
-                customCodec = QuaZipTextCodec::codecForCodePage(
+                customCodec = QuaZipTextCodec::codecForCodepage(
                     QuaZipTextCodec::WCP_IBM850);
             }
             break;
         }
     } else {
-        customCodec = QuaZipTextCodec::codecForCodePage(codepage);
+        customCodec = QuaZipTextCodec::codecForCodepage(codepage);
     }
 }
 
-bool QuaZipTextCodecPrivate::shouldUseCustomCodec() const
+bool QuaZipTextCodec::Private::shouldUseCustomCodec()
 {
-    if (codepage != 0 && customCodec != nullptr)
-        return true;
 #ifdef Q_OS_WIN
-    if (codepage != 0)
-        return customCodec != nullptr;
-
-    auto oemCp = GetOEMCP();
-    return oemCp != CP_UTF7 && oemCp != CP_UTF8;
-#else
-    return false;
+    if (codepage == 0)
+        return false;
 #endif
+
+    if (customCodec == nullptr)
+        setCodePage(codepage);
+
+    return customCodec != nullptr;
+}
+
+QByteArray QuaZipTextCodec::Private::codecNameForCodePage(quint32 codepage)
+{
+    return QByteArrayLiteral("QuaZipTextCodec") + QByteArray::number(codepage);
 }

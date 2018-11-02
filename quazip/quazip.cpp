@@ -96,7 +96,6 @@ private:
     inline QuaZipPrivate(QuaZip *q, const QString &zipName);
     /// The constructor for the corresponding QuaZip constructor.
     QuaZipPrivate(QuaZip *q, QIODevice *ioDevice);
-    ~QuaZipPrivate();
     /// Returns either a list of file names or a list of QuaZipFileInfo.
     template<typename TFileInfo>
     bool getFileInfoList(QList<TFileInfo> *result) const;
@@ -191,22 +190,22 @@ private:
     static QuaZip::Compatibility defaultCompatibility;
     static QTextCodec *defaultFileNameCodec;
     static QTextCodec *defaultCommentCodec;
-    static QScopedPointer<QuaZipTextCodec> legacyTextCodec;
+    static QTextCodec *legacyTextCodec;
 };
 
 QuaZip::Compatibility QuaZipPrivate::defaultCompatibility(
     QuaZip::UnixCompatible | QuaZip::WindowsCompatible);
 QTextCodec *QuaZipPrivate::defaultFileNameCodec = nullptr;
 QTextCodec *QuaZipPrivate::defaultCommentCodec = nullptr;
-QScopedPointer<QuaZipTextCodec> QuaZipPrivate::legacyTextCodec;
+QTextCodec *QuaZipPrivate::legacyTextCodec = nullptr;
 
 QTextCodec *QuaZipPrivate::getLegacyTextCodec()
 {
     if (legacyTextCodec == nullptr) {
-        legacyTextCodec.reset(new QuaZipTextCodec);
+        legacyTextCodec = QuaZipTextCodec::codecForCodepage(0);
     }
 
-    return legacyTextCodec.data();
+    return legacyTextCodec;
 }
 
 QTextCodec *QuaZipPrivate::getDefaultFileNameCodec()
@@ -221,7 +220,7 @@ QTextCodec *QuaZipPrivate::getDefaultFileNameCodec()
 QTextCodec *QuaZipPrivate::getDefaultCommentCodec()
 {
     if (defaultCommentCodec == nullptr) {
-        return QTextCodec::codecForLocale();
+        return QuaZipTextCodec::codecForLocale();
     }
 
     return defaultCommentCodec;
@@ -244,7 +243,6 @@ QuaZipPrivate::QuaZipPrivate(QuaZip *q, QIODevice *ioDevice)
     , commentCodec(getDefaultCommentCodec())
     , passwordCodec(QuaZipKeysGenerator::defaultPasswordCodec())
     , ioDevice(ioDevice)
-    , winZipCodec(nullptr)
     , mode(QuaZip::mdNotOpen)
     , compatibility(defaultCompatibility)
     , zipError(UNZ_OK)
@@ -257,11 +255,6 @@ QuaZipPrivate::QuaZipPrivate(QuaZip *q, QIODevice *ioDevice)
     zipFile_f = NULL;
     lastMappedDirectoryEntry.num_of_file = 0;
     lastMappedDirectoryEntry.pos_in_zip_directory = 0;
-}
-
-QuaZipPrivate::~QuaZipPrivate()
-{
-    delete winZipCodec;
 }
 
 void QuaZipPrivate::clearDirectoryMap()
@@ -871,7 +864,7 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
                 return getLegacyTextCodec()->toUnicode(text);
             }
 
-            return QTextCodec::codecForLocale()->toUnicode(text);
+            return QuaZipTextCodec::codecForLocale()->toUnicode(text);
         }
         break;
     }
@@ -939,16 +932,17 @@ void QuaZipPrivate::storeWinZipExtraFields(QuaZExtraField::Map &centralExtra,
         return;
 
     quint8 flags = 0;
-    quint32 filePathCodePage = 0;
-    quint32 commentCodePage = 0;
 
     auto filePathCodec = compatibleFilePathCodec();
-    int mib =
-        filePathCodec ? filePathCodec->mibEnum() : QuaZipTextCodec::IANA_UTF8;
-    filePathCodePage = QuaZipTextCodec::mibToCodePage(mib);
+    quint32 filePathCodePage = filePathCodec
+        ? QuaZipTextCodec::codepageForCodec(filePathCodec)
+        : QuaZipTextCodec::IANA_UTF8;
+
     auto commentCodec = compatibleCommentCodec();
-    mib = commentCodec ? commentCodec->mibEnum() : QuaZipTextCodec::IANA_UTF8;
-    commentCodePage = QuaZipTextCodec::mibToCodePage(mib);
+    quint32 commentCodePage = commentCodec
+        ? QuaZipTextCodec::codepageForCodec(commentCodec)
+        : QuaZipTextCodec::IANA_UTF8;
+
     QByteArray filePathUtf8;
     if (compatibility == QuaZip::CustomCompatibility) {
         flags |= WINZIP_FILENAME_CODEPAGE_FLAG;
@@ -1027,14 +1021,6 @@ QString QuaZipPrivate::getInfoZipUnicodeText(quint16 headerId,
     return QString::fromUtf8(utf8);
 }
 
-QuaZipTextCodec *QuaZipPrivate::winZipTextCodec()
-{
-    if (!winZipCodec)
-        winZipCodec = new QuaZipTextCodec;
-
-    return winZipCodec;
-}
-
 QString QuaZipPrivate::getWinZipUnicodeFileName(
     const QuaZExtraField::Map &extra, const QByteArray &legacyFileName)
 {
@@ -1068,7 +1054,7 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
         fileNameLength -= sizeof(commentCodePage);
     }
 
-    quint32 fileNameCodePage = QuaZipTextCodec::WCP_UTF8;
+    quint32 fileNameCodePage = 0;
     if (flags & WINZIP_FILENAME_CODEPAGE_FLAG) {
         fieldReader >> fileNameCodePage;
         if (fieldReader.status() != QDataStream::Ok)
@@ -1076,8 +1062,11 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
         fileNameLength -= sizeof(fileNameCodePage);
     }
 
-    auto codec = winZipTextCodec();
-    codec->setCodePage(fileNameCodePage);
+    QTextCodec *codec = fileNameCodePage > 0
+        ? QuaZipTextCodec::codecForCodepage(fileNameCodePage)
+        : nullptr;
+    if (!codec)
+        codec = QuaZipTextCodec::codecForLocale();
     if (flags & WINZIP_ENCODED_FILENAME_FLAG) {
         QByteArray fileName;
         fileName.resize(fileNameLength);
@@ -1143,8 +1132,11 @@ QString QuaZipPrivate::getWinZipUnicodeComment(
         if (fieldReader.status() == QDataStream::ReadCorruptData)
             return QString();
 
-        auto codec = winZipTextCodec();
-        codec->setCodePage(commentCodePage);
+        QTextCodec *codec = commentCodePage > 0
+            ? QuaZipTextCodec::codecForCodepage(commentCodePage)
+            : nullptr;
+        if (!codec)
+            codec = QuaZipTextCodec::codecForLocale();
         return codec->toUnicode(legacyComment);
     }
 
@@ -1360,7 +1352,9 @@ void QuaZip::close()
                     commentCodec = QuaZipPrivate::getLegacyTextCodec();
                 break;
             }
-            if (commentCodec && commentCodec->canEncode(comment)) {
+            if (commentCodec &&
+                (p->compatibility == DosCompatible ||
+                    commentCodec->canEncode(comment))) {
                 encodedComment = commentCodec->fromUnicode(comment);
             } else {
                 encodedComment =
@@ -2077,8 +2071,10 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
                 p->storeInfoZipComment(
                     centralExtra, fileInfo.comment(), compatibleComment);
             }
-            p->storeWinZipExtraFields(
-                centralExtra, fileInfo.filePath(), compatibleFilePath);
+            if (isUnicodeComment || isUnicodeFilePath) {
+                p->storeWinZipExtraFields(
+                    centralExtra, fileInfo.filePath(), compatibleFilePath);
+            }
         }
 
         auto &createTime = fileInfo.creationTime();

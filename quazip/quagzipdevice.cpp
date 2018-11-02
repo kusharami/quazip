@@ -25,6 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quagzipdevice.h"
 
 #include "private/quaziodeviceprivate.h"
+#include "quaziptextcodec.h"
 
 #include <QDateTime>
 #include <QFileDevice>
@@ -105,7 +106,7 @@ QTextCodec *QuaGzipDevice::fileNameCodec() const
 
 void QuaGzipDevice::setFileNameCodec(QTextCodec *codec)
 {
-    d()->fileNameCodec = codec ? codec : QTextCodec::codecForLocale();
+    d()->fileNameCodec = codec ? codec : QuaZipTextCodec::codecForLocale();
 }
 
 void QuaGzipDevice::setFileNameCodec(const char *codecName)
@@ -120,7 +121,7 @@ QTextCodec *QuaGzipDevice::commentCodec() const
 
 void QuaGzipDevice::setCommentCodec(QTextCodec *codec)
 {
-    d()->commentCodec = codec ? codec : QTextCodec::codecForLocale();
+    d()->commentCodec = codec ? codec : QuaZipTextCodec::codecForLocale();
 }
 
 void QuaGzipDevice::setCommentCodec(const char *codecName)
@@ -235,7 +236,7 @@ QuaGzipDevicePrivate::QuaGzipDevicePrivate(QuaGzipDevice *owner)
     gzHeader.comment = reinterpret_cast<Bytef *>(comment);
     gzHeader.comm_max = COMMENT_MAX;
 
-    fileNameCodec = QTextCodec::codecForLocale();
+    fileNameCodec = QuaZipTextCodec::codecForLocale();
     commentCodec = fileNameCodec;
 }
 

@@ -565,8 +565,8 @@ public:
      * won't affect the QuaZip instances already created at that moment.
      *
      * The codec specified here can be overriden by calling setCommentCodec().
-     * If neither function is called, QTextCodec::codecForLocale() will be used
-     * to decode and encode comments.
+     * If neither function is called, QuaZipTextCodec::codecForLocale() will
+     * be used to decode and encode comments.
      */
     static void setDefaultCommentCodec(QTextCodec *codec = nullptr);
     /**

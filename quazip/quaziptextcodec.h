@@ -4,8 +4,6 @@
 
 #include <QTextCodec>
 
-class QuaZipTextCodecPrivate;
-
 /// Class for encoding/decoding file names and comments in a zip file.
 /**
  * \note On Windows you can convert with any valid code page number;
@@ -15,43 +13,33 @@ class QuaZipTextCodecPrivate;
  * 20866, 21866, 50220, 50221, 50222
  */
 class QUAZIP_EXPORT QuaZipTextCodec : public QTextCodec {
-public:
-    /// Default constructor
-    /**
-     * On Windows it uses current OEM code page if it is not UTF-7 or UTF-8.
-     * In other cases and on other systems it uses IBM866 if default locale
-     * is Russian, IBM 437 code page (if available) or IBM 850 code page.
-     **/
-    QuaZipTextCodec();
-    /// Constructs codec using Windows code page number
-    /**
-     * @param codepage Valid Windows code page number
-     * If zero, then default behavior.
-     *
-     * \sa setCodePage()
-     */
-    QuaZipTextCodec(quint32 codepage);
-
+protected:
+    /// Registers the codec with Windows Codepage Number
+    /// \param codepage If codepage is zero,
+    /// IBM 437, IBM 850 or IBM 866 code page will be used.
+    /// Tt is Locale and Platform specific what codepage will be chosen
+    QuaZipTextCodec(quint32 codepage = 0);
+    /// Do not delete! Qt will automatically delete the codec
     virtual ~QuaZipTextCodec() override;
 
+public:
     /// Windows code page number
-    /// \return Zero if default behavior
     quint32 codepage() const;
-    /// Set Windows code page number
-    /**
-     * @param codepage Valid Windows code page number.
-     * If zero, then default behavior.
-     **/
-    void setCodePage(quint32 codepage);
 
     /// Returns QTextCodec for supported Windows Code Page number
-    static QTextCodec *codecForCodePage(quint32 codepage);
+    static QTextCodec *codecForCodepage(quint32 codepage);
+    /// Overrides QTextCodec::codecForLocale to fix
+    /// canEncode on Windows platform (QTBUG-6925)
+    static QTextCodec *codecForLocale();
+
+    /// Returns Windows Code Page Number associated with \a codec
+    static quint32 codepageForCodec(QTextCodec *codec);
 
     /// Converts Windows Code Page Number to IANA Code Page number
-    static int codePageToMib(quint32 codepage);
+    static int mibForCodepage(quint32 codepage);
 
     /// Converts IANA Code Page Number to Windows Code Page number
-    static quint32 mibToCodePage(int mib);
+    static quint32 codepageForMib(int mib);
 
     virtual QByteArray name() const override;
     virtual QList<QByteArray> aliases() const override;
@@ -156,5 +144,6 @@ protected:
         const QChar *in, int length, ConverterState *state) const override;
 
 private:
-    QuaZipTextCodecPrivate *d;
+    class Private;
+    Private *d;
 };
