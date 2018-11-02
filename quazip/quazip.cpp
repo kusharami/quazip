@@ -64,7 +64,6 @@ private:
     QString zipName;
     /// The device to access the archive.
     QIODevice *ioDevice;
-    QuaZipTextCodec *winZipCodec;
     /// The global comment.
     QString comment;
     /// The open mode.
@@ -168,8 +167,6 @@ private:
 
     static QString getInfoZipUnicodeText(quint16 headerId,
         const QuaZExtraField::Map &extra, const QByteArray &legacyText);
-
-    QuaZipTextCodec *winZipTextCodec();
 
     QString getWinZipUnicodeFileName(
         const QuaZExtraField::Map &extra, const QByteArray &legacyFileName);
@@ -1373,8 +1370,7 @@ void QuaZip::close()
         p->ioDevice = nullptr;
     }
     p->clearDirectoryMap();
-    if (p->zipError == UNZ_OK)
-        p->mode = mdNotOpen;
+    p->mode = mdNotOpen;
 }
 
 void QuaZip::setZipFilePath(const QString &zipName)
