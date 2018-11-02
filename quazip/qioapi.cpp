@@ -250,7 +250,7 @@ int ZCALLBACK qiodevice64_seek_file_func(
         d->pos += offset;
         break;
     case ZLIB_FILEFUNC_SEEK_END:
-        d->pos -= offset;
+        d->pos = iodevice->size() - offset;
         break;
     case ZLIB_FILEFUNC_SEEK_SET:
         d->pos = offset;
