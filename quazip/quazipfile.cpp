@@ -238,6 +238,7 @@ bool QuaZipFile::open(OpenMode mode)
         return false;
     }
 
+    p->clearZipError();
     if (mode & ReadOnly) {
         mode = p->initRead(mode);
     } else if (mode & WriteOnly) {
@@ -250,7 +251,7 @@ bool QuaZipFile::open(OpenMode mode)
     if (mode == NotOpen)
         return false;
 
-    p->clearZipError();
+    Q_ASSERT(p->zipError == 0);
     return QIODevice::open(mode);
 }
 
@@ -822,8 +823,8 @@ QIODevice::OpenMode QuaZipFilePrivate::initWrite(QIODevice::OpenMode mode)
         info_z.extrafield_global = centralExtra.data();
         info_z.size_extrafield_global = uInt(centralExtra.length());
 
-        info_z.extrafield_global = localExtra.data();
-        info_z.size_extrafield_global = uInt(localExtra.length());
+        info_z.extrafield_local = localExtra.data();
+        info_z.size_extrafield_local = uInt(localExtra.length());
 
         setZipError(zipOpenNewFileInZipKeys(zip->getZipFile(), &info_z,
             fileInfo.hasCryptKeys() ? fileInfo.cryptKeys() : NULL));
