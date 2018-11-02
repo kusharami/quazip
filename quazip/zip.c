@@ -1202,7 +1202,7 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
 
     int level = zipfi->level;
     zi->ci.flag = zipfi->flag;
-    zi->ci.flag &= 6;
+    zi->ci.flag &= ~6;
     if (method == Z_DEFLATED)
     {
         if (level < 0)
