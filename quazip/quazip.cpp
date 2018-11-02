@@ -97,7 +97,7 @@ private:
     QuaZipPrivate(QuaZip *q, QIODevice *ioDevice);
     /// Returns either a list of file names or a list of QuaZipFileInfo.
     template<typename TFileInfo>
-    bool getFileInfoList(QList<TFileInfo> *result) const;
+    bool getFileInfoList(QList<TFileInfo> *result);
 
     /// Stores map of filenames and file locations for unzipping
     inline void clearDirectoryMap();
@@ -269,14 +269,15 @@ void QuaZipPrivate::addCurrentFileToDirectoryMap(const QString &fileName)
     if (!hasCurrentFile_f || fileName.isEmpty()) {
         return;
     }
+    auto cleanFilePath = QDir::cleanPath(fileName);
     // Adds current file to filename map as fileName
     unz64_file_pos fileDirectoryPos;
     unzGetFilePos64(unzFile_f, &fileDirectoryPos);
 
-    directoryCaseSensitive.insert(fileName, fileDirectoryPos);
+    directoryCaseSensitive.insert(cleanFilePath, fileDirectoryPos);
     // Only add lowercase to directory map if not already there
     // ensures only map the first one seen
-    QString lower = QLocale().toLower(fileName);
+    QString lower = QLocale().toLower(cleanFilePath);
     if (!directoryCaseInsensitive.contains(lower))
         directoryCaseInsensitive.insert(lower, fileDirectoryPos);
     // Mark last one
@@ -419,7 +420,7 @@ QDateTime QuaZipPrivate::decodeLastAccessTime(const unz_file_info64 &info,
         }
     }
 
-    return zInfoToDateTime(info);
+    return decodeModificationTime(info, centralExtra, localExtra);
 }
 
 QString QuaZipPrivate::decodeSymLinkTarget(
@@ -670,11 +671,11 @@ void QuaZipPrivate::storeUnixExtraFields(QuaZExtraField::Map &centralExtra,
         : dateTimeToUnixTime(createTime, createTime32);
 
     quint8 timeFlags = 0;
-    if (accTime32 == unixAccTime)
-        timeFlags |= UNIX_ACC_TIME_FLAG;
     if (modTime32 == unixModTime)
         timeFlags |= UNIX_MOD_TIME_FLAG;
-    if (createTime32 == unixCreateTime)
+    if (accTime32 == unixAccTime && unixAccTime != unixModTime)
+        timeFlags |= UNIX_ACC_TIME_FLAG;
+    if (createTime32 == unixCreateTime && unixCreateTime != unixModTime)
         timeFlags |= UNIX_CRT_TIME_FLAG;
 
     if ((timeFlags & UNIX_ACC_TIME_FLAG) || (timeFlags & UNIX_MOD_TIME_FLAG) ||
@@ -701,14 +702,6 @@ void QuaZipPrivate::storeUnixExtraFields(QuaZExtraField::Map &centralExtra,
         {
             QDataStream writer(&unixTimestamps, QIODevice::WriteOnly);
             writer.setByteOrder(QDataStream::LittleEndian);
-
-            if (timeFlags & UNIX_MOD_TIME_FLAG) {
-                if (modTime32 == accTime32)
-                    timeFlags &= ~UNIX_ACC_TIME_FLAG;
-
-                if (modTime32 == createTime32)
-                    timeFlags &= ~UNIX_CRT_TIME_FLAG;
-            }
 
             writer << timeFlags;
             if (timeFlags & UNIX_MOD_TIME_FLAG) {
@@ -1645,8 +1638,8 @@ QString QuaZip::currentFilePath() const
 
     auto extraMap = QuaZExtraField::toMap(centralExtra);
 
-    QString result = QDir::cleanPath(p->decodeZipText(
-        fileName, info_z.flag, extraMap, QuaZipPrivate::ZIP_FILENAME));
+    QString result = p->decodeZipText(
+        fileName, info_z.flag, extraMap, QuaZipPrivate::ZIP_FILENAME);
 
     // Add to directory map
     p->addCurrentFileToDirectoryMap(result);
@@ -1776,10 +1769,9 @@ QString QuaZip_getFileInfo(QuaZip *zip, bool *ok)
 }
 
 template<typename TFileInfo>
-bool QuaZipPrivate::getFileInfoList(QList<TFileInfo> *result) const
+bool QuaZipPrivate::getFileInfoList(QList<TFileInfo> *result)
 {
-    QuaZipPrivate *fakeThis = const_cast<QuaZipPrivate *>(this);
-    fakeThis->zipError = UNZ_OK;
+    zipError = UNZ_OK;
     if (mode != QuaZip::mdUnzip) {
         qWarning("QuaZip::getFileNameList/getFileInfoList(): "
                  "ZIP is not open in mdUnzip mode");
@@ -2048,6 +2040,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
 
     QuaZExtraField::Map *EXTRA[] = {&localExtra, &centralExtra};
     for (auto map : EXTRA) {
+        map->remove(ZIP64_HEADER);
         map->remove(UNIX_HEADER);
         map->remove(UNIX_EXTENDED_TIMESTAMP_HEADER);
         map->remove(INFO_ZIP_UNIX_HEADER);

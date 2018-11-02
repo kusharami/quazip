@@ -40,8 +40,12 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quazip/JlCompress.h"
 #include "quazip/quacrc32.h"
 
-static QString nameChecksumStr(const QString &name)
+static QString nameForDos(const QString &name)
 {
+    auto codec = QuaZipTextCodec::codecForCodepage(0);
+    if (codec->canEncode(name))
+        return name;
+
     return QStringLiteral("%1").arg(
         zChecksum<QuaCrc32>(name.constData(), name.length() * sizeof(QChar)), 8,
         16, QChar('0'));
@@ -59,33 +63,32 @@ void TestQuaZip::create_data()
     QString dirRus = QString::fromUtf8("папка");
     QString testDirFmt("test/dir/%1/");
     QString rusExtFmt("%1/%2");
-    QString rusExtFile = QString::fromUtf8("file.экс");
+    QString japExtFile = QString::fromUtf8("file.わたし");
 
     QStringList testFiles;
     testFiles << "testZipName.txt";
     testFiles << testDirFmt.arg(dirRus);
-    testFiles << rusExtFmt.arg(dirRus, rusExtFile);
+    testFiles << rusExtFmt.arg(dirRus, japExtFile);
 
     QStringList dosFiles;
-    testFiles << "testZi~1.txt";
-    testFiles << testDirFmt.arg(nameChecksumStr(dirRus));
-    testFiles << rusExtFmt.arg(
-        nameChecksumStr(dirRus), nameChecksumStr(rusExtFile));
+    dosFiles << "testZi~1.txt";
+    dosFiles << testDirFmt.arg(nameForDos(dirRus));
+    dosFiles << rusExtFmt.arg(nameForDos(dirRus), nameForDos(japExtFile));
 
     QString latinComment("lorem ipsum");
     auto unicodeComment =
         QString::fromUtf8("SUPER COMMENT わたしはジップファイル פתח תקווה");
 
     QTest::newRow("default")
-        << QuaZip::Compatibility(QuaZip::DefaultCompatibility) << testFiles
-        << testFiles << unicodeComment << unicodeComment;
+        << QuaZip::Compatibility(QuaZip::DefaultCompatibility) << QByteArray()
+        << testFiles << testFiles << unicodeComment << unicodeComment;
 
     QTest::newRow("dos only")
         << QuaZip::Compatibility(QuaZip::DosCompatible) << QByteArray()
         << testFiles << dosFiles << unicodeComment
         << QString::fromLatin1(
-               QTextCodec::codecForMib(QuaZipTextCodec::IANA_IBM850)
-                   ->fromUnicode(unicodeComment));
+               QuaZipTextCodec::codecForCodepage(0)->fromUnicode(
+                   unicodeComment));
 
     QTest::newRow("dos+append")
         << QuaZip::Compatibility(QuaZip::DosCompatible)
@@ -97,8 +100,9 @@ void TestQuaZip::create_data()
                           << unicodeComment << unicodeComment;
 
     QTest::newRow("windows+append")
-        << QuaZip::Compatibility(QuaZip::WindowsCompatible) << QByteArray()
-        << testFiles << testFiles << unicodeComment << unicodeComment;
+        << QuaZip::Compatibility(QuaZip::WindowsCompatible)
+        << QByteArray(33, Qt::Uninitialized) << testFiles << testFiles
+        << unicodeComment << unicodeComment;
 
     QTest::newRow("custom compatibility")
         << QuaZip::Compatibility(QuaZip::CustomCompatibility) << QByteArray()
