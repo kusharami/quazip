@@ -173,6 +173,8 @@ private:
     QString getWinZipUnicodeComment(
         const QuaZExtraField::Map &extra, const QByteArray &legacyComment);
 
+    QString readComment();
+
     QByteArray compatibleFilePath(const QString &filePath) const;
     QTextCodec *compatibleFilePathCodec() const;
     QByteArray compatibleComment(const QString &comment) const;
@@ -1140,6 +1142,22 @@ QString QuaZipPrivate::getWinZipUnicodeComment(
     return QString();
 }
 
+QString QuaZipPrivate::readComment()
+{
+    unz_global_info64 globalInfo;
+    QByteArray comment;
+    if ((zipError = unzGetGlobalInfo64(unzFile_f, &globalInfo)) != UNZ_OK)
+        return QString();
+    comment.resize(int(globalInfo.size_comment));
+    if ((zipError = unzGetGlobalComment(
+             unzFile_f, comment.data(), unsigned(comment.size()))) < 0)
+        return QString();
+    zipError = UNZ_OK;
+
+    auto codec = QTextCodec::codecForUtfText(comment, commentCodec);
+    return codec->toUnicode(comment);
+}
+
 QByteArray QuaZipPrivate::toDosPath(const QByteArray &path)
 {
     auto names = path.split('/');
@@ -1260,7 +1278,7 @@ bool QuaZip::open(OpenMode mode)
                          "sequential devices");
                 break;
             }
-            p->comment = QString();
+            p->comment = p->readComment();
             p->mode = mode;
             p->ioDevice = ioDevice;
             return true;
@@ -1426,22 +1444,7 @@ int QuaZip::entryCount() const
 
 QString QuaZip::globalComment() const
 {
-    p->zipError = UNZ_OK;
-    if (p->mode != mdUnzip) {
-        return p->comment;
-    }
-    unz_global_info64 globalInfo;
-    QByteArray comment;
-    if ((p->zipError = unzGetGlobalInfo64(p->unzFile_f, &globalInfo)) != UNZ_OK)
-        return QString();
-    comment.resize(int(globalInfo.size_comment));
-    if ((p->zipError = unzGetGlobalComment(
-             p->unzFile_f, comment.data(), unsigned(comment.size()))) < 0)
-        return QString();
-    p->zipError = UNZ_OK;
-
-    auto codec = QTextCodec::codecForUtfText(comment, p->commentCodec);
-    return codec->toUnicode(comment);
+    return p->comment;
 }
 
 bool QuaZip::setCurrentFile(const QString &fileName, CaseSensitivity cs)
