@@ -119,7 +119,7 @@ QuaZExtraField::ResultCode QuaZExtraField::fromMap(
         auto &fieldData = it.value();
 
         int fieldDataLength = fieldData.length();
-        int maxFieldLength = std::numeric_limits<quint16>::max();
+        Q_CONSTEXPR int maxFieldLength = std::numeric_limits<quint16>::max();
 
         if (fieldDataLength > maxFieldLength) {
             return ERR_FIELD_SIZE_LIMIT;

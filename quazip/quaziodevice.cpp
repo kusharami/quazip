@@ -104,6 +104,8 @@ bool QuaZIODevice::open(OpenMode mode)
         }
     }
 
+    d->hasError = false;
+    setErrorString(QString());
     setOpenMode(mode);
     d->hasUncompressedSize = false;
 
@@ -121,9 +123,8 @@ bool QuaZIODevice::open(OpenMode mode)
         }
     }
 
+    Q_ASSERT(!d->hasError);
     d->ioPosition = d->ioStartPosition;
-    d->hasError = false;
-    setErrorString(QString());
     return QIODevice::open(mode);
 }
 

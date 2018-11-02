@@ -121,9 +121,6 @@ bool QuaZipDir::cd(const QString &dirPath)
         return true;
     }
 
-    if (normalizedDirPath.endsWith('/'))
-        normalizedDirPath.chop(1);
-
     if (normalizedDirPath == ".") {
         return true;
     }
@@ -567,9 +564,6 @@ void QuaZipDir::setPath(const QString &path)
 
     if (!normalizedPath.startsWith('/'))
         normalizedPath = '/' + normalizedPath;
-
-    if (normalizedPath.endsWith('/'))
-        normalizedPath = normalizedPath.right(1);
 
     if (normalizedPath == this->path())
         return;
