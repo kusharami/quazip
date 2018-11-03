@@ -33,9 +33,6 @@
 #include <string.h>
 #include <time.h>
 #include <zlib.h>
-#if (ZLIB_VERNUM < 0x1270)
-typedef uLongf z_crc_t;
-#endif
 #include "zip.h"
 
 #ifdef STDC
@@ -49,6 +46,10 @@ typedef uLongf z_crc_t;
 #   include <errno.h>
 #endif
 
+
+#ifndef NOCRYPT
+#include "minizip_crypt.h"
+#endif
 
 #ifndef local
 #  define local static
@@ -190,12 +191,6 @@ typedef struct
     unsigned flags;
 
 } zip64_internal;
-
-
-#ifndef NOCRYPT
-#define INCLUDECRYPTINGCODE_IFCRYPTALLOWED
-#include "minizip_crypt.h"
-#endif
 
 local linkedlist_datablock_internal* allocate_new_datablock()
 {
@@ -1301,6 +1296,7 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
         case Z_NO_COMPRESSION:
             break;
         case Z_DEFLATED:
+        {
             zi->ci.stream.zalloc = (alloc_func)0;
             zi->ci.stream.zfree = (free_func)0;
             zi->ci.stream.opaque = (voidpf)0;
@@ -1315,6 +1311,7 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
             if (err==Z_OK)
                 zi->ci.stream_initialised = Z_DEFLATED;
             break;
+        }
         case Z_BZIP2ED:
 #ifdef HAVE_BZIP2
             zi->ci.bstream.avail_in = (uInt)0;
@@ -1332,9 +1329,10 @@ static int  zipOpenNewFileInZipInternal(zipFile file,
             err = BZ2_bzCompressInit(&zi->ci.bstream, level, 0,35);
             if(err == BZ_OK)
                 zi->ci.stream_initialised = Z_BZIP2ED;
-#else
+            break;
+    #endif
+        default:
             return ZIP_PARAMERROR;
-#endif
         }
     }
 

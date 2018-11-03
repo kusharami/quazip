@@ -73,10 +73,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "zlib.h"
-#if (ZLIB_VERNUM < 0x1270)
-typedef uLongf z_crc_t;
-#endif
+#include <zlib.h>
 #include "unzip.h"
 
 #ifdef STDC
@@ -818,8 +815,8 @@ extern unzFile ZEXPORT unzOpen2_64 (voidpf file,
         zlib_filefunc64_32_def_fill.zseek32_file = NULL;
         return unzOpenInternal(file, &zlib_filefunc64_32_def_fill, 1, UNZ_DEFAULT_FLAGS);
     }
-    else
-        return unzOpenInternal(file, NULL, 1, UNZ_DEFAULT_FLAGS);
+
+    return unzOpenInternal(file, NULL, 1, UNZ_DEFAULT_FLAGS);
 }
 
 extern unzFile ZEXPORT unzOpen (voidpf file)
@@ -1530,12 +1527,15 @@ static int unzOpenCurrentFile34 (unzFile file,
 
     if (level!=NULL)
     {
-        *level = 6;
-        switch (s->cur_file_info.flag & 0x06)
+        *level = Z_DEFAULT_COMPRESSION;
+        if (s->cur_file_info.compression_method == Z_DEFLATED)
         {
-          case 6 : *level = Z_BEST_SPEED; break;
-          case 4 : *level = Z_BEST_SPEED + 2; break;
-          case 2 : *level = Z_BEST_COMPRESSION; break;
+            switch (s->cur_file_info.flag & 0x06)
+            {
+              case 6 : *level = Z_BEST_SPEED; break;
+              case 4 : *level = Z_BEST_SPEED + 2; break;
+              case 2 : *level = Z_BEST_COMPRESSION; break;
+            }
         }
     }
 
@@ -1558,7 +1558,7 @@ static int unzOpenCurrentFile34 (unzFile file,
 #else
         if (password == NULL && keys == NULL)
         {
-            return UNZ_BADZIPFILE;
+            return UNZ_PARAMERROR;
         }
 #endif
     }
@@ -1583,6 +1583,30 @@ static int unzOpenCurrentFile34 (unzFile file,
         {
         case Z_NO_COMPRESSION:
             break;
+        case Z_DEFLATED:
+            pfile_in_zip_read_info->stream.zalloc = (alloc_func)0;
+            pfile_in_zip_read_info->stream.zfree = (free_func)0;
+            pfile_in_zip_read_info->stream.opaque = (voidpf)0;
+            pfile_in_zip_read_info->stream.next_in = 0;
+            pfile_in_zip_read_info->stream.avail_in = 0;
+
+            /* windowBits is passed < 0 to tell that there is no zlib header.
+             * Note that in this case inflate *requires* an extra "dummy" byte
+             * after the compressed stream in order to complete decompression and
+             * return Z_STREAM_END.
+             * In unzip, i don't wait absolutely Z_STREAM_END because I known the
+             * size of both compressed and uncompressed data
+             */
+            err=inflateInit2(&pfile_in_zip_read_info->stream, -MAX_WBITS);
+            if (err == Z_OK)
+            {
+                pfile_in_zip_read_info->stream_initialised=Z_DEFLATED;
+                break;
+            }
+
+            TRYFREE(pfile_in_zip_read_info->read_buffer);
+            TRYFREE(pfile_in_zip_read_info);
+            return err;
         case Z_BZIP2ED:
     #ifdef HAVE_BZIP2
             pfile_in_zip_read_info->bstream.bzalloc = (void *(*) (void *, int, int))0;
@@ -1598,41 +1622,17 @@ static int unzOpenCurrentFile34 (unzFile file,
 
             err=BZ2_bzDecompressInit(&pfile_in_zip_read_info->bstream, 0, 0);
             if (err == Z_OK)
+            {
                 pfile_in_zip_read_info->stream_initialised=Z_BZIP2ED;
-            else
-            {
-                TRYFREE(pfile_in_zip_read_info);
-                return err;
+                break;
             }
-    #else
-            return UNZ_BADZIPFILE;
-    #endif
-        case Z_DEFLATED:
-            pfile_in_zip_read_info->stream.zalloc = (alloc_func)0;
-            pfile_in_zip_read_info->stream.zfree = (free_func)0;
-            pfile_in_zip_read_info->stream.opaque = (voidpf)0;
-            pfile_in_zip_read_info->stream.next_in = 0;
-            pfile_in_zip_read_info->stream.avail_in = 0;
 
-            err=inflateInit2(&pfile_in_zip_read_info->stream, -MAX_WBITS);
-            if (err == Z_OK)
-                pfile_in_zip_read_info->stream_initialised=Z_DEFLATED;
-            else
-            {
-                TRYFREE(pfile_in_zip_read_info->read_buffer);
-                TRYFREE(pfile_in_zip_read_info);
-                return err;
-            }
-            /* windowBits is passed < 0 to tell that there is no zlib header.
-             * Note that in this case inflate *requires* an extra "dummy" byte
-             * after the compressed stream in order to complete decompression and
-             * return Z_STREAM_END.
-             * In unzip, i don't wait absolutely Z_STREAM_END because I known the
-             * size of both compressed and uncompressed data
-             */
+            TRYFREE(pfile_in_zip_read_info);
+            return err;
+    #endif
         default:
             return UNZ_BADZIPFILE;
-        }
+       }
     }
 
     pfile_in_zip_read_info->rest_read_compressed =
