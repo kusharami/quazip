@@ -39,8 +39,6 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #include <QDataStream>
 #include <QDir>
 
-#include <memory>
-
 /// All the internal stuff for the QuaZip class.
 /**
   \internal
@@ -1246,17 +1244,16 @@ bool QuaZip::open(OpenMode mode)
         qWarning("QuaZip::open(): ZIP already opened");
         return false;
     }
-    std::unique_ptr<QIODevice> fileDevice;
+    QScopedPointer<QIODevice> fileDevice;
     QIODevice *ioDevice = p->ioDevice;
     if (!ioDevice) {
         if (p->zipName.isEmpty()) {
             qWarning("QuaZip::open(): set either ZIP file name or IO "
                      "device first");
             return false;
-        } else {
-            fileDevice.reset(new QFile(p->zipName));
-            ioDevice = fileDevice.get();
         }
+        fileDevice.reset(new QFile(p->zipName));
+        ioDevice = fileDevice.data();
     }
     unsigned flags = 0;
     switch (mode) {
@@ -1276,7 +1273,7 @@ bool QuaZip::open(OpenMode mode)
             p->comment = p->readComment();
             p->mode = mode;
             p->ioDevice = ioDevice;
-            fileDevice.release();
+            fileDevice.take();
             return true;
         }
         p->zipError = UNZ_OPENERROR;
@@ -1323,7 +1320,7 @@ bool QuaZip::open(OpenMode mode)
             }
             p->mode = mode;
             p->ioDevice = ioDevice;
-            fileDevice.release();
+            fileDevice.take();
             return true;
         }
         p->zipError = UNZ_OPENERROR;
