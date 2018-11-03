@@ -321,7 +321,7 @@ void TestQuaZipFile::getZip()
     QVERIFY(f1.zipFilePath().isEmpty());
     QString zipPath("doesntexist.zip");
     QuaZipFile f2(zipPath, "someFile");
-    QCOMPARE(f2.zip(), nullptr);
+    QCOMPARE(f2.zip(), static_cast<QuaZip *>(nullptr));
     f2.setZip(&testZip);
     QCOMPARE(f2.zip(), &testZip);
     QCOMPARE(f2.zipFilePath(), zipPath);

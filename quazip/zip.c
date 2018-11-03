@@ -1490,7 +1490,7 @@ extern int ZEXPORT zipWriteInFileInZip (zipFile file,const void* buf,unsigned in
     else
 #endif
     {
-      zi->ci.stream.next_in = (z_const Bytef*)buf;
+      zi->ci.stream.next_in = (Bytef*)buf;
       zi->ci.stream.avail_in = len;
 
       while ((err==ZIP_OK) && (zi->ci.stream.avail_in>0))

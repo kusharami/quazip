@@ -899,7 +899,8 @@ QFile::Permissions QuaZipFileInfo::Private::permissions() const
         permissions = QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup |
             QFile::ReadOther;
         if (0 == (externalAttributes & QuaZipFileInfo::ReadOnly)) {
-            permissions |= QFile::WriteOwner | QFile::WriteUser;
+            permissions |= QFile::WriteOwner | QFile::WriteUser |
+                QFile::WriteOther | QFile::WriteGroup;
         }
         break;
 
@@ -909,7 +910,8 @@ QFile::Permissions QuaZipFileInfo::Private::permissions() const
                 QFile::ReadOther | QFile::ReadGroup;
 
         if (uAttr & (AMI_IWRITE | AMI_IDELETE))
-            permissions |= QFile::WriteUser | QFile::WriteOwner;
+            permissions |= QFile::WriteUser | QFile::WriteOwner |
+                QFile::WriteGroup | QFile::WriteOther;
 
         if (uAttr & AMI_IEXECUTE)
             permissions |= QFile::ExeUser | QFile::ExeOwner;
@@ -1012,7 +1014,8 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 
     Q_CONSTEXPR auto allRead =
         QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
-    Q_CONSTEXPR auto allWrite = QFile::WriteUser;
+    Q_CONSTEXPR auto allWrite =
+        QFile::WriteUser | QFile::WriteGroup | QFile::WriteOther;
 
     if (testPerm & allWrite) {
         externalAttributes &= ~ReadOnly;
@@ -1092,10 +1095,10 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 
     case OS_AMIGA:
         uAttr &= ~AMI_IALL;
-        if (value & (QFile::ReadUser | QFile::ReadOwner))
+        if (testPerm & allRead)
             uAttr |= AMI_IREAD;
 
-        if (value & (QFile::WriteUser | QFile::WriteOwner))
+        if (testPerm & allWrite)
             uAttr |= AMI_IWRITE | AMI_IDELETE;
 
         if (value & (QFile::ExeOwner | QFile::ExeUser))
@@ -1105,10 +1108,10 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 
     case OS_THEOS:
         uAttr &= ~THS_IALL;
-        if (value & (QFile::ReadUser | QFile::ReadOwner))
+        if (value & (QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup))
             uAttr |= THS_IRUSR;
 
-        if (value & (QFile::WriteUser | QFile::WriteOwner))
+        if (value & (QFile::WriteUser | QFile::WriteOwner | QFile::WriteGroup))
             uAttr |= THS_IWUSR | THS_IEUSR;
 
         if (value & (QFile::ExeUser | QFile::ExeOwner))

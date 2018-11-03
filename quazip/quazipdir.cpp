@@ -116,7 +116,7 @@ QuaZip::CaseSensitivity QuaZipDir::caseSensitivity() const
 bool QuaZipDir::cd(const QString &dirPath)
 {
     QString normalizedDirPath = QDir::cleanPath(dirPath);
-    if (normalizedDirPath.isEmpty() || normalizedDirPath == "/") {
+    if (normalizedDirPath.isEmpty() || normalizedDirPath == QChar('/')) {
         d->dir.clear();
         return true;
     }
@@ -143,7 +143,7 @@ bool QuaZipDir::cd(const QString &dirPath)
             qDebug(
                 "QuaZipDir::cd(%s): going to /", dirName.toUtf8().constData());
 #endif
-            if (!dir.cd("/"))
+            if (!dir.cd(QChar('/')))
                 return false;
         }
         QStringList path =
@@ -351,7 +351,7 @@ bool QuaZipDirPrivate::entryInfoList(QStringList nameFilters,
 
     QString basePath = dir;
     if (!basePath.isEmpty() && !basePath.endsWith('/'))
-        basePath += "/";
+        basePath += '/';
     int baseLength = basePath.length();
     QuaZipDirRestoreCurrent saveCurrent(zip);
     if (!zip->goToFirstFile()) {
@@ -460,7 +460,7 @@ QStringList QuaZipDir::entryList(
 bool QuaZipDir::exists(const QString &filePath) const
 {
     QString normalizedFilePath = QDir::cleanPath(filePath);
-    if (filePath.isEmpty() || filePath == "/")
+    if (filePath.isEmpty() || filePath == QChar('/'))
         return true;
 
     if (normalizedFilePath.endsWith('/'))
@@ -518,7 +518,7 @@ QDir::Filters QuaZipDir::filter()
 
 bool QuaZipDir::isRoot() const
 {
-    return d->dir == '/';
+    return d->dir == QChar('/');
 }
 
 QStringList QuaZipDir::nameFilters() const

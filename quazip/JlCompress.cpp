@@ -468,7 +468,7 @@ QStringList JlCompress::extractDir(QuaZip *zip, const QString &dir)
         QString name = zip->currentFilePath();
         QString absFilePath = directory.absoluteFilePath(name);
         QString absCleanPath = QDir::cleanPath(absFilePath);
-        if (!absCleanPath.startsWith(absCleanDir + "/"))
+        if (!absCleanPath.startsWith(absCleanDir + '/'))
             continue;
         if (!extractSingleFile(zip, QString(), tempFilePath)) {
             continue;
