@@ -31,6 +31,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quazipkeysgenerator.h"
 #include "quazextrafield.h"
 
+struct QuaZipRawFileInfo;
 class QFileInfo;
 class QDir;
 
@@ -111,6 +112,7 @@ public:
     QuaZipFileInfo(const QuaZipFileInfo &other);
     ~QuaZipFileInfo();
 
+    static QuaZipFileInfo fromRawInfo(const QuaZipRawFileInfo &rawInfo);
     static QuaZipFileInfo fromFile(
         const QString &filePath, const QString &storePath = QString());
     static QuaZipFileInfo fromFile(
@@ -118,6 +120,7 @@ public:
     static QuaZipFileInfo fromDir(
         const QDir &dir, const QString &storePath = QString());
 
+    void initWithRawInfo(const QuaZipRawFileInfo &raw);
     bool initWithDir(const QDir &dir);
     bool initWithFile(const QString &filePath);
     bool initWithFile(const QFileInfo &fileInfo);

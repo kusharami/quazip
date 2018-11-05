@@ -26,7 +26,8 @@ HEADERS += \
     $$PWD/quazextrafield.h \
     $$PWD/minizip_crypt.h \
     $$PWD/quazutils.h \
-    $$PWD/quazipkeysgenerator.h
+    $$PWD/quazipkeysgenerator.h \
+    $$PWD/quaziprawfileinfo.h
 
 SOURCES += $$PWD/qioapi.cpp \
            $$PWD/JlCompress.cpp \

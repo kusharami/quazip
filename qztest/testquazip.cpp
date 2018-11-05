@@ -36,9 +36,11 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <QTextCodec>
 
 #include "quazip/quazip.h"
+#include "quazip/quaziprawfileinfo.h"
 #include "quazip/quaziptextcodec.h"
 #include "quazip/JlCompress.h"
 #include "quazip/quacrc32.h"
+#include "quazip/unzip.h"
 
 static QString nameForDos(const QString &name)
 {
@@ -195,6 +197,8 @@ void TestQuaZip::fileList()
 {
     QFETCH(QStringList, fileNames);
 
+    qSort(fileNames);
+
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
     auto filesPath = tempFilesPath(tempDir);
@@ -239,8 +243,8 @@ void TestQuaZip::addFiles_data()
                           << "testdir2/subdir/test2sub.txt")
         << (QStringList() << "testAdd.txt"
                           << QString::fromUtf8(
-                                 "わたしはジップファイル.japanese"))
-        << QString::fromUtf8("פתח תקווה.hebrew");
+                                 "testdir2/jp/わたしはジップファイル.txt")
+                          << QString::fromUtf8("hebrew/פתח תקווה.txt"));
 }
 
 void TestQuaZip::addFiles()
@@ -271,11 +275,13 @@ void TestQuaZip::addFiles()
     QCOMPARE(testZip.openMode(), QuaZip::mdAdd);
     for (const QString &fileName : fileNamesToAdd) {
         auto filePath = dir.filePath(fileName);
-        QuaZipFile testFile(&testZip, filePath);
+        QuaZipFile testFile(&testZip, fileName);
+        testFile.setIsText(true);
         QVERIFY(testFile.open(QIODevice::WriteOnly));
         QFile inFile(filePath);
-        QVERIFY(inFile.open(QIODevice::ReadOnly));
-        QCOMPARE(testFile.write(inFile.readAll()), inFile.size());
+        QVERIFY(inFile.open(QIODevice::ReadOnly | QIODevice::Text));
+        auto expectedData = inFile.readAll();
+        QCOMPARE(testFile.write(expectedData), expectedData.size());
     }
     testZip.close();
     QCOMPARE(testZip.zipError(), 0);
@@ -327,9 +333,19 @@ void TestQuaZip::filePathCodec()
 
     QuaZip testZip(zipPath);
     QVERIFY(testZip.open(QuaZip::mdUnzip));
+
     QStringList fileList = testZip.filePathList();
     qSort(fileList);
-    QVERIFY(fileList != fileNames);
+    QCOMPARE(fileList, fileNames);
+
+    auto codec = QTextCodec::codecForName(codecName);
+    for (const auto &fileName : fileNames) {
+        QVERIFY(testZip.setCurrentFile(fileName));
+        QuaZipRawFileInfo rawInfo;
+        QVERIFY(testZip.getCurrentRawFileInfo(rawInfo));
+        QCOMPARE(rawInfo.fileName, codec->fromUnicode(fileName));
+    }
+
     testZip.close();
     testZip.setFilePathCodec(codecName);
     QVERIFY(testZip.open(QuaZip::mdUnzip));
@@ -351,8 +367,7 @@ void TestQuaZip::commentCodec_data()
         << QByteArray("windows-1251") << QByteArray("IBM850");
 
     QTest::newRow("multilingual")
-        << (QStringList() << QString::fromUtf8(
-                "פתח תקווה わたしはジップファイル"))
+        << QString::fromUtf8("פתח תקווה わたしはジップファイル")
         << QByteArray("UTF-8") << QByteArray("Shift_JIS");
 }
 
@@ -383,7 +398,13 @@ void TestQuaZip::commentCodec()
     QVERIFY(zip.open(QuaZip::mdUnzip));
     QCOMPARE(zip.globalComment(), comment);
     {
+        auto codec = QTextCodec::codecForName(codecName);
         QuaZipFile zipFile(&zip, testFileName);
+
+        QuaZipRawFileInfo rawInfo;
+        QVERIFY(zip.setCurrentFile(testFileName));
+        QVERIFY(zip.getCurrentRawFileInfo(rawInfo));
+        QCOMPARE(rawInfo.fileName, codec->fromUnicode(testFileName));
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
         QCOMPARE(zipFile.comment(), comment);
     }
@@ -395,7 +416,7 @@ void TestQuaZip::commentCodec()
     {
         QuaZipFile zipFile(&zip, testFileName);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
-        QVERIFY(zipFile.comment() != comment);
+        QCOMPARE(zipFile.comment(), comment);
     }
     zip.close();
     QCOMPARE(zip.zipError(), 0);
@@ -405,7 +426,7 @@ void TestQuaZip::dataDescriptorWritingEnabled()
 {
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
-    QString testFileName("vegetation_info.xml");
+    QString testFileName("vegetati.xml");
 
     quint32 magic;
     quint16 versionNeeded;
@@ -416,16 +437,21 @@ void TestQuaZip::dataDescriptorWritingEnabled()
         testZip.setDataDescriptorWritingEnabled(false);
         QVERIFY(testZip.open(QuaZip::mdCreate));
         QuaZipFile testZipFile(&testZip, testFileName);
+        testZipFile.setCompressionMethod(Z_NO_COMPRESSION);
         QVERIFY(testZipFile.open(QIODevice::WriteOnly));
         QCOMPARE(testZipFile.write(contents), qint64(contents.length()));
         testZipFile.close();
         testZip.close();
+        QCOMPARE(testZip.zipError(), 0);
+    }
+
+    {
         QuaZipFile readZipFile(zipPath, testFileName);
         QVERIFY(readZipFile.open(QIODevice::ReadOnly));
         // Test that file is not compressed.
         QCOMPARE(readZipFile.compressedSize(), qint64(contents.size()));
         readZipFile.close();
-        QCOMPARE(QFileInfo(zipPath).size(), qint64(171));
+        QCOMPARE(QFileInfo(zipPath).size(), qint64(157));
         QFile zipFile(zipPath);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
         QDataStream zipData(&zipFile);
@@ -434,9 +460,6 @@ void TestQuaZip::dataDescriptorWritingEnabled()
         zipData >> versionNeeded;
         QCOMPARE(magic, quint32(0x04034b50));
         QCOMPARE(versionNeeded, quint16(10));
-        zipFile.close();
-
-        QVERIFY2(QFile::remove(zipPath), "Can't remove zip file");
     }
 
     {
@@ -445,12 +468,13 @@ void TestQuaZip::dataDescriptorWritingEnabled()
         QVERIFY(testZip.isDataDescriptorWritingEnabled());
         QVERIFY(testZip.open(QuaZip::mdCreate));
         QuaZipFile testZipFile(&testZip, testFileName);
+        testZipFile.setCompressionMethod(Z_NO_COMPRESSION);
         QVERIFY(testZipFile.open(QIODevice::WriteOnly));
         QCOMPARE(testZipFile.write(contents), qint64(contents.length()));
         testZipFile.close();
         testZip.close();
         QCOMPARE(QFileInfo(zipPath).size(),
-            qint64(171 + 16)); // 16 bytes = data descriptor
+            qint64(157 + 16)); // 16 bytes = data descriptor
         QCOMPARE(testZip.zipError(), 0);
     }
 
@@ -462,7 +486,6 @@ void TestQuaZip::dataDescriptorWritingEnabled()
     zipData >> versionNeeded;
     QCOMPARE(magic, quint32(0x04034b50));
     QCOMPARE(versionNeeded, quint16(20));
-    zipFile.close();
 }
 
 void TestQuaZip::testQIODeviceAPI()
@@ -504,6 +527,10 @@ void TestQuaZip::setZipFilePath()
     QCOMPARE(zip.zipError(), 0);
     QVERIFY(!zip.ioDevice());
     QVERIFY(QFileInfo::exists(zip.zipFilePath()));
+    QVERIFY(zip.open(QuaZip::mdUnzip));
+    QCOMPARE(zip.entryCount(), 0);
+    zip.close();
+    QCOMPARE(zip.zipError(), 0);
 }
 
 void TestQuaZip::setIODevice()
@@ -519,6 +546,10 @@ void TestQuaZip::setIODevice()
     QCOMPARE(zip.zipError(), 0);
     QVERIFY(!buffer.isOpen());
     QVERIFY(!buffer.data().isEmpty());
+    QVERIFY(zip.open(QuaZip::mdUnzip));
+    QCOMPARE(zip.entryCount(), 0);
+    zip.close();
+    QCOMPARE(zip.zipError(), 0);
 }
 
 void TestQuaZip::autoClose_data()

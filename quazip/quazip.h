@@ -45,6 +45,7 @@ struct zlib_filefunc_def_s;
 struct zip_fileinfo_s;
 }
 
+struct QuaZipRawFileInfo;
 class QuaZipPrivate;
 class QuaZipFile;
 class QuaZipFilePrivate;
@@ -404,6 +405,7 @@ public:
      *
      **/
     bool getCurrentFileInfo(QuaZipFileInfo &info) const;
+    bool getCurrentRawFileInfo(QuaZipRawFileInfo &rawInfo) const;
     /// Returns the current file name.
     /** Equivalent to calling getCurrentFileInfo() and then getting \c
      * name field of the QuaZipFileInfo structure, but faster and more

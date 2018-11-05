@@ -80,7 +80,7 @@ void TestQuaZipFile::zipUnzip_data()
         << QByteArray() << QByteArray() << QByteArray() << true << -1;
     QTest::newRow("large enough to flush")
         << (QStringList() << QString::fromUtf8(
-                "BAD CODEC FILE NAME わたしはジップファイル.txt"))
+                "BAD CODEC FILE NAME わたしはジップファイル.bin"))
         << QString::fromUtf8("BAD CODEC COMMENT わたしはジップファイル")
         << QString() << QByteArrayLiteral("windows-1251")
         << QByteArrayLiteral("windows-1252") << QByteArray() << true
@@ -97,6 +97,7 @@ void TestQuaZipFile::zipUnzip()
     QFETCH(QByteArray, passwordCodec);
     QFETCH(bool, zip64);
     QFETCH(int, size);
+    bool isText = size == -1;
 
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
@@ -130,15 +131,18 @@ void TestQuaZipFile::zipUnzip()
         compatibility |= QuaZip::DefaultCompatibility;
     }
     testZip.setCompatibility(compatibility);
-    testZip.setGlobalComment(comment);
 
+    QFile::OpenMode fileOpenMode(QFile::ReadOnly);
+    if (isText)
+        fileOpenMode |= QFile::Text;
     QVERIFY(testZip.open(QuaZip::mdCreate));
     for (const QString &fileName : fileNames) {
         QFile inFile(dir.filePath(fileName));
-        QVERIFY2(inFile.open(QIODevice::ReadOnly), "Couldn't open input file");
+        QVERIFY2(inFile.open(fileOpenMode), "Couldn't open input file");
 
         QuaZipFile outFile(&testZip);
-        outFile.setFilePath(fileName);
+        outFile.setFileInfo(
+            QuaZipFileInfo::fromFile(inFile.fileName(), fileName));
         QCOMPARE(outFile.filePath(), fileName);
         outFile.setComment(comment);
         QCOMPARE(outFile.comment(), comment);
@@ -149,20 +153,15 @@ void TestQuaZipFile::zipUnzip()
             QVERIFY(outFile.isEncrypted());
         }
 
+        outFile.setIsText(isText);
         QVERIFY(!outFile.open(QIODevice::ReadWrite));
         QVERIFY(!outFile.open(QIODevice::Append));
         QVERIFY(outFile.open(QIODevice::WriteOnly));
         QVERIFY(outFile.openMode() & QIODevice::Truncate);
         QVERIFY(outFile.openMode() & QIODevice::Unbuffered);
-        QVERIFY(!outFile.isTextModeEnabled());
-        for (qint64 pos = 0, len = inFile.size(); pos < len;) {
-            char buf[4096];
-            qint64 readSize = qMin(qint64(4096), len - pos);
-            QCOMPARE(inFile.read(buf, readSize), readSize);
-            QVERIFY(outFile.write(buf, readSize));
-            pos += readSize;
-        }
-        inFile.close();
+        QCOMPARE(outFile.isTextModeEnabled(), isText);
+        auto data = inFile.readAll();
+        QCOMPARE(outFile.write(data), qint64(data.length()));
         outFile.close();
         QCOMPARE(outFile.zipError(), ZIP_OK);
     }
@@ -174,12 +173,10 @@ void TestQuaZipFile::zipUnzip()
 
     QVERIFY(testZip.open(QuaZip::mdUnzip));
     QCOMPARE(testZip.openMode(), QuaZip::mdUnzip);
-    QCOMPARE(testZip.globalComment(), comment);
-    QVERIFY(testZip.goToFirstFile());
     for (const QString &fileName : fileNames) {
         QFileInfo fileInfo(dir.filePath(fileName));
         QFile original(fileInfo.filePath());
-        QVERIFY(original.open(QIODevice::ReadOnly));
+        QVERIFY(original.open(QFile::ReadOnly));
 
         QuaZipFile archived(&testZip);
         if (!password.isNull()) {
@@ -194,7 +191,7 @@ void TestQuaZipFile::zipUnzip()
             original.reset();
             archived.setFilePath(expectedFilePath, QuaZip::csInsensitive);
 
-            QVERIFY(archived.open(QIODevice::ReadOnly));
+            QVERIFY(archived.open(QFile::ReadOnly));
             QVERIFY(archived.openMode() & QIODevice::Unbuffered);
             QVERIFY(!archived.isTextModeEnabled());
             QVERIFY(!archived.isSequential());
@@ -245,7 +242,7 @@ void TestQuaZipFile::zipUnzip()
             if (compatibility == QuaZip::DosCompatible) {
                 QVERIFY(!hasUnicodeFlag);
                 QVERIFY(!archived.centralExtraFields().contains(
-                    WINZIP_EXTRA_FIELD_HEADER));
+                    ZIPARCHIVE_EXTRA_FIELD_HEADER));
                 QVERIFY(!archived.centralExtraFields().contains(
                     INFO_ZIP_UNICODE_PATH_HEADER));
                 QVERIFY(!archived.localExtraFields().contains(
@@ -254,22 +251,22 @@ void TestQuaZipFile::zipUnzip()
                     INFO_ZIP_UNICODE_COMMENT_HEADER));
             } else {
                 bool hasUnicodeExtra;
-                bool hasWinZipExtra;
+                bool hasZipArchiveExtra;
 
                 if (compatibility == QuaZip::CustomCompatibility) {
-                    hasWinZipExtra = !hasUnicodeFlag;
-                    hasUnicodeExtra = hasWinZipExtra &&
+                    hasZipArchiveExtra = !hasUnicodeFlag;
+                    hasUnicodeExtra = hasZipArchiveExtra &&
                         (!testZip.filePathCodec()->canEncode(fileName) ||
                             !testZip.commentCodec()->canEncode(comment));
                 } else {
                     hasUnicodeExtra = !hasUnicodeFlag &&
                         (!QuaZUtils::isAscii(fileName) ||
                             !QuaZUtils::isAscii(comment));
-                    hasWinZipExtra = hasUnicodeExtra;
+                    hasZipArchiveExtra = hasUnicodeExtra;
                 }
                 QCOMPARE(archived.centralExtraFields().contains(
-                             WINZIP_EXTRA_FIELD_HEADER),
-                    hasWinZipExtra);
+                             ZIPARCHIVE_EXTRA_FIELD_HEADER),
+                    hasZipArchiveExtra);
                 QCOMPARE(archived.centralExtraFields().contains(
                              INFO_ZIP_UNICODE_PATH_HEADER),
                     hasUnicodeExtra);
@@ -432,7 +429,7 @@ void TestQuaZipFile::construct()
     }
     {
         QuaZipFile zipFile(zipName, &parent);
-        QVERIFY(zipFile.zip() == nullptr);
+        QVERIFY(zipFile.zip() != nullptr);
         QCOMPARE(zipFile.zipFilePath(), zipName);
         QVERIFY(zipFile.filePath().isEmpty());
         QCOMPARE(zipFile.caseSensitivity(), QuaZip::csDefault);
@@ -440,7 +437,7 @@ void TestQuaZipFile::construct()
     }
     {
         QuaZipFile zipFile(zipName, fileName, caseSensitivity, &parent);
-        QVERIFY(zipFile.zip() == nullptr);
+        QVERIFY(zipFile.zip() != nullptr);
         QCOMPARE(zipFile.zipFilePath(), zipName);
         QCOMPARE(zipFile.filePath(), fileName);
         QCOMPARE(zipFile.caseSensitivity(), caseSensitivity);

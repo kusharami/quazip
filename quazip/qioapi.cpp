@@ -120,7 +120,7 @@ voidpf ZCALLBACK qiodevice_open_file_func(voidpf opaque, voidpf file, int mode)
             d->pos = iodevice->pos();
             return iodevice;
         }
-        if (!iodevice->isReadable()) {
+        if (!(desiredMode & QIODevice::ReadOnly)) {
             d->pos = 0;
             return iodevice;
         } // sequential read is not supported

@@ -27,6 +27,7 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #include "quacrc32.h"
 #include "quazutils.h"
 #include "quazipfileinfo.h"
+#include "quaziprawfileinfo.h"
 #include "private/quazipextrafields_p.h"
 
 #include "zip.h"
@@ -138,15 +139,14 @@ private:
     static QDateTime zInfoToDateTime(const unz_file_info64 &info);
     static void fillTMZDate(tm_zip &out, const QDateTime &time);
 
-    static QDateTime decodeCreationTime(const unz_file_info64 &info,
+    static QDateTime decodeCreationTime(const QuaZExtraField::Map &centralExtra,
+        const QuaZExtraField::Map &localExtra);
+
+    static QDateTime decodeModificationTime(
         const QuaZExtraField::Map &centralExtra,
         const QuaZExtraField::Map &localExtra);
 
-    static QDateTime decodeModificationTime(const unz_file_info64 &info,
-        const QuaZExtraField::Map &centralExtra,
-        const QuaZExtraField::Map &localExtra);
-
-    static QDateTime decodeLastAccessTime(const unz_file_info64 &info,
+    static QDateTime decodeLastAccessTime(
         const QuaZExtraField::Map &centralExtra,
         const QuaZExtraField::Map &localExtra);
 
@@ -162,15 +162,15 @@ private:
         const QByteArray &compatibleFilePath);
     void storeInfoZipComment(QuaZExtraField::Map &centralExtra,
         const QString &comment, const QByteArray &compatibleComment);
-    void storeWinZipExtraFields(QuaZExtraField::Map &centralExtra,
+    void storeZipArchiveExtraFields(QuaZExtraField::Map &centralExtra,
         const QString &filePath, const QByteArray &compatibleFilePath);
 
     static QString getInfoZipUnicodeText(quint16 headerId,
         const QuaZExtraField::Map &extra, const QByteArray &legacyText);
 
-    QString getWinZipUnicodeFileName(
+    QString getZipArchiveUnicodeFileName(
         const QuaZExtraField::Map &extra, const QByteArray &legacyFileName);
-    QString getWinZipUnicodeComment(
+    QString getZipArchiveUnicodeComment(
         const QuaZExtraField::Map &extra, const QByteArray &legacyComment);
 
     QString readComment();
@@ -308,14 +308,14 @@ bool QuaZipPrivate::goToFirstUnmappedFile()
     return hasCurrentFile_f;
 }
 
-QDateTime QuaZipPrivate::decodeCreationTime(const unz_file_info64 &info,
+QDateTime QuaZipPrivate::decodeCreationTime(
     const QuaZExtraField::Map &centralExtra,
     const QuaZExtraField::Map &localExtra)
 {
     QDateTime result;
     {
         auto it = localExtra.find(NTFS_HEADER);
-        if (it == localExtra.end()) {
+        if (it != localExtra.end()) {
             result = decodeNTFSTime(it.value(), TimeOfCreation);
             if (!result.isNull())
                 return result;
@@ -331,17 +331,17 @@ QDateTime QuaZipPrivate::decodeCreationTime(const unz_file_info64 &info,
         }
     }
 
-    return decodeModificationTime(info, centralExtra, localExtra);
+    return decodeModificationTime(centralExtra, localExtra);
 }
 
-QDateTime QuaZipPrivate::decodeModificationTime(const unz_file_info64 &info,
+QDateTime QuaZipPrivate::decodeModificationTime(
     const QuaZExtraField::Map &centralExtra,
     const QuaZExtraField::Map &localExtra)
 {
     QDateTime result;
     {
         auto it = localExtra.find(NTFS_HEADER);
-        if (it == localExtra.end()) {
+        if (it != localExtra.end()) {
             result = decodeNTFSTime(it.value(), TimeOfModification);
             if (!result.isNull())
                 return result;
@@ -376,17 +376,17 @@ QDateTime QuaZipPrivate::decodeModificationTime(const unz_file_info64 &info,
         }
     }
 
-    return zInfoToDateTime(info);
+    return result;
 }
 
-QDateTime QuaZipPrivate::decodeLastAccessTime(const unz_file_info64 &info,
+QDateTime QuaZipPrivate::decodeLastAccessTime(
     const QuaZExtraField::Map &centralExtra,
     const QuaZExtraField::Map &localExtra)
 {
     QDateTime result;
     {
         auto it = localExtra.find(NTFS_HEADER);
-        if (it == localExtra.end()) {
+        if (it != localExtra.end()) {
             result = decodeNTFSTime(it.value(), TimeOfAccess);
             if (!result.isNull())
                 return result;
@@ -420,7 +420,7 @@ QDateTime QuaZipPrivate::decodeLastAccessTime(const unz_file_info64 &info,
         }
     }
 
-    return decodeModificationTime(info, centralExtra, localExtra);
+    return decodeModificationTime(centralExtra, localExtra);
 }
 
 QString QuaZipPrivate::decodeSymLinkTarget(
@@ -819,7 +819,6 @@ void QuaZipPrivate::fillTMZDate(tm_zip &out, const QDateTime &dateTime)
 QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
     const QuaZExtraField::Map &centralExtra, ZipTextType textType)
 {
-    Q_ASSERT(flags);
     bool isUtf8 = 0 != (flags & QuaZipFileInfo::Unicode);
 
     if (isUtf8)
@@ -831,7 +830,7 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
         result = getInfoZipUnicodeText(
             INFO_ZIP_UNICODE_PATH_HEADER, centralExtra, text);
         if (result.isEmpty()) {
-            result = getWinZipUnicodeFileName(centralExtra, text);
+            result = getZipArchiveUnicodeFileName(centralExtra, text);
         }
         if (result.isEmpty()) {
             if (compatibility == QuaZip::CustomCompatibility) {
@@ -845,7 +844,7 @@ QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
         result = getInfoZipUnicodeText(
             INFO_ZIP_UNICODE_COMMENT_HEADER, centralExtra, text);
         if (result.isEmpty()) {
-            result = getWinZipUnicodeComment(centralExtra, text);
+            result = getZipArchiveUnicodeComment(centralExtra, text);
         }
         if (result.isEmpty()) {
             if (compatibility == QuaZip::CustomCompatibility) {
@@ -916,8 +915,9 @@ void QuaZipPrivate::storeInfoZipComment(QuaZExtraField::Map &centralExtra,
     }
 }
 
-void QuaZipPrivate::storeWinZipExtraFields(QuaZExtraField::Map &centralExtra,
-    const QString &filePath, const QByteArray &compatibleFilePath)
+void QuaZipPrivate::storeZipArchiveExtraFields(
+    QuaZExtraField::Map &centralExtra, const QString &filePath,
+    const QByteArray &compatibleFilePath)
 {
     if (compatibility != QuaZip::CustomCompatibility &&
         0 == (compatibility & QuaZip::WindowsCompatible))
@@ -937,40 +937,40 @@ void QuaZipPrivate::storeWinZipExtraFields(QuaZExtraField::Map &centralExtra,
 
     QByteArray filePathUtf8;
     if (compatibility == QuaZip::CustomCompatibility) {
-        flags |= WINZIP_FILENAME_CODEPAGE_FLAG;
-        flags |= WINZIP_COMMENT_CODEPAGE_FLAG;
+        flags |= ZIPARCHIVE_FILENAME_CODEPAGE_FLAG;
+        flags |= ZIPARCHIVE_COMMENT_CODEPAGE_FLAG;
     } else {
         filePathUtf8 = filePath.toUtf8();
 
-        flags |= WINZIP_FILENAME_CODEPAGE_FLAG;
+        flags |= ZIPARCHIVE_FILENAME_CODEPAGE_FLAG;
         if (filePathUtf8 != compatibleFilePath) {
             filePathCodePage = QuaZipTextCodec::WCP_UTF8;
-            flags |= WINZIP_ENCODED_FILENAME_FLAG;
+            flags |= ZIPARCHIVE_ENCODED_FILENAME_FLAG;
         }
     }
 
     if (flags == 0)
         return;
 
-    QByteArray winZipExtra;
+    QByteArray zipArchiveExtra;
     {
-        QDataStream writer(&winZipExtra, QIODevice::WriteOnly);
+        QDataStream writer(&zipArchiveExtra, QIODevice::WriteOnly);
         writer.setByteOrder(QDataStream::LittleEndian);
 
         writer << quint8(1);
         writer << flags;
 
-        if (flags & WINZIP_FILENAME_CODEPAGE_FLAG) {
+        if (flags & ZIPARCHIVE_FILENAME_CODEPAGE_FLAG) {
             writer << filePathCodePage;
         }
-        if (flags & WINZIP_ENCODED_FILENAME_FLAG) {
+        if (flags & ZIPARCHIVE_ENCODED_FILENAME_FLAG) {
             writer.writeRawData(filePathUtf8.data(), filePathUtf8.length());
         }
-        if (flags & WINZIP_COMMENT_CODEPAGE_FLAG) {
+        if (flags & ZIPARCHIVE_COMMENT_CODEPAGE_FLAG) {
             writer << commentCodePage;
         }
     }
-    centralExtra.insert(WINZIP_EXTRA_FIELD_HEADER, winZipExtra);
+    centralExtra.insert(ZIPARCHIVE_EXTRA_FIELD_HEADER, zipArchiveExtra);
 }
 
 QString QuaZipPrivate::getInfoZipUnicodeText(quint16 headerId,
@@ -1013,10 +1013,10 @@ QString QuaZipPrivate::getInfoZipUnicodeText(quint16 headerId,
     return QString::fromUtf8(utf8);
 }
 
-QString QuaZipPrivate::getWinZipUnicodeFileName(
+QString QuaZipPrivate::getZipArchiveUnicodeFileName(
     const QuaZExtraField::Map &extra, const QByteArray &legacyFileName)
 {
-    auto it = extra.find(WINZIP_EXTRA_FIELD_HEADER);
+    auto it = extra.find(ZIPARCHIVE_EXTRA_FIELD_HEADER);
     if (it == extra.end()) {
         return QString();
     }
@@ -1040,14 +1040,14 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
         return QString();
 
     int fileNameLength = size;
-    if (flags & WINZIP_COMMENT_CODEPAGE_FLAG) {
+    if (flags & ZIPARCHIVE_COMMENT_CODEPAGE_FLAG) {
         quint32 commentCodePage;
         Q_UNUSED(commentCodePage);
         fileNameLength -= sizeof(commentCodePage);
     }
 
     quint32 fileNameCodePage = 0;
-    if (flags & WINZIP_FILENAME_CODEPAGE_FLAG) {
+    if (flags & ZIPARCHIVE_FILENAME_CODEPAGE_FLAG) {
         fieldReader >> fileNameCodePage;
         if (fieldReader.status() != QDataStream::Ok)
             return QString();
@@ -1059,7 +1059,7 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
         : nullptr;
     if (!codec)
         codec = QuaZipTextCodec::codecForLocale();
-    if (flags & WINZIP_ENCODED_FILENAME_FLAG) {
+    if (flags & ZIPARCHIVE_ENCODED_FILENAME_FLAG) {
         QByteArray fileName;
         fileName.resize(fileNameLength);
         if (fileNameLength !=
@@ -1072,10 +1072,10 @@ QString QuaZipPrivate::getWinZipUnicodeFileName(
     return codec->toUnicode(legacyFileName);
 }
 
-QString QuaZipPrivate::getWinZipUnicodeComment(
+QString QuaZipPrivate::getZipArchiveUnicodeComment(
     const QuaZExtraField::Map &extra, const QByteArray &legacyComment)
 {
-    auto it = extra.find(WINZIP_EXTRA_FIELD_HEADER);
+    auto it = extra.find(ZIPARCHIVE_EXTRA_FIELD_HEADER);
     if (it == extra.end()) {
         return QString();
     }
@@ -1100,11 +1100,11 @@ QString QuaZipPrivate::getWinZipUnicodeComment(
 
     int fileNameLength = size;
     quint32 commentCodePage;
-    if (flags & WINZIP_COMMENT_CODEPAGE_FLAG) {
+    if (flags & ZIPARCHIVE_COMMENT_CODEPAGE_FLAG) {
         fileNameLength -= sizeof(commentCodePage);
     }
 
-    if (flags & WINZIP_FILENAME_CODEPAGE_FLAG) {
+    if (flags & ZIPARCHIVE_FILENAME_CODEPAGE_FLAG) {
         quint32 fileNameCodePage;
         Q_UNUSED(fileNameCodePage);
         if (sizeof(fileNameCodePage) !=
@@ -1114,12 +1114,12 @@ QString QuaZipPrivate::getWinZipUnicodeComment(
         fileNameLength -= sizeof(fileNameCodePage);
     }
 
-    if (flags & WINZIP_ENCODED_FILENAME_FLAG) {
+    if (flags & ZIPARCHIVE_ENCODED_FILENAME_FLAG) {
         if (fileNameLength != fieldReader.skipRawData(fileNameLength))
             return QString();
     }
 
-    if (flags & WINZIP_COMMENT_CODEPAGE_FLAG) {
+    if (flags & ZIPARCHIVE_COMMENT_CODEPAGE_FLAG) {
         fieldReader >> commentCodePage;
         if (fieldReader.status() == QDataStream::ReadCorruptData)
             return QString();
@@ -1529,6 +1529,54 @@ bool QuaZip::goToNextFile()
 
 bool QuaZip::getCurrentFileInfo(QuaZipFileInfo &info) const
 {
+    QuaZipRawFileInfo raw;
+    if (!getCurrentRawFileInfo(raw))
+        return false;
+
+    auto centralExtraMap = QuaZExtraField::toMap(raw.centralExtra);
+    centralExtraMap.remove(ZIP64_HEADER);
+    auto localExtraMap = QuaZExtraField::toMap(raw.localExtra);
+    localExtraMap.remove(ZIP64_HEADER);
+
+    info.setMadeBy(raw.versionMadeBy);
+    info.setZipVersionNeeded(raw.versionNeeded);
+    info.setZipOptions(QuaZipFileInfo::ZipOptions(raw.flags));
+    info.setCompressionMethod(raw.compressionMethod);
+    info.setCompressedSize(raw.compressedSize);
+    info.setUncompressedSize(raw.uncompressedSize);
+    info.setInternalAttributes(raw.internalAttributes);
+    info.setExternalAttributes(raw.externalAttributes);
+    info.setDiskNumber(raw.diskNumber);
+    info.setCrc(raw.crc);
+    info.setCompressionLevel(info.detectCompressionLevel());
+
+    info.setCentralExtraFields(centralExtraMap);
+    info.setLocalExtraFields(localExtraMap);
+    info.setFilePath(p->decodeZipText(
+        raw.fileName, raw.flags, centralExtraMap, QuaZipPrivate::ZIP_FILENAME));
+    info.setComment(p->decodeZipText(
+        raw.comment, raw.flags, centralExtraMap, QuaZipPrivate::ZIP_COMMENT));
+
+    auto time =
+        QuaZipPrivate::decodeCreationTime(centralExtraMap, localExtraMap);
+    info.setCreationTime(time.isNull() ? raw.modificationTime : time);
+
+    time =
+        QuaZipPrivate::decodeModificationTime(centralExtraMap, localExtraMap);
+    info.setModificationTime(time.isNull() ? raw.modificationTime : time);
+
+    time = QuaZipPrivate::decodeLastAccessTime(centralExtraMap, localExtraMap);
+    info.setLastAccessTime(time.isNull() ? raw.modificationTime : time);
+
+    info.setSymLinkTarget(QuaZipPrivate::decodeSymLinkTarget(localExtraMap));
+
+    // Add to directory map
+    p->addCurrentFileToDirectoryMap(info.filePath());
+    return true;
+}
+
+bool QuaZip::getCurrentRawFileInfo(QuaZipRawFileInfo &rawInfo) const
+{
     p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::getCurrentFileInfo(): ZIP is not open in mdUnzip "
@@ -1574,40 +1622,21 @@ bool QuaZip::getCurrentFileInfo(QuaZipFileInfo &info) const
     if ((p->zipError = unzCloseCurrentFile(p->unzFile_f)))
         return false;
 
-    auto centralExtraMap = QuaZExtraField::toMap(centralExtra);
-    centralExtraMap.remove(ZIP64_HEADER);
-    auto localExtraMap = QuaZExtraField::toMap(localExtra);
-    localExtraMap.remove(ZIP64_HEADER);
-
-    info.setMadeBy(quint16(info_z.version));
-    info.setZipVersionNeeded(quint16(info_z.version_needed));
-    info.setZipOptions(QuaZipFileInfo::ZipOptions(quint16(info_z.flag)));
-    info.setCompressionMethod(quint16(info_z.compression_method));
-    info.setCompressedSize(qint64(info_z.compressed_size));
-    info.setUncompressedSize(qint64(info_z.uncompressed_size));
-    info.setInternalAttributes(quint16(info_z.internal_fa));
-    info.setExternalAttributes(qint32(info_z.external_fa));
-    info.setDiskNumber(int(info_z.disk_num_start));
-    info.setCrc(info_z.crc);
-    info.setCompressionLevel(info.detectCompressionLevel());
-
-    info.setCentralExtraFields(centralExtraMap);
-    info.setLocalExtraFields(localExtraMap);
-    info.setFilePath(p->decodeZipText(
-        fileName, info_z.flag, centralExtraMap, QuaZipPrivate::ZIP_FILENAME));
-    info.setComment(p->decodeZipText(
-        comment, info_z.flag, centralExtraMap, QuaZipPrivate::ZIP_COMMENT));
-
-    info.setCreationTime(QuaZipPrivate::decodeCreationTime(
-        info_z, centralExtraMap, localExtraMap));
-    info.setModificationTime(QuaZipPrivate::decodeModificationTime(
-        info_z, centralExtraMap, localExtraMap));
-    info.setLastAccessTime(QuaZipPrivate::decodeLastAccessTime(
-        info_z, centralExtraMap, localExtraMap));
-    info.setSymLinkTarget(QuaZipPrivate::decodeSymLinkTarget(localExtraMap));
-
-    // Add to directory map
-    p->addCurrentFileToDirectoryMap(info.filePath());
+    rawInfo.versionMadeBy = quint16(info_z.version);
+    rawInfo.versionNeeded = quint16(info_z.version_needed);
+    rawInfo.flags = quint16(info_z.flag);
+    rawInfo.crc = info_z.crc;
+    rawInfo.compressionMethod = quint16(info_z.compression_method);
+    rawInfo.internalAttributes = quint16(info_z.internal_fa);
+    rawInfo.externalAttributes = qint32(info_z.external_fa);
+    rawInfo.diskNumber = int(info_z.disk_num_start);
+    rawInfo.compressedSize = qint64(info_z.compressed_size);
+    rawInfo.uncompressedSize = qint64(info_z.uncompressed_size);
+    rawInfo.modificationTime = QuaZipPrivate::zInfoToDateTime(info_z);
+    rawInfo.fileName = fileName;
+    rawInfo.localExtra = localExtra;
+    rawInfo.centralExtra = centralExtra;
+    rawInfo.comment = comment;
     return true;
 }
 
@@ -2009,7 +2038,8 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     } else {
         compatibleFilePath = p->compatibleFilePath(fileInfo.filePath());
 
-        if (isUnicodeComment && compatibility != DosCompatible) {
+        if (isUnicodeComment && compatibility != DosCompatible &&
+            compatibility != CustomCompatibility) {
             //comment will be stored in extra fields only
             compatibleComment.clear();
         } else {
@@ -2048,7 +2078,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
         map->remove(NTFS_HEADER);
         map->remove(INFO_ZIP_UNICODE_PATH_HEADER);
         map->remove(INFO_ZIP_UNICODE_COMMENT_HEADER);
-        map->remove(WINZIP_EXTRA_FIELD_HEADER);
+        map->remove(ZIPARCHIVE_EXTRA_FIELD_HEADER);
     }
     if (compatibility != DosCompatible) {
         if (!(fileInfo.zipOptions() & QuaZipFileInfo::Unicode)) {
@@ -2065,7 +2095,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
                     centralExtra, fileInfo.comment(), compatibleComment);
             }
             if (isUnicodeComment || isUnicodeFilePath) {
-                p->storeWinZipExtraFields(
+                p->storeZipArchiveExtraFields(
                     centralExtra, fileInfo.filePath(), compatibleFilePath);
             }
         }

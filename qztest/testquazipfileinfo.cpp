@@ -393,7 +393,7 @@ void TestQuaZipFileInfo::fromZipFile()
     QFETCH(int, fileSize);
     QFETCH(QString, password);
     QFETCH(QuaZip::Compatibility, compatibility);
-    bool isText = fileName.endsWith(".txt");
+    bool isText = fileName.endsWith(".txt", Qt::CaseInsensitive);
 
     SaveDefaultZipOptions saveCompatibility;
     QuaZip::setDefaultCompatibility(compatibility);
@@ -503,10 +503,11 @@ void TestQuaZipFileInfo::fromZipFile()
     QCOMPARE(
         localExtra.contains(INFO_ZIP_UNICODE_PATH_HEADER), hasUnicodePathExtra);
 
-    bool hasWinZipExtra = (isUnicode && windowsCompatible) ||
+    bool hasZipArchiveExtra = (isUnicode && windowsCompatible) ||
         compatibility == QuaZip::CustomCompatibility;
 
-    QCOMPARE(centralExtra.contains(WINZIP_EXTRA_FIELD_HEADER), hasWinZipExtra);
+    QCOMPARE(centralExtra.contains(ZIPARCHIVE_EXTRA_FIELD_HEADER),
+        hasZipArchiveExtra);
 
     QVERIFY(!localExtra.contains(INFO_ZIP_UNICODE_COMMENT_HEADER));
 

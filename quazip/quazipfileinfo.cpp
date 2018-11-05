@@ -25,6 +25,9 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "quazipfileinfo.h"
 
+#include "quaziprawfileinfo.h"
+#include "quazip.h"
+
 #include <QDataStream>
 #include <QDir>
 
@@ -141,6 +144,13 @@ QuaZipFileInfo::~QuaZipFileInfo()
     // here is private data destroyed
 }
 
+QuaZipFileInfo QuaZipFileInfo::fromRawInfo(const QuaZipRawFileInfo &rawInfo)
+{
+    QuaZipFileInfo info;
+    info.initWithRawInfo(rawInfo);
+    return info;
+}
+
 QuaZipFileInfo QuaZipFileInfo::fromFile(
     const QString &filePath, const QString &storePath)
 {
@@ -163,6 +173,33 @@ QuaZipFileInfo QuaZipFileInfo::fromDir(
     QuaZipFileInfo info(storePath);
     info.initWithDir(dir);
     return info;
+}
+
+void QuaZipFileInfo::initWithRawInfo(const QuaZipRawFileInfo &raw)
+{
+    ZipOptions options(raw.flags);
+    setZipOptions(options);
+    setFilePath((options & Unicode)
+            ? QString::fromUtf8(raw.fileName)
+            : QuaZip::defaultFilePathCodec()->toUnicode(raw.fileName));
+    setComment((options & Unicode)
+            ? QString::fromUtf8(raw.comment)
+            : QuaZip::defaultCommentCodec()->toUnicode(raw.comment));
+    setMadeBy(raw.versionMadeBy);
+    setZipVersionNeeded(raw.versionNeeded);
+    setInternalAttributes(raw.internalAttributes);
+    setExternalAttributes(raw.externalAttributes);
+    setDiskNumber(raw.diskNumber);
+    setCrc(raw.crc);
+    setCompressedSize(raw.compressedSize);
+    setUncompressedSize(raw.uncompressedSize);
+    setCompressionMethod(raw.compressionMethod);
+    setCompressionLevel(detectCompressionLevel());
+    setModificationTime(raw.modificationTime);
+    setCreationTime(raw.modificationTime);
+    setLastAccessTime(raw.modificationTime);
+    setCentralExtraFields(QuaZExtraField::toMap(raw.centralExtra));
+    setLocalExtraFields(QuaZExtraField::toMap(raw.localExtra));
 }
 
 bool QuaZipFileInfo::initWithDir(const QDir &dir)
@@ -201,13 +238,21 @@ bool QuaZipFileInfo::initWithFile(const QFileInfo &fileInfo)
         d->setEntryType(File);
     }
 
-    Attributes attr;
-    auto perm = fileInfo.permissions();
-    if (!fileInfo.isWritable())
-        attr |= ReadOnly;
+    auto attr = d->attributes();
+#ifdef Q_OS_WIN
+    auto fullFilePath = fileInfo.filePath();
+    DWORD result = GetFileAttributesW(
+        reinterpret_cast<const WCHAR *>(fullFilePath.utf16()));
+    if (result != INVALID_FILE_ATTRIBUTES)
+        attr |= Attributes(result & AllAttrs);
+#else
+    attr |= Archived;
+#endif
+    attr.setFlag(DirAttr, fileInfo.isDir());
+    attr.setFlag(ReadOnly, !fileInfo.isWritable());
+    attr.setFlag(Hidden, fileInfo.isHidden());
 
-    if (fileInfo.isHidden())
-        attr |= Hidden;
+    auto perm = fileInfo.permissions();
 
     if (fileInfo.isExecutable())
         perm |= QFile::ExeUser | QFile::ExeOwner;
@@ -1384,7 +1429,7 @@ bool QuaZipFileInfo::isSymLinkHost(ZipSystem host)
 
 QuaZipFileInfo::Private::Private()
     : crc(0)
-    , externalAttributes(0)
+    , externalAttributes(Archived)
     , internalAttributes(0)
     , flags(0)
     , zipVersionMadeBy(10)

@@ -107,13 +107,16 @@ bool createTestFiles(
             }
         } else {
             QFile testFile(filePath);
-            if (!testFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            if (!testFile.open(QIODevice::WriteOnly)) {
                 qWarning(
                     "Couldn't create %s", fileName.toLocal8Bit().constData());
                 return false;
             }
             if (size == -1) {
+                testFile.setTextModeEnabled(true);
                 QTextStream testStream(&testFile);
+                testStream.setCodec("UTF-8");
+                testStream.setGenerateByteOrderMark(true);
                 testStream << "This is a test file named " << fileName << endl;
             } else {
                 for (int i = 0; i < size; ++i) {
@@ -145,7 +148,8 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
         QFileInfo fileInfo(filePath);
         auto zipFileInfo =
             QuaZipFileInfo::fromFile(fileInfo, dir.relativeFilePath(filePath));
-        zipFileInfo.setIsText(filePath.endsWith(".txt", Qt::CaseInsensitive));
+        bool isText = filePath.endsWith(".txt", Qt::CaseInsensitive);
+        zipFileInfo.setIsText(isText);
 
         zipFile.setFileInfo(zipFileInfo);
         if (!password.isNull()) {
@@ -160,7 +164,8 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
         }
         if (!fileInfo.isDir()) {
             QFile file(filePath);
-            if (!file.open(QIODevice::ReadOnly)) {
+            if (!file.open(QIODevice::ReadOnly |
+                    (isText ? QIODevice::Text : QIODevice::OpenModeFlag(0)))) {
                 qWarning(
                     "Couldn't open %s", filePath.toLocal8Bit().constData());
                 return false;
@@ -252,6 +257,7 @@ SaveDefaultZipOptions::~SaveDefaultZipOptions()
 int main(int argc, char **argv)
 {
     QLocale::setDefault(QLocale::Russian);
+    qDebug() << "Init tests...";
     QCoreApplication app(argc, argv);
 
     int err = 0;
