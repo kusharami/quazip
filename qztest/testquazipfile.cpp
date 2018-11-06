@@ -347,10 +347,11 @@ void TestQuaZipFile::getZip()
     QVERIFY(f1.zipFilePath().isEmpty());
     QString zipPath("doesntexist.zip");
     QuaZipFile f2(zipPath, "someFile");
-    QCOMPARE(f2.zip(), static_cast<QuaZip *>(nullptr));
+    QCOMPARE(f2.zipFilePath(), zipPath);
+    QVERIFY(f2.zip() != nullptr);
     f2.setZip(&testZip);
     QCOMPARE(f2.zip(), &testZip);
-    QCOMPARE(f2.zipFilePath(), zipPath);
+    QVERIFY(f2.zipFilePath().isEmpty());
 }
 
 void TestQuaZipFile::setZipFilePath()
@@ -404,8 +405,8 @@ void TestQuaZipFile::zipFileInfo()
         QCOMPARE(testFile.filePath(), csFileName);
         QCOMPARE(testFile.caseSensitivity(), caseSensitivity);
         QVERIFY(testFile.open(QIODevice::ReadOnly));
-        QCOMPARE(testFile.filePath(), testFileName);
-        QCOMPARE(testFile.actualFilePath(), csFileName);
+        QCOMPARE(testFile.filePath(), csFileName);
+        QCOMPARE(testFile.actualFilePath(), testFileName);
         zipFileInfo = testFile.fileInfo();
     }
     {
@@ -554,7 +555,7 @@ void TestQuaZipFile::fileAttributes()
     QVERIFY(createTestFiles(testFiles, -1, filesPath));
 
     QString symLinkName(
-        (attributes & QuaZipFileInfo::Hidden) ? "symlink" : ".symlink");
+        (attributes & QuaZipFileInfo::Hidden) ? ".symlink" : "symlink");
     testFiles << symLinkName;
 
     QVERIFY(

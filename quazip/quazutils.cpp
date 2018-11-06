@@ -44,7 +44,7 @@ bool QuaZUtils::createSymLink(
         reinterpret_cast<const WCHAR *>(target.utf16()), dwFlags);
 #else
     return CreateSymbolicLinkA(
-        linkPath.toLocal8Bit().data(), absTarget.toLocal8Bit().data(), dwFlags);
+        linkPath.toLocal8Bit().data(), target.toLocal8Bit().data(), dwFlags);
 #endif
 #else
     Q_UNUSED(isDir);
