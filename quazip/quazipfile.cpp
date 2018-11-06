@@ -881,8 +881,9 @@ bool QuaZipFilePrivate::seekInternal(qint64 newPos)
         auto unzFile = zip->getUnzFile();
         int err = unzCloseCurrentFile(unzFile);
         if (err == UNZ_OK) {
-            err = unzOpenCurrentFile4(unzFile, NULL, NULL,
-                int(fileInfo.isRaw()), fileInfo.cryptKeys());
+            err =
+                unzOpenCurrentFile4(unzFile, NULL, NULL, int(fileInfo.isRaw()),
+                    fileInfo.hasCryptKeys() ? fileInfo.cryptKeys() : nullptr);
         }
 
         if (err != UNZ_OK) {
