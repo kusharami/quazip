@@ -2084,11 +2084,17 @@ extern int ZEXPORT unzCloseCurrentFile (unzFile file)
 
     int stream_end_error = UNZ_OK;
     if (!pfile_in_zip_read_info->raw
-    && pfile_in_zip_read_info->rest_read_compressed > 0
     && pfile_in_zip_read_info->rest_read_uncompressed == 0)
     {
-        Byte dummy;
-        stream_end_error = unzReadCurrentFile(file, &dummy, 1);
+        if (pfile_in_zip_read_info->crc32 != pfile_in_zip_read_info->crc32_wait)
+            err=UNZ_CRCERROR;
+        else
+        if (pfile_in_zip_read_info->rest_read_compressed > 0)
+        {
+            Byte dummy;
+            pfile_in_zip_read_info->rest_read_uncompressed = 1;
+            stream_end_error = unzReadCurrentFile(file, &dummy, 1);
+        }
     }
 
     if (pfile_in_zip_read_info->stream_initialised == Z_DEFLATED)
@@ -2100,14 +2106,6 @@ extern int ZEXPORT unzCloseCurrentFile (unzFile file)
 
     if (stream_end_error != UNZ_OK)
         err = stream_end_error > 0 ? UNZ_BADZIPFILE : stream_end_error;
-    else
-    if ((pfile_in_zip_read_info->rest_read_uncompressed == 0) &&
-        (!pfile_in_zip_read_info->raw))
-    {
-        if (pfile_in_zip_read_info->crc32 != pfile_in_zip_read_info->crc32_wait)
-            err=UNZ_CRCERROR;
-    }
-
 
     TRYFREE(pfile_in_zip_read_info->read_buffer);
     pfile_in_zip_read_info->read_buffer = NULL;
