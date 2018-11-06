@@ -776,7 +776,7 @@ qint64 QuaZipPrivate::dateTimeToUnixTime(const QDateTime &from, qint32 &time32)
 
 QDateTime QuaZipPrivate::zInfoToDateTime(const unz_file_info64 &info)
 {
-    QDate date(int(info.tmu_date.tm_year), int(info.tmu_date.tm_mon + 1),
+    QDate date(int(info.tmu_date.tm_year), int(info.tmu_date.tm_mon),
         int(info.tmu_date.tm_mday));
     QTime time(int(info.tmu_date.tm_hour), int(info.tmu_date.tm_min),
         int(info.tmu_date.tm_sec));
