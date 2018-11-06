@@ -1487,7 +1487,7 @@ bool QuaZip::setCurrentFile(const QString &fileName, CaseSensitivity cs)
 
     // Not mapped yet, start from where we have got to so far
     for (bool more = p->goToFirstUnmappedFile(); more; more = goToNextFile()) {
-        current = currentFilePath();
+        current = QDir::cleanPath(currentFilePath());
         if (current.isEmpty())
             return false;
         if (caseSensitive) {
