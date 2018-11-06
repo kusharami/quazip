@@ -85,6 +85,11 @@ void TestQuaZipFile::zipUnzip_data()
         << QString() << QByteArrayLiteral("windows-1251")
         << QByteArrayLiteral("windows-1252") << QByteArray() << true
         << 65536 * 2;
+
+    QTest::newRow("encrypted empty file")
+        << QStringList("dummy") << QString("Zero encrypted")
+        << QString("わたしはジップファイル") << QByteArray() << QByteArray()
+        << QByteArrayLiteral("EUC-JP") << false << 0;
 }
 
 void TestQuaZipFile::zipUnzip()
@@ -232,7 +237,7 @@ void TestQuaZipFile::zipUnzip()
 
             QCOMPARE(archived.size(), expectedFileSize);
             QCOMPARE(archived.bytesAvailable(), expectedFileSize);
-            QVERIFY(!archived.atEnd());
+            QCOMPARE(archived.atEnd(), expectedFileSize == 0);
             QVERIFY(archived.seek(expectedFileSize));
             QCOMPARE(archived.bytesAvailable(), qint64(0));
             QVERIFY(archived.atEnd());
@@ -240,10 +245,10 @@ void TestQuaZipFile::zipUnzip()
             QCOMPARE(archived.uncompressedSize(), expectedFileSize);
             QVERIFY(archived.compressedSize() > 0);
             QVERIFY(archived.reset());
-            QVERIFY(!archived.atEnd());
+            QCOMPARE(archived.atEnd(), expectedFileSize == 0);
             QCOMPARE(archived.peek(expectedFileSize),
                 original.peek(expectedFileSize));
-            QVERIFY(!archived.atEnd());
+            QCOMPARE(archived.atEnd(), expectedFileSize == 0);
             QCOMPARE(archived.pos(), qint64(0));
             QCOMPARE(original.readAll(), archived.readAll());
             QVERIFY(archived.atEnd());
@@ -307,7 +312,10 @@ void TestQuaZipFile::zipUnzip()
         QString wrongPassword("WrongPassword");
         archived.setPassword(&wrongPassword);
         QVERIFY(archived.open(QIODevice::ReadOnly));
-        QVERIFY(original.readAll() != archived.readAll());
+        QCOMPARE(original.readAll() != archived.readAll(), size != 0);
+        if (size != 0)
+            QVERIFY(archived.zipError() != UNZ_OK);
+        archived.close();
         QVERIFY(archived.zipError() != UNZ_OK);
     }
 
@@ -323,6 +331,8 @@ void TestQuaZipFile::zipUnzip()
         archived.setFileInfo(info);
         QVERIFY(archived.open(QIODevice::ReadOnly));
         QCOMPARE(original.readAll(), archived.readAll());
+        QCOMPARE(archived.zipError(), UNZ_OK);
+        archived.close();
         QCOMPARE(archived.zipError(), UNZ_OK);
     }
     testZip.close();

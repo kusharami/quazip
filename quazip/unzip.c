@@ -2082,7 +2082,25 @@ extern int ZEXPORT unzCloseCurrentFile (unzFile file)
     if (pfile_in_zip_read_info==NULL)
         return UNZ_PARAMERROR;
 
+    int stream_end_error = UNZ_OK;
+    if (!pfile_in_zip_read_info->raw
+    && pfile_in_zip_read_info->rest_read_compressed > 0
+    && pfile_in_zip_read_info->rest_read_uncompressed == 0)
+    {
+        Byte dummy;
+        stream_end_error = unzReadCurrentFile(file, &dummy, 1);
+    }
 
+    if (pfile_in_zip_read_info->stream_initialised == Z_DEFLATED)
+        err = inflateEnd(&pfile_in_zip_read_info->stream);
+#ifdef HAVE_BZIP2
+    else if (pfile_in_zip_read_info->stream_initialised == Z_BZIP2ED)
+        BZ2_bzDecompressEnd(&pfile_in_zip_read_info->bstream);
+#endif
+
+    if (stream_end_error != UNZ_OK)
+        err = stream_end_error > 0 ? UNZ_BADZIPFILE : stream_end_error;
+    else
     if ((pfile_in_zip_read_info->rest_read_uncompressed == 0) &&
         (!pfile_in_zip_read_info->raw))
     {
@@ -2093,14 +2111,6 @@ extern int ZEXPORT unzCloseCurrentFile (unzFile file)
 
     TRYFREE(pfile_in_zip_read_info->read_buffer);
     pfile_in_zip_read_info->read_buffer = NULL;
-    if (pfile_in_zip_read_info->stream_initialised == Z_DEFLATED)
-        inflateEnd(&pfile_in_zip_read_info->stream);
-#ifdef HAVE_BZIP2
-    else if (pfile_in_zip_read_info->stream_initialised == Z_BZIP2ED)
-        BZ2_bzDecompressEnd(&pfile_in_zip_read_info->bstream);
-#endif
-
-
     pfile_in_zip_read_info->stream_initialised = 0;
     TRYFREE(pfile_in_zip_read_info);
 
