@@ -193,11 +193,11 @@ public:
     quint16 zipVersionNeeded() const;
     void setZipVersionNeeded(quint16 value);
 
-    quint16 internalAttributes();
+    quint16 internalAttributes() const;
     void setInternalAttributes(quint16 value);
 
-    qint32 externalAttributes();
-    void setExternalAttributes(qint32 value);
+    quint32 externalAttributes() const;
+    void setExternalAttributes(quint32 value);
 
     const QString &symLinkTarget() const;
     void setSymLinkTarget(const QString &filePath);

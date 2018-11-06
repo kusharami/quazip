@@ -11,7 +11,7 @@ struct QuaZipRawFileInfo {
     quint16 flags;
     quint16 compressionMethod;
     quint16 internalAttributes;
-    qint32 externalAttributes;
+    quint32 externalAttributes;
     quint32 crc;
     int diskNumber;
     qint64 compressedSize;

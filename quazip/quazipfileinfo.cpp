@@ -87,7 +87,7 @@ enum
 
 struct QuaZipFileInfo::Private : public QSharedData {
     quint32 crc;
-    qint32 externalAttributes;
+    quint32 externalAttributes;
     quint16 internalAttributes;
     quint16 flags;
     quint8 zipVersionMadeBy;
@@ -469,7 +469,7 @@ void QuaZipFileInfo::Private::setEntryType(EntryType value)
 
         externalAttributes &= ~DirAttr;
 
-        uAttr &= UNX_IFMT;
+        uAttr &= ~UNX_IFMT;
         uAttr |= UNX_IFLNK;
         break;
     }
@@ -675,7 +675,7 @@ void QuaZipFileInfo::setZipVersionMadeBy(quint8 spec)
     d->zipVersionMadeBy = spec;
 }
 
-quint16 QuaZipFileInfo::internalAttributes()
+quint16 QuaZipFileInfo::internalAttributes() const
 {
     return d->internalAttributes;
 }
@@ -688,12 +688,12 @@ void QuaZipFileInfo::setInternalAttributes(quint16 value)
     d->internalAttributes = value;
 }
 
-qint32 QuaZipFileInfo::externalAttributes()
+quint32 QuaZipFileInfo::externalAttributes() const
 {
     return d->externalAttributes;
 }
 
-void QuaZipFileInfo::setExternalAttributes(qint32 value)
+void QuaZipFileInfo::setExternalAttributes(quint32 value)
 {
     if (externalAttributes() == value)
         return;
@@ -709,11 +709,10 @@ const QString &QuaZipFileInfo::symLinkTarget() const
 
 void QuaZipFileInfo::setSymLinkTarget(const QString &filePath)
 {
-    if (entryType() == SymLink && symLinkTarget() == filePath)
+    if (symLinkTarget() == filePath)
         return;
 
     d->symLinkTarget = filePath;
-    setEntryType(SymLink);
 }
 
 bool QuaZipFileInfo::isEncrypted() const
@@ -970,7 +969,8 @@ QFile::Permissions QuaZipFileInfo::Private::permissions() const
         }
 
         if (uAttr & (THS_IEUSR | THS_IWUSR))
-            permissions |= QFile::WriteUser | QFile::WriteOwner;
+            permissions |=
+                QFile::WriteUser | QFile::WriteOwner | QFile::WriteGroup;
 
         if (uAttr & THS_IXUSR)
             permissions |= QFile::ExeUser | QFile::ExeOwner;
@@ -1340,7 +1340,7 @@ void QuaZipFileInfo::setAttributes(Attributes value)
         tempFilePath += '/';
     }
     d->filePath = tempFilePath;
-    d->externalAttributes &= (0xFFFF | ~AllAttrs);
+    d->externalAttributes &= (0xFFFF & ~AllAttrs);
     d->externalAttributes |= value | (uAttr << 16);
 }
 
