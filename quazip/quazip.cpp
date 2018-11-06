@@ -738,7 +738,7 @@ void QuaZipPrivate::storeNTFSExtraFields(QuaZExtraField::Map &localExtra,
 
         quint64 mNTFSTime = dateTimeToNTFSTime(modTime);
         quint64 cNTFSTime =
-            createTime.isNull() ? mNTFSTime : dateTimeToNTFSTime(modTime);
+            createTime.isNull() ? mNTFSTime : dateTimeToNTFSTime(createTime);
         quint64 aNTFSTime =
             accTime.isNull() ? mNTFSTime : dateTimeToNTFSTime(accTime);
 
