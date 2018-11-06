@@ -1682,11 +1682,14 @@ static int unzOpenCurrentFile34 (unzFile file,
         s->encrypted = 1;
     }
 #endif
-    if (encrypted && !s->encrypted)
+    if (encrypted)
     {
-        if (raw)
-            pfile_in_zip_read_info->rest_read_compressed += RAND_HEAD_LEN;
-        else
+        if (s->encrypted)
+        {
+            if (pfile_in_zip_read_info->rest_read_compressed < RAND_HEAD_LEN)
+                return UNZ_BADZIPFILE;
+            pfile_in_zip_read_info->rest_read_compressed -= RAND_HEAD_LEN;
+        } else if (!raw)
             return UNZ_PARAMERROR;
     }
 
