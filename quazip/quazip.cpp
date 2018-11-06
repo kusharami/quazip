@@ -1625,10 +1625,10 @@ bool QuaZip::getCurrentRawFileInfo(QuaZipRawFileInfo &rawInfo) const
     rawInfo.versionMadeBy = quint16(info_z.version);
     rawInfo.versionNeeded = quint16(info_z.version_needed);
     rawInfo.flags = quint16(info_z.flag);
-    rawInfo.crc = info_z.crc;
+    rawInfo.crc = quint32(info_z.crc);
     rawInfo.compressionMethod = quint16(info_z.compression_method);
     rawInfo.internalAttributes = quint16(info_z.internal_fa);
-    rawInfo.externalAttributes = qint32(info_z.external_fa);
+    rawInfo.externalAttributes = quint32(info_z.external_fa);
     rawInfo.diskNumber = int(info_z.disk_num_start);
     rawInfo.compressedSize = qint64(info_z.compressed_size);
     rawInfo.uncompressedSize = qint64(info_z.uncompressed_size);
@@ -2050,7 +2050,7 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     QuaZipPrivate::fillTMZDate(zipInfo.tmz_date, modTime);
     zipInfo.dosDate = 0;
     zipInfo.internal_fa = fileInfo.internalAttributes();
-    zipInfo.external_fa = uLong(fileInfo.externalAttributes());
+    zipInfo.external_fa = fileInfo.externalAttributes();
     zipInfo.filename = compatibleFilePath.data();
     zipInfo.comment = compatibleComment.data();
     zipInfo.level = fileInfo.compressionLevel();

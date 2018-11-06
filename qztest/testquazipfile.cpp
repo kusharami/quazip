@@ -128,7 +128,7 @@ void TestQuaZipFile::zipUnzip()
     } else if (!filePathCodec.isEmpty() && !commentCodec.isEmpty()) {
         compatibility = QuaZip::CustomCompatibility;
     } else {
-        compatibility |= QuaZip::DefaultCompatibility;
+        compatibility = QuaZip::DefaultCompatibility;
     }
     testZip.setCompatibility(compatibility);
 
@@ -154,6 +154,8 @@ void TestQuaZipFile::zipUnzip()
         }
 
         outFile.setIsText(isText);
+        QCOMPARE(outFile.isText(), isText);
+        QVERIFY(!outFile.isTextModeEnabled());
         QVERIFY(!outFile.open(QIODevice::ReadWrite));
         QVERIFY(!outFile.open(QIODevice::Append));
         QVERIFY(outFile.open(QIODevice::WriteOnly));
