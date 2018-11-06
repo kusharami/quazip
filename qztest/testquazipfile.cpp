@@ -177,6 +177,22 @@ void TestQuaZipFile::zipUnzip()
     QCOMPARE(testZip.openMode(), QuaZip::mdUnzip);
     for (const QString &fileName : fileNames) {
         QFileInfo fileInfo(dir.filePath(fileName));
+
+        QDateTime expectedCreationTime;
+        QDateTime expectedModificationTime;
+        QDateTime expectedAccessTime;
+        if (compatibility == QuaZip::DosCompatible) {
+            qint64 secs =
+                (fileInfo.lastModified().toMSecsSinceEpoch() / 1000) & ~1;
+            expectedCreationTime = expectedAccessTime =
+                expectedModificationTime =
+                    QDateTime::fromMSecsSinceEpoch(secs * 1000, Qt::UTC);
+        } else {
+            expectedCreationTime = fileInfo.created();
+            expectedModificationTime = fileInfo.lastModified();
+            expectedAccessTime = fileInfo.lastRead();
+        }
+
         QFile original(fileInfo.filePath());
         QVERIFY(original.open(QFile::ReadOnly));
 
@@ -208,9 +224,10 @@ void TestQuaZipFile::zipUnzip()
                 archived.fileInfo().centralExtraFields());
             QCOMPARE(archived.localExtraFields(),
                 archived.fileInfo().localExtraFields());
-            QCOMPARE(archived.creationTime(), fileInfo.created());
-            QCOMPARE(archived.modificationTime(), fileInfo.lastModified());
-            QCOMPARE(archived.lastAccessTime(), fileInfo.lastRead());
+
+            QCOMPARE(archived.creationTime(), expectedCreationTime);
+            QCOMPARE(archived.modificationTime(), expectedModificationTime);
+            QCOMPARE(archived.lastAccessTime(), expectedAccessTime);
             QCOMPARE(archived.permissions(), fileInfo.permissions());
 
             QCOMPARE(archived.size(), expectedFileSize);
