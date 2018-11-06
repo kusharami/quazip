@@ -1600,7 +1600,7 @@ bool QuaZip::getCurrentRawFileInfo(QuaZipRawFileInfo &rawInfo) const
         return false;
     }
 
-    if ((p->zipError = unzOpenCurrentFile(p->unzFile_f))) {
+    if ((p->zipError = unzOpenCurrentFile2(p->unzFile_f, NULL, NULL, 1))) {
         return false;
     }
 
