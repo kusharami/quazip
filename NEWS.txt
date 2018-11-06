@@ -1,16 +1,56 @@
 QuaZipAC changes
 
 * Current
+        * QuaZip is reworked.
+          Added compatibility modes for DOS, Windows and Unix specific
+          options in zip archive.
+          Automatically read and store meta data of a file in zip
+          extra fields: NTFS/Unix times, symbolic link target, unicode
+          file path and unicode comment.
+          Possibility to adapt file names to be DOS compatible -
+          shorten names in 8.3 format, names with unsupported characters
+          replaced with CRC32 hex-representation.
+        * QuaZipFile is reworked.
+          Supported seeking in any position of decompressed stream;
+          Supported setting compression level.
+          Now there is only one QuaZipFile::open overriden from QIODevice.
+          Options are provided through QuaZipFileInfo for both
+          zipping and unzipping.
+        * QuaZipFileInfo is reworked.
+          It is used to provide full information of a zipped file or
+          a file to be zipped. QuaZipNewInfo is removed.
+        * QuaZipKeysGenerator added.
+          Class to provide secure way to set a password for
+          a file to be zipped or unzipped.
+          Password text codec can be set to support
+          different system locale settings.
+        * QuaZipRawFileInfo added.
+          This structure can be used to store raw information about a zip
+          file: internal, external attributes, flags, multibyte character
+          versions of file name and comment; raw extra field blocks, etc.
+        * QuaZipDir is reworked.
+          QuaZipDir::path always starts with '/', because it specifies
+          an absolute path in zip archive.
         * QuaZIODevice is reworked.
           Supported seeking in any position of decompressed stream.
           Supported setting compression level.
         * QuaGzipFile is replaced with QuaGzipDevice:
           Supported seeking in any position of decompressed stream.
-          Supported Gzip files compression/docompression to/from any device;
-          Supported setting/reading original file name, comment, 
+          Supported Gzip files compression/docompression to/from any device.
+          Supported setting/reading original file name, comment,
           modification time and extra fields in Gzip header.
           QuaGzipDevice inherits QuaZIODevice and supports everything from it.
-        
+        * QuaChecksum32 is reworked.
+          Added static functions to calculate checksum zChecksum<T> where
+          T is an algorithm class name (QuaCrc32, QuaAdler32).
+          Checksum can be calculated from QIODevice.
+        * QuaZipTextCodec added.
+          The text codec to encode/decode text with DOS and Windows
+          code page numbers. Code page number 0 maps to a current locale
+          OEM code page on Windows. On Unix IBM 437, IBM 850 or IBM 866
+          codec is used (IBM 866 is chosen when Cyrillic locale
+          is set as default).
+
 -------------------------------------------------------------------------------
 Original QuaZIP changes
 
@@ -53,7 +93,7 @@ QuaZIP changes
 
 * 2014-02-09 0.6.2
         * QuaZipNewInfo / QuaZipFileInfo64 now provide API to access/set
-          NTFS time stamps - useful even on non-NTFS systems if you 
+          NTFS time stamps - useful even on non-NTFS systems if you
           need more precise dates and times than default ones.
         * QuaZipNewInfo may now be initialized from QuaZipFileInfo64.
         * No more crashes when using QSaveFile as QIODevice for ZIP.
