@@ -37,6 +37,13 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <Windows.h>
 #endif
 
+static Q_CONSTEXPR auto allRead =
+    QFile::ReadOwner | QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
+static Q_CONSTEXPR auto allWrite = QFile::WriteOwner | QFile::WriteUser |
+    QFile::WriteGroup | QFile::WriteOther;
+static Q_CONSTEXPR auto allExe =
+    QFile::ExeUser | QFile::ExeGroup | QFile::ExeOther | QFile::ExeOwner;
+
 enum
 {
     UNX_IFMT = 0170000,
@@ -53,6 +60,7 @@ enum
     UNX_IROTH = 00004, /* Unix read permission: other */
     UNX_IWOTH = 00002, /* Unix write permission: other */
     UNX_IXOTH = 00001, /* Unix execute permission: other */
+    UNX_WALL = UNX_IWOTH | UNX_IWGRP | UNX_IWUSR,
 
     AMI_IFMT = 06000, /* Amiga file type mask */
     AMI_IFDIR = 04000, /* Amiga directory */
@@ -66,6 +74,7 @@ enum
     AMI_IEXECUTE = 00002, /* executable image, a loadable runfile */
     AMI_IDELETE = 00001, /* can be deleted */
     AMI_IALL = AMI_IREAD | AMI_IWRITE | AMI_IEXECUTE | AMI_IDELETE,
+    AMI_WALL = AMI_IWRITE | AMI_IDELETE,
 
     THS_IFMT = 0xF000,
     THS_IFDIR = 0x4000,
@@ -80,6 +89,7 @@ enum
     THS_IROTH = 0x0004, /* read permission: other */
     THS_IWOTH = 0x0002, /* write permission: other */
     THS_IXOTH = 0x0001, /* execute permission: other */
+    THS_WALL = THS_IWOTH | THS_IWUSR | THS_IEUSR,
 
     RAW_FLAG = 1 << 0,
     HAS_KEYS_FLAG = 1 << 1
@@ -115,10 +125,13 @@ struct QuaZipFileInfo::Private : public QSharedData {
 
     void setEntryType(EntryType value);
     void setPermissions(QFile::Permissions value);
+    void setAttributes(Attributes value);
 
     EntryType entryType() const;
     QFile::Permissions permissions() const;
     Attributes attributes() const;
+    QString fileName() const;
+    QString path() const;
     void adjustFilePath(bool isDir);
     bool equals(const Private &other) const;
 };
@@ -179,16 +192,16 @@ void QuaZipFileInfo::initWithRawInfo(const QuaZipRawFileInfo &raw)
 {
     ZipOptions options(raw.flags);
     setZipOptions(options);
+    setMadeBy(raw.versionMadeBy);
+    setZipVersionNeeded(raw.versionNeeded);
+    setInternalAttributes(raw.internalAttributes);
+    setExternalAttributes(raw.externalAttributes);
     setFilePath((options & Unicode)
             ? QString::fromUtf8(raw.fileName)
             : QuaZip::defaultFilePathCodec()->toUnicode(raw.fileName));
     setComment((options & Unicode)
             ? QString::fromUtf8(raw.comment)
             : QuaZip::defaultCommentCodec()->toUnicode(raw.comment));
-    setMadeBy(raw.versionMadeBy);
-    setZipVersionNeeded(raw.versionNeeded);
-    setInternalAttributes(raw.internalAttributes);
-    setExternalAttributes(raw.externalAttributes);
     setDiskNumber(raw.diskNumber);
     setCrc(raw.crc);
     setCompressedSize(raw.compressedSize);
@@ -227,38 +240,69 @@ bool QuaZipFileInfo::initWithFile(const QFileInfo &fileInfo)
         return initWithDir(dir);
     }
 
+    auto fullFilePath = QDir::cleanPath(fileInfo.absoluteFilePath());
     if (d.constData()->filePath.isEmpty())
         setFilePath(fileInfo.fileName());
     if (fileInfo.isSymLink()) {
         d->setEntryType(SymLink);
-        d->symLinkTarget = fileInfo.symLinkTarget();
+        auto symLinkTarget = QDir::cleanPath(fileInfo.symLinkTarget());
+        Qt::CaseSensitivity cs;
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+        cs = Qt::CaseInsensitive;
+#else
+        cs = Qt::CaseSensitive;
+#endif
+        if (!symLinkTarget.isEmpty() && !QDir::isRelativePath(symLinkTarget) &&
+            fullFilePath.endsWith(d.constData()->filePath, cs)) {
+            symLinkTarget = fileInfo.dir().relativeFilePath(symLinkTarget);
+        }
+        if (!symLinkTarget.isEmpty() && QDir::isRelativePath(symLinkTarget)) {
+            int parentDirCount = d.constData()->filePath.count('/');
+            int i = 0;
+            while (i <= symLinkTarget.length() - 2 &&
+                symLinkTarget.at(i) == '.' && symLinkTarget.at(i + 1) == '.') {
+                i += 2;
+                if (i < symLinkTarget.length()) {
+                    if (symLinkTarget.at(i) != '/')
+                        break;
+                }
+                if (--parentDirCount < 0) {
+                    symLinkTarget =
+                        fileInfo.dir().absoluteFilePath(symLinkTarget);
+                    break;
+                }
+                ++i;
+            }
+        }
+        d->symLinkTarget = symLinkTarget;
     } else if (fileInfo.isDir()) {
         d->setEntryType(Directory);
     } else {
         d->setEntryType(File);
     }
 
-    auto attr = d->attributes();
+    QuaZipFileInfo::Attributes attr;
 #ifdef Q_OS_WIN
-    auto fullFilePath = fileInfo.filePath();
+    fullFilePath = QDir::toNativeSeparators(fullFilePath);
     DWORD result = GetFileAttributesW(
         reinterpret_cast<const WCHAR *>(fullFilePath.utf16()));
     if (result != INVALID_FILE_ATTRIBUTES)
         attr |= Attributes(result & AllAttrs);
 #else
-    attr |= Archived;
+    attr.setFlag(ReadOnly, !fileInfo.isWritable());
 #endif
     attr.setFlag(DirAttr, fileInfo.isDir());
-    attr.setFlag(ReadOnly, !fileInfo.isWritable());
     attr.setFlag(Hidden, fileInfo.isHidden());
 
     auto perm = fileInfo.permissions();
+    if (attr & ReadOnly)
+        perm &= ~allWrite;
 
     if (fileInfo.isExecutable())
         perm |= QFile::ExeUser | QFile::ExeOwner;
 
-    setAttributes(attr);
-    setPermissions(perm);
+    d->setPermissions(perm);
+    d->setAttributes(attr);
 
     setModificationTime(fileInfo.lastModified());
     setLastAccessTime(fileInfo.lastRead());
@@ -274,17 +318,17 @@ bool QuaZipFileInfo::applyAttributesTo(const QString &filePath,
     if (filePath.isEmpty())
         return false;
 
-    auto nativeFilePath =
-        QDir::toNativeSeparators(QFileInfo(filePath).absoluteFilePath());
     if (!QFile::exists(filePath))
         return false;
+
+    auto nativeFilePath = QDir::toNativeSeparators(
+        QDir::cleanPath(QFileInfo(filePath).absoluteFilePath()));
     if (permissions == 0) {
         permissions = QFile::permissions(filePath);
     }
 
     if (attributes & ReadOnly)
-        permissions &= ~(QFile::WriteOwner | QFile::WriteUser |
-            QFile::WriteGroup | QFile::WriteOther);
+        permissions &= ~allWrite;
     else
         permissions |= QFile::WriteOwner | QFile::WriteUser;
 
@@ -498,27 +542,17 @@ void QuaZipFileInfo::setFilePath(const QString &filePath)
     d->filePath = normalizedFilePath;
     auto attr = d.constData()->attributes();
     attr.setFlag(DirAttr, filePath.endsWith('/') || filePath.endsWith('\\'));
-    setAttributes(attr);
+    d->setAttributes(attr);
 }
 
 QString QuaZipFileInfo::fileName() const
 {
-    QFileInfo fileInfo(filePath());
-
-    if (fileInfo.fileName().isEmpty())
-        fileInfo.setFile(fileInfo.path());
-
-    return fileInfo.fileName();
+    return d->fileName();
 }
 
 QString QuaZipFileInfo::path() const
 {
-    QFileInfo fileInfo(filePath());
-
-    if (fileInfo.fileName().isEmpty())
-        fileInfo.setFile(fileInfo.path());
-
-    return fileInfo.path();
+    return d->path();
 }
 
 const QDateTime &QuaZipFileInfo::creationTime() const
@@ -659,7 +693,39 @@ void QuaZipFileInfo::setSystemMadeBy(ZipSystem value)
     if (systemMadeBy() == value)
         return;
 
-    d->zipSystem = value;
+    QFile::Permissions perm;
+    auto attr = attributes();
+    switch (value) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+        d->zipSystem = value;
+        perm = permissions();
+        break;
+
+    case OS_AMIGA:
+    case OS_THEOS:
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+    case OS_MACOSX:
+    case OS_UNIX:
+        perm = permissions();
+        d->zipSystem = value;
+        break;
+    }
+    d->setPermissions(perm);
+    d->setAttributes(attr);
 }
 
 quint8 QuaZipFileInfo::zipVersionMadeBy() const
@@ -940,49 +1006,46 @@ QFile::Permissions QuaZipFileInfo::Private::permissions() const
     case OS_MVS:
     case OS_VMCMS:
     case OS_ACORN:
-        permissions = QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup |
-            QFile::ReadOther;
-        if (0 == (externalAttributes & QuaZipFileInfo::ReadOnly)) {
-            permissions |= QFile::WriteOwner | QFile::WriteUser |
-                QFile::WriteOther | QFile::WriteGroup;
+        permissions = allRead;
+        if (!(externalAttributes & ReadOnly)) {
+            permissions |= allWrite;
+        }
+        if (externalAttributes & DirAttr) {
+            permissions |= allExe;
         }
         break;
 
     case OS_AMIGA:
         if (uAttr & AMI_IREAD)
-            permissions |= QFile::ReadUser | QFile::ReadOwner |
-                QFile::ReadOther | QFile::ReadGroup;
+            permissions |= allRead;
 
         if (uAttr & (AMI_IWRITE | AMI_IDELETE))
-            permissions |= QFile::WriteUser | QFile::WriteOwner |
-                QFile::WriteGroup | QFile::WriteOther;
+            permissions |= allWrite;
 
         if (uAttr & AMI_IEXECUTE)
-            permissions |= QFile::ExeUser | QFile::ExeOwner;
+            permissions |= allExe;
 
         break;
 
     case OS_THEOS:
         if (uAttr & THS_IRUSR) {
-            permissions |=
-                QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup;
+            permissions |= QFile::ReadUser | QFile::ReadOwner;
         }
 
         if (uAttr & (THS_IEUSR | THS_IWUSR))
-            permissions |=
-                QFile::WriteUser | QFile::WriteOwner | QFile::WriteGroup;
+            permissions |= QFile::WriteUser | QFile::WriteOwner;
 
         if (uAttr & THS_IXUSR)
             permissions |= QFile::ExeUser | QFile::ExeOwner;
 
         if (uAttr & THS_IROTH)
-            permissions |= QFile::ReadOther;
+            permissions |= QFile::ReadOther | QFile::ReadGroup;
 
         if (uAttr & THS_IWOTH)
-            permissions |= QFile::WriteOther;
+            permissions |= QFile::WriteOther | QFile::WriteGroup;
 
         if (uAttr & THS_IXOTH)
-            permissions |= QFile::ExeOther;
+            permissions |= QFile::ExeOther | QFile::ExeGroup;
 
         break;
 
@@ -1046,23 +1109,7 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 {
     int uAttr = externalAttributes >> 16;
 
-    auto testPerm = value;
-    if (testPerm & (QFile::ReadUser | QFile::ReadOwner)) {
-        testPerm &= ~QFile::ReadOwner;
-        testPerm |= QFile::ReadUser;
-    }
-
-    if (testPerm & (QFile::WriteUser | QFile::WriteOwner)) {
-        testPerm &= ~QFile::WriteOwner;
-        testPerm |= QFile::WriteUser;
-    }
-
-    Q_CONSTEXPR auto allRead =
-        QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
-    Q_CONSTEXPR auto allWrite =
-        QFile::WriteUser | QFile::WriteGroup | QFile::WriteOther;
-
-    if (testPerm & allWrite) {
+    if (value & allWrite) {
         externalAttributes &= ~ReadOnly;
     } else {
         externalAttributes |= ReadOnly;
@@ -1076,7 +1123,21 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
     case OS_MVS:
     case OS_VMCMS:
     case OS_ACORN: {
-        if (testPerm == allRead || testPerm == (allRead | allWrite)) {
+        auto testPerm = value;
+        if (testPerm & (QFile::ReadUser | QFile::ReadOwner)) {
+            testPerm &= ~QFile::ReadOwner;
+            testPerm |= QFile::ReadUser;
+        }
+
+        if (testPerm & (QFile::WriteUser | QFile::WriteOwner)) {
+            testPerm &= ~QFile::WriteOwner;
+            testPerm |= QFile::WriteUser;
+        }
+        Q_CONSTEXPR auto allReadCheck = allRead & ~QFile::ReadOwner;
+        Q_CONSTEXPR auto allWriteCheck = allWrite & ~QFile::WriteOwner;
+        testPerm &= ~allExe;
+        if (testPerm == allReadCheck ||
+            testPerm == (allReadCheck | allWriteCheck)) {
             break;
         }
 
@@ -1140,33 +1201,36 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
 
     case OS_AMIGA:
         uAttr &= ~AMI_IALL;
-        if (testPerm & allRead)
+        if (value & allRead)
             uAttr |= AMI_IREAD;
 
-        if (testPerm & allWrite)
+        if (value & allWrite)
             uAttr |= AMI_IWRITE | AMI_IDELETE;
 
-        if (value & (QFile::ExeOwner | QFile::ExeUser))
+        if (value & allExe)
             uAttr |= AMI_IEXECUTE;
 
         break;
 
     case OS_THEOS:
         uAttr &= ~THS_IALL;
-        if (value & (QFile::ReadUser | QFile::ReadOwner | QFile::ReadGroup))
+        if (value & (QFile::ReadUser | QFile::ReadOwner))
             uAttr |= THS_IRUSR;
 
-        if (value & (QFile::WriteUser | QFile::WriteOwner | QFile::WriteGroup))
+        if (value & (QFile::WriteUser | QFile::WriteOwner))
             uAttr |= THS_IWUSR | THS_IEUSR;
 
         if (value & (QFile::ExeUser | QFile::ExeOwner))
             uAttr |= THS_IXUSR;
 
-        if (value & QFile::ReadOther)
+        if (value & (QFile::ReadOther | QFile::ReadGroup))
             uAttr |= THS_IROTH;
 
-        if (value & QFile::WriteOther)
+        if (value & (QFile::WriteOther | QFile::WriteGroup))
             uAttr |= THS_IWOTH;
+
+        if (value & (QFile::ExeOther | QFile::ExeGroup))
+            uAttr |= THS_IXOTH;
 
         break;
     }
@@ -1175,81 +1239,15 @@ void QuaZipFileInfo::Private::setPermissions(QFile::Permissions value)
     externalAttributes |= uAttr << 16;
 }
 
-QuaZipFileInfo::Attributes QuaZipFileInfo::attributes() const
+void QuaZipFileInfo::Private::setAttributes(Attributes value)
 {
-    auto result = d->attributes() & AllAttrs;
-
-    if (d->filePath.endsWith('/'))
-        result |= DirAttr;
-
-    return result;
-}
-
-QuaZipFileInfo::Attributes QuaZipFileInfo::Private::attributes() const
-{
-    Attributes result(externalAttributes & 0xFF);
-    int uAttr = externalAttributes >> 16;
-
-    switch (zipSystem) {
-    case OS_MSDOS:
-    case OS_WINDOWS_NTFS:
-    case OS_WINDOWS_VFAT:
-    case OS_OS2HPFS:
-    case OS_MVS:
-    case OS_VMCMS:
-    case OS_ACORN:
-        break;
-
-    case OS_AMIGA:
-        result.setFlag(DirAttr, AMI_IFDIR == (uAttr & AMI_IFMT));
-        result.setFlag(Hidden, uAttr & AMI_IHIDDEN);
-        result.setFlag(Archived, uAttr & AMI_IARCHIVE);
-        break;
-
-    case OS_THEOS:
-        result.setFlag(DirAttr, THS_IFDIR == (uAttr & THS_IFMT));
-        result.setFlag(Hidden, !(uAttr & THS_INHID));
-        result.setFlag(Archived, !(uAttr & THS_IMODF));
-        break;
-
-    case OS_MACOSX:
-    case OS_UNIX:
-    case OS_QDOS:
-    case OS_OPENVMS:
-    case OS_ZSYSTEM:
-    case OS_CPM:
-    case OS_TANDEM:
-    case OS_ATARI:
-    case OS_BEOS:
-    case OS_TOPS20:
-    case OS_MACINTOSH:
-        result.setFlag(Hidden, QFileInfo(filePath).fileName().startsWith('.'));
-        result.setFlag(DirAttr, UNX_IFDIR == (uAttr & UNX_IFMT));
-        result |= Archived;
-        break;
-    }
-
-    result.setFlag(ReadOnly,
-        !(permissions() &
-            (QFile::WriteGroup | QFile::WriteOwner | QFile::WriteUser |
-                QFile::WriteOther)));
-
-    return result;
-}
-
-void QuaZipFileInfo::setAttributes(Attributes value)
-{
-    value &= AllAttrs;
-    if (attributes() == value)
-        return;
-
-    auto tempFilePath = d->filePath;
+    auto tempFilePath = filePath;
     if (tempFilePath.endsWith('/'))
         tempFilePath.chop(1);
 
-    int uAttr = d->externalAttributes >> 16;
+    int uAttr = externalAttributes >> 16;
 
-    switch (d->zipSystem) {
+    switch (zipSystem) {
     case OS_MSDOS:
     case OS_WINDOWS_NTFS:
     case OS_WINDOWS_VFAT:
@@ -1275,9 +1273,14 @@ void QuaZipFileInfo::setAttributes(Attributes value)
             uAttr |= AMI_IHIDDEN;
         else
             uAttr &= ~AMI_IHIDDEN;
+
+        if (value & ReadOnly)
+            uAttr &= ~AMI_WALL;
+        else if (!(uAttr & AMI_WALL))
+            uAttr |= AMI_WALL;
         break;
 
-    case OS_THEOS:
+    case OS_THEOS: {
         uAttr &= ~THS_IFMT;
         if (value & DirAttr)
             uAttr |= THS_IFDIR;
@@ -1294,7 +1297,13 @@ void QuaZipFileInfo::setAttributes(Attributes value)
         else
             uAttr |= THS_INHID;
 
+        if (value & ReadOnly)
+            uAttr &= ~THS_WALL;
+        else if (!(uAttr & THS_WALL))
+            uAttr |= THS_WALL;
+
         break;
+    }
 
     case OS_QDOS:
     case OS_OPENVMS:
@@ -1331,7 +1340,12 @@ void QuaZipFileInfo::setAttributes(Attributes value)
             }
         }
 
-        tempFilePath = fileInfo.filePath();
+        if (value & ReadOnly)
+            uAttr &= ~UNX_WALL;
+        else if (!(uAttr & UNX_WALL))
+            uAttr |= UNX_WALL;
+
+        tempFilePath = QDir::cleanPath(fileInfo.filePath());
         break;
     }
     }
@@ -1339,9 +1353,99 @@ void QuaZipFileInfo::setAttributes(Attributes value)
     if (!tempFilePath.isEmpty() && 0 != (value & DirAttr)) {
         tempFilePath += '/';
     }
-    d->filePath = tempFilePath;
-    d->externalAttributes &= (0xFFFF & ~AllAttrs);
-    d->externalAttributes |= value | (uAttr << 16);
+    filePath = tempFilePath;
+    externalAttributes &= ~(0xFFFF0000 | AllAttrs);
+    externalAttributes |= value | (uAttr << 16);
+}
+
+QuaZipFileInfo::Attributes QuaZipFileInfo::attributes() const
+{
+    auto result = d->attributes() & AllAttrs;
+
+    if (d->filePath.endsWith('/'))
+        result |= DirAttr;
+
+    return result;
+}
+
+QuaZipFileInfo::Attributes QuaZipFileInfo::Private::attributes() const
+{
+    Attributes result(externalAttributes & 0xFF);
+    int uAttr = externalAttributes >> 16;
+
+    switch (zipSystem) {
+    case OS_MSDOS:
+    case OS_WINDOWS_NTFS:
+    case OS_WINDOWS_VFAT:
+    case OS_OS2HPFS:
+    case OS_MVS:
+    case OS_VMCMS:
+    case OS_ACORN:
+        return result;
+
+    case OS_AMIGA:
+        result.setFlag(DirAttr, AMI_IFDIR == (uAttr & AMI_IFMT));
+        result.setFlag(Hidden, uAttr & AMI_IHIDDEN);
+        result.setFlag(Archived, uAttr & AMI_IARCHIVE);
+        break;
+
+    case OS_THEOS:
+        result.setFlag(DirAttr, THS_IFDIR == (uAttr & THS_IFMT));
+        result.setFlag(Hidden, !(uAttr & THS_INHID));
+        result.setFlag(Archived, !(uAttr & THS_IMODF));
+        break;
+
+    case OS_MACOSX:
+    case OS_UNIX:
+    case OS_QDOS:
+    case OS_OPENVMS:
+    case OS_ZSYSTEM:
+    case OS_CPM:
+    case OS_TANDEM:
+    case OS_ATARI:
+    case OS_BEOS:
+    case OS_TOPS20:
+    case OS_MACINTOSH:
+        result.setFlag(Hidden, fileName().startsWith('.'));
+        result.setFlag(DirAttr, UNX_IFDIR == (uAttr & UNX_IFMT));
+        break;
+    }
+
+    result.setFlag(ReadOnly,
+        !(permissions() &
+            (QFile::WriteGroup | QFile::WriteOwner | QFile::WriteUser |
+                QFile::WriteOther)));
+
+    return result;
+}
+
+QString QuaZipFileInfo::Private::fileName() const
+{
+    QFileInfo fileInfo(filePath);
+
+    if (fileInfo.fileName().isEmpty())
+        fileInfo.setFile(fileInfo.path());
+
+    return fileInfo.fileName();
+}
+
+QString QuaZipFileInfo::Private::path() const
+{
+    QFileInfo fileInfo(filePath);
+
+    if (fileInfo.fileName().isEmpty())
+        fileInfo.setFile(fileInfo.path());
+
+    return fileInfo.path();
+}
+
+void QuaZipFileInfo::setAttributes(Attributes value)
+{
+    value &= AllAttrs;
+    if (attributes() == value && (externalAttributes() & AllAttrs) == value)
+        return;
+
+    d->setAttributes(value);
 }
 
 int QuaZipFileInfo::diskNumber() const

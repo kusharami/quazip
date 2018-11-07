@@ -148,6 +148,8 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
         QFileInfo fileInfo(filePath);
         auto zipFileInfo =
             QuaZipFileInfo::fromFile(fileInfo, dir.relativeFilePath(filePath));
+        QuaZipFileInfo::applyAttributesTo(
+            filePath, QuaZipFileInfo::Archived, defaultReadWrite);
         bool isText = filePath.endsWith(".txt", Qt::CaseInsensitive);
         zipFileInfo.setIsText(isText);
 
@@ -162,7 +164,8 @@ static bool createTestArchive(QuaZip &zip, const QString &zipName,
                 zipName.toLocal8Bit().constData());
             return false;
         }
-        if (!fileInfo.isDir()) {
+
+        if (!fileInfo.isDir() && !fileInfo.isSymLink()) {
             QFile file(filePath);
             if (!file.open(QIODevice::ReadOnly |
                     (isText ? QIODevice::Text : QIODevice::OpenModeFlag(0)))) {

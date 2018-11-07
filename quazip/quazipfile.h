@@ -268,6 +268,7 @@ public:
      * \sa zipFilePath(), getFileName(), QuaZip::CaseSensitivity
      **/
     QString actualFilePath() const;
+    QString symLinkTarget() const;
 
     /// Opens a file for reading or writing.
     /** Returns \c true on success, \c false otherwise.

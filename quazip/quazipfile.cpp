@@ -160,6 +160,11 @@ QString QuaZipFile::actualFilePath() const
     return fileInfo().filePath();
 }
 
+QString QuaZipFile::symLinkTarget() const
+{
+    return fileInfo().symLinkTarget();
+}
+
 void QuaZipFile::setZipFilePath(const QString &zipFilePath)
 {
     if (isOpen()) {

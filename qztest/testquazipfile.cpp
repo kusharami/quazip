@@ -30,6 +30,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quazip/quazipfile.h"
 #include "quazip/quazip.h"
 #include "quazip/quazutils.h"
+#include "quazip/quaziprawfileinfo.h"
 #include "quazip/zip.h"
 #include "quazip/unzip.h"
 #include "quazip/private/quazipextrafields_p.h"
@@ -313,8 +314,6 @@ void TestQuaZipFile::zipUnzip()
         archived.setPassword(&wrongPassword);
         QVERIFY(archived.open(QIODevice::ReadOnly));
         QCOMPARE(original.readAll() != archived.readAll(), size != 0);
-        if (size != 0)
-            QVERIFY(archived.zipError() != UNZ_OK);
         archived.close();
         QVERIFY(archived.zipError() != UNZ_OK);
     }
@@ -524,6 +523,7 @@ void TestQuaZipFile::fileAttributes_data()
 
 void TestQuaZipFile::fileAttributes()
 {
+    QFETCH(QuaZip::Compatibility, compatibility);
     QFETCH(QFile::Permissions, permissions);
     QFETCH(QuaZipFileInfo::Attributes, attributes);
 
@@ -546,7 +546,8 @@ void TestQuaZipFile::fileAttributes()
                 isDir = true;
             }
 
-            fileName = fileInfo.dir().filePath('.' + fileInfo.fileName());
+            fileName = QDir::cleanPath(
+                fileInfo.dir().filePath('.' + fileInfo.fileName()));
             if (isDir)
                 fileName += '/';
         }
@@ -554,25 +555,33 @@ void TestQuaZipFile::fileAttributes()
 
     QVERIFY(createTestFiles(testFiles, -1, filesPath));
 
-    QString symLinkName(
-        (attributes & QuaZipFileInfo::Hidden) ? ".symlink" : "symlink");
-    testFiles << symLinkName;
+    if (compatibility & QuaZip::UnixCompatible) {
+        QString symLinkName(
+            (attributes & QuaZipFileInfo::Hidden) ? ".symlink" : "symlink");
+        testFiles << symLinkName;
 
-    QVERIFY(
-        QuaZUtils::createSymLink(dir.filePath(symLinkName), testFiles.at(0)));
+        QVERIFY(QuaZUtils::createSymLink(
+            dir.filePath(symLinkName), testFiles.at(0)));
+    }
 
+    QVector<QFile::Permissions> perm;
     for (auto &fileName : testFiles) {
         auto testFilePath = dir.filePath(fileName);
 
-        if (!QuaZipFileInfo::applyAttributesTo(
-                testFilePath, attributes, permissions)) {
-            qWarning("Some attributes or permissions are not applied");
-        }
+        QuaZipFileInfo::applyAttributesTo(
+            testFilePath, attributes, permissions);
+        auto p = QFile::permissions(testFilePath);
+        if (attributes & QuaZipFileInfo::ReadOnly)
+            p &= ~defaultWrite;
+        perm.append(p);
     }
 
+    SaveDefaultZipOptions saveCompatibility;
+    QuaZip::setDefaultCompatibility(compatibility);
     QVERIFY(createTestArchive(zipPath, testFiles, nullptr, filesPath));
 
-    for (auto &fileName : testFiles) {
+    for (int i = 0, count = testFiles.count(); i < count; i++) {
+        auto &fileName = testFiles.at(i);
         QuaZipFile zipFile(zipPath, fileName);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
         bool isDir = fileName.endsWith('/');
@@ -580,10 +589,15 @@ void TestQuaZipFile::fileAttributes()
         QCOMPARE(zipFile.isFile(), !isDir && !isSymLink);
         QCOMPARE(zipFile.isDir(), isDir);
         QCOMPARE(zipFile.isSymLink(), isSymLink);
-        QCOMPARE(zipFile.permissions(), zipFile.fileInfo().permissions());
-        QCOMPARE(zipFile.attributes(), zipFile.fileInfo().attributes());
-        QCOMPARE(zipFile.permissions(), permissions);
-        QCOMPARE(zipFile.attributes(), attributes);
+        auto expectedSymLinkTarget = isSymLink ? testFiles.at(0) : QString();
+        QCOMPARE(zipFile.symLinkTarget(), expectedSymLinkTarget);
+        QCOMPARE(zipFile.permissions(), perm.at(i));
+
+        auto expectedAttributes = attributes;
+        if (isDir)
+            expectedAttributes |= QuaZipFileInfo::DirAttr;
+
+        QCOMPARE(zipFile.attributes(), expectedAttributes);
     }
 }
 
@@ -689,10 +703,6 @@ void TestQuaZipFile::zip64()
     }
 
     QByteArray text("tempo\niltempo");
-    qint64 expectedTextLength = 5;
-#ifdef Q_OS_WIN
-    expectedTextLength++;
-#endif
     QString comment("Just another comment");
     QuaZip zip(zipPath);
     zip.setZip64Enabled(true);
@@ -700,7 +710,6 @@ void TestQuaZipFile::zip64()
     {
         QuaZipFile zipFile(&zip);
         zipFile.setFilePath("koko/add_test.txt");
-        zipFile.setIsText(true);
         zipFile.setComment(comment);
         QVERIFY(!zipFile.open(QIODevice::ReadOnly));
         QVERIFY(!zipFile.open(QIODevice::ReadWrite));
@@ -708,7 +717,7 @@ void TestQuaZipFile::zip64()
         QVERIFY(zipFile.open(QIODevice::WriteOnly));
         QVERIFY(zipFile.openMode() & QIODevice::Truncate);
         QVERIFY(zipFile.openMode() & QIODevice::Unbuffered);
-        QVERIFY(zipFile.isTextModeEnabled());
+        QVERIFY(!zipFile.isTextModeEnabled());
         QCOMPARE(zipFile.write(text), text.length());
     }
     zip.close();
@@ -718,15 +727,24 @@ void TestQuaZipFile::zip64()
     QVERIFY(zip.open(QuaZip::mdUnzip));
     QVERIFY(zip.goToFirstFile());
     for (int i = 0; i < numFiles; i++) {
+        QuaZipRawFileInfo rawInfo;
+        QVERIFY(zip.getCurrentRawFileInfo(rawInfo));
+        bool containZip64Central = i < staticNumFiles;
+        QCOMPARE(
+            QuaZExtraField::toMap(rawInfo.centralExtra).contains(ZIP64_HEADER),
+            containZip64Central);
+        QVERIFY(
+            QuaZExtraField::toMap(rawInfo.localExtra).contains(ZIP64_HEADER));
         QuaZipFile zipFile(&zip);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
         qint64 expectedUncompressedSize =
-            i < staticNumFiles ? 0 : expectedTextLength;
+            i < staticNumFiles ? 0 : text.length();
         QString expectedComment = i < staticNumFiles ? QString() : comment;
         QCOMPARE(zipFile.size(), expectedUncompressedSize);
         QCOMPARE(zipFile.uncompressedSize(), expectedUncompressedSize);
-        QVERIFY(zipFile.centralExtraFields().contains(ZIP64_HEADER));
-        QVERIFY(zipFile.localExtraFields().contains(ZIP64_HEADER));
+        QVERIFY(!zipFile.centralExtraFields().contains(ZIP64_HEADER));
+        QVERIFY(!zipFile.localExtraFields().contains(ZIP64_HEADER));
+
         QCOMPARE(zipFile.comment(), expectedComment);
 
         zip.goToNextFile();

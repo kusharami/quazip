@@ -1544,18 +1544,19 @@ bool QuaZip::getCurrentFileInfo(QuaZipFileInfo &info) const
     info.setCompressionMethod(raw.compressionMethod);
     info.setCompressedSize(raw.compressedSize);
     info.setUncompressedSize(raw.uncompressedSize);
-    info.setInternalAttributes(raw.internalAttributes);
-    info.setExternalAttributes(raw.externalAttributes);
     info.setDiskNumber(raw.diskNumber);
     info.setCrc(raw.crc);
     info.setCompressionLevel(info.detectCompressionLevel());
+    info.setInternalAttributes(raw.internalAttributes);
+    info.setExternalAttributes(raw.externalAttributes);
 
-    info.setCentralExtraFields(centralExtraMap);
-    info.setLocalExtraFields(localExtraMap);
     info.setFilePath(p->decodeZipText(
         raw.fileName, raw.flags, centralExtraMap, QuaZipPrivate::ZIP_FILENAME));
     info.setComment(p->decodeZipText(
         raw.comment, raw.flags, centralExtraMap, QuaZipPrivate::ZIP_COMMENT));
+
+    info.setCentralExtraFields(centralExtraMap);
+    info.setLocalExtraFields(localExtraMap);
 
     auto time =
         QuaZipPrivate::decodeCreationTime(centralExtraMap, localExtraMap);
@@ -1990,8 +1991,6 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
 
     int compatibility = p->compatibility;
     fileInfo.setZipVersionMadeBy(45);
-    auto attr = fileInfo.attributes();
-    auto perm = fileInfo.permissions();
 
     bool isUnicodeFilePath = !QuaZUtils::isAscii(fileInfo.filePath());
     bool isUnicodeComment = !QuaZUtils::isAscii(fileInfo.comment());
@@ -2029,8 +2028,6 @@ void QuaZip::fillZipInfo(zip_fileinfo_s &zipInfo, QuaZipFileInfo &fileInfo,
     }
 
     fileInfo.setZipOptions(zipOptions);
-    fileInfo.setAttributes(attr);
-    fileInfo.setPermissions(perm);
 
     if (zipOptions & QuaZipFileInfo::Unicode) {
         compatibleFilePath = fileInfo.filePath().toUtf8();
