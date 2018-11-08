@@ -533,58 +533,44 @@ void TestQuaZip::setZipFilePath()
     QCOMPARE(zip.zipError(), 0);
 }
 
+void TestQuaZip::setIODevice_data()
+{
+    QADD_COLUMN(bool, autoClose);
+
+    QTest::newRow("auto-close") << true;
+    QTest::newRow("no auto-close") << false;
+}
+
 void TestQuaZip::setIODevice()
 {
+    QFETCH(bool, autoClose);
+
     QuaZip zip;
     QBuffer buffer;
     zip.setIODevice(&buffer);
+
+    if (!autoClose) {
+        QVERIFY(buffer.open(QIODevice::Truncate));
+    }
+
     QVERIFY(zip.zipFilePath().isEmpty());
     QCOMPARE(zip.ioDevice(), &buffer);
     zip.open(QuaZip::mdCreate);
     QVERIFY(buffer.isOpen());
     zip.close();
     QCOMPARE(zip.zipError(), 0);
-    QVERIFY(!buffer.isOpen());
-    QVERIFY(!buffer.data().isEmpty());
+    QCOMPARE(buffer.isOpen(), !autoClose);
+    QCOMPARE(buffer.pos(), qint64(0));
+    QVERIFY(buffer.size() > 0);
+    if (!autoClose) {
+        QVERIFY(buffer.open(QIODevice::ReadOnly));
+    }
     QVERIFY(zip.open(QuaZip::mdUnzip));
     QCOMPARE(zip.entryCount(), 0);
     zip.close();
     QCOMPARE(zip.zipError(), 0);
-}
-
-void TestQuaZip::autoClose_data()
-{
-    QADD_COLUMN(bool, autoCloseEnabled);
-
-    QTest::newRow("yes") << true;
-    QTest::newRow("no") << false;
-}
-
-void TestQuaZip::autoClose()
-{
-    QFETCH(bool, autoCloseEnabled);
-
-    QBuffer buf;
-    {
-        QuaZip zip(&buf);
-        QVERIFY(zip.isAutoClose());
-        zip.setAutoClose(autoCloseEnabled);
-        QCOMPARE(zip.isAutoClose(), autoCloseEnabled);
-        QVERIFY(zip.open(QuaZip::mdCreate));
-        zip.close();
-        QCOMPARE(zip.zipError(), 0);
-    }
-    QCOMPARE(!buf.isOpen(), autoCloseEnabled);
-    buf.close();
-    {
-        QVERIFY(buf.open(QIODevice::ReadOnly));
-        QuaZip zip(&buf);
-        zip.setAutoClose(autoCloseEnabled);
-        QVERIFY(zip.open(QuaZip::mdUnzip));
-        zip.close();
-        QCOMPARE(zip.zipError(), 0);
-    }
-    QCOMPARE(!buf.isOpen(), autoCloseEnabled);
+    QCOMPARE(buffer.isOpen(), !autoClose);
+    QCOMPARE(buffer.pos(), qint64(0));
 }
 
 void TestQuaZip::sequentialWrite()
@@ -601,8 +587,8 @@ void TestQuaZip::sequentialWrite()
     QVERIFY(server.waitForNewConnection(10000));
     QTcpSocket *client = server.nextPendingConnection();
     {
+        QVERIFY(socket.open(QIODevice::WriteOnly));
         QuaZip zip(&socket);
-        zip.setAutoClose(false);
         QVERIFY(zip.open(QuaZip::mdCreate));
         QVERIFY(socket.isOpen());
         QuaZipFile zipFile(&zip, testFileName);

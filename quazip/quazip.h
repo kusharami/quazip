@@ -214,6 +214,9 @@ public:
      * easier, quazip.h header defines additional error code \c
      * UNZ_ERROROPEN and getZipError() will return it if the open call
      * of the ZIP/UNZIP API returns \c NULL.
+     *
+     * \note When using QSaveFile you should open it before
+     * calling QuaZip::open().
      **/
     bool open(OpenMode mode);
     /// Closes ZIP file.
@@ -222,13 +225,9 @@ public:
      * If the file was opened by name, then the underlying QIODevice is closed
      * and deleted.
      *
-     * If the underlying QIODevice was set explicitly using setIoDevice() or
-     * the appropriate constructor, then it is closed if the auto-close flag
-     * is set (which it is by default). Call setAutoClose() to clear the
-     * auto-close flag if this behavior is undesirable.
+     * If the underlying QIODevice was set explicitly using setIODevice() and
+     * it was not open before QuaZip::open(), then it will be closed.
      *
-     * \note When using QSaveFile you should call setAutoClose(false),
-     * because it will crash when close called.
       */
     void close();
     /// Sets the codec used to encode/decode file names inside archive.
@@ -277,19 +276,19 @@ public:
     /** Returns null string if no ZIP file name has been set, for
      * example when the QuaZip instance is set up to use a QIODevice
      * instead.
-     * \sa setZipFilePath(), setIoDevice(), getIODevice()
+     * \sa setZipFilePath(), setIODevice(), getIODevice()
      **/
     QString zipFilePath() const;
     /// Sets the name of the ZIP file.
     /** Does nothing if the ZIP file is open.
      *
      * Does not reset error code returned by getZipError().
-     * \sa setIoDevice(), getIODevice(), zipFilePath()
+     * \sa setIODevice(), getIODevice(), zipFilePath()
      **/
     void setZipFilePath(const QString &zipName);
     /// Returns the device representing this ZIP file.
     /**
-     * \sa setIoDevice(), zipFilePath(), setZipFilePath()
+     * \sa setIODevice(), zipFilePath(), setZipFilePath()
      **/
     QIODevice *ioDevice() const;
     /// Sets the device representing the ZIP file.
@@ -496,36 +495,6 @@ public:
      * \sa setZip64Enabled()
      */
     bool isZip64Enabled() const;
-    /// Returns the auto-close flag.
-    /**
-      @sa setAutoClose()
-      */
-    bool isAutoClose() const;
-    /// Sets or unsets the auto-close flag.
-    /**
-      By default, QuaZIP opens the underlying QIODevice when open() is called,
-      and closes it when close() is called. In some cases, when the device
-      is set explicitly using setIoDevice(), it may be desirable to
-      leave the device open. If the auto-close flag is unset using this method,
-      then the device isn't closed automatically if it was set explicitly.
-
-      If it is needed to clear this flag, it is recommended to do so before
-      opening the archive because otherwise QuaZIP may close the device
-      during the open() call if an error is encountered after the device
-      is opened.
-
-      If the device was not set explicitly, but rather the setZipFilePath() or
-      the appropriate constructor was used to set the ZIP file name instead,
-      then the auto-close flag has no effect, and the internal device
-      is closed nevertheless because there is no other way to close it.
-
-      \note For QSaveFile should be set to false,
-        otherwise will crash on close().
-
-      @sa isAutoClose()
-      @sa setIoDevice()
-      */
-    void setAutoClose(bool autoClose) const;
     /// Returns default file path codec
     static QTextCodec *defaultFilePathCodec();
     /// Sets the default file name codec to use.

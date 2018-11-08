@@ -34,6 +34,7 @@ quazip/(un)zip.h files for details, basically it's zlib license.
 #include "unzip.h"
 
 #include <QFile>
+#include <QSaveFile>
 #include <QFlags>
 #include <QHash>
 #include <QLocale>
@@ -81,8 +82,6 @@ private:
     bool dataDescriptorWritingEnabled;
     /// The zip64 mode.
     bool zip64;
-    /// The auto-close flag.
-    bool autoClose;
 
     /// The archive file name.
     QString zipName;
@@ -250,7 +249,6 @@ QuaZipPrivate::QuaZipPrivate(QuaZip *q, QIODevice *ioDevice)
     , hasCurrentFile_f(false)
     , dataDescriptorWritingEnabled(true)
     , zip64(false)
-    , autoClose(true)
 {
     unzFile_f = NULL;
     zipFile_f = NULL;
@@ -1254,16 +1252,26 @@ bool QuaZip::open(OpenMode mode)
                      "device first");
             return false;
         }
-        fileDevice.reset(new QFile(p->zipName));
-        ioDevice = fileDevice.data();
+        if (mode == mdCreate) {
+            ioDevice = new QSaveFile(p->zipName);
+        } else {
+            ioDevice = new QFile(p->zipName);
+        }
+        fileDevice.reset(ioDevice);
+        if (mode == mdCreate &&
+            !ioDevice->open(QIODevice::WriteOnly | QFile::Truncate)) {
+            p->zipError = UNZ_OPENERROR;
+            return false;
+        }
     }
-    p->zipStartPosition = ioDevice->pos();
     unsigned flags = 0;
+    if (ioDevice->isOpen()) {
+        p->zipStartPosition = ioDevice->pos();
+    } else {
+        flags |= UNZ_AUTO_CLOSE;
+    }
     switch (mode) {
     case mdUnzip: {
-        if (p->autoClose)
-            flags |= UNZ_AUTO_CLOSE;
-
         p->unzFile_f = unzOpenInternal(ioDevice, NULL, 1, flags);
         if (p->unzFile_f != NULL) {
             if (ioDevice->isSequential()) {
@@ -1279,14 +1287,11 @@ bool QuaZip::open(OpenMode mode)
             fileDevice.take();
             return true;
         }
-        p->zipError = UNZ_OPENERROR;
         break;
     }
     case mdCreate:
     case mdAppend:
     case mdAdd: {
-        if (p->autoClose)
-            flags |= ZIP_AUTO_CLOSE;
         if (p->dataDescriptorWritingEnabled)
             flags |= ZIP_WRITE_DATA_DESCRIPTOR;
 
@@ -1326,11 +1331,20 @@ bool QuaZip::open(OpenMode mode)
             fileDevice.take();
             return true;
         }
-        p->zipError = UNZ_OPENERROR;
         break;
     }
     case mdNotOpen:
         Q_UNREACHABLE();
+    }
+
+    if (fileDevice) {
+        p->ioDevice = nullptr;
+    } else if (ioDevice->isOpen()) {
+        if (flags & UNZ_AUTO_CLOSE) {
+            ioDevice->close();
+        } else if (!ioDevice->isSequential()) {
+            ioDevice->seek(p->zipStartPosition);
+        }
     }
 
     return false;
@@ -1379,12 +1393,21 @@ void QuaZip::close()
         break;
     }
     }
-    // opened by name, need to delete the internal IO device
+    auto device = p->ioDevice;
     if (!p->zipName.isEmpty()) {
-        delete p->ioDevice;
+        // opened by name, need to delete the internal IO device
+        auto saveFile = qobject_cast<QSaveFile *>(device);
+        if (saveFile && p->zipError == ZIP_OK) {
+            saveFile->commit();
+        }
+        delete device;
         p->ioDevice = nullptr;
-    } else if (!p->ioDevice->isSequential()) {
-        p->ioDevice->seek(p->zipStartPosition);
+    } else if (device->isOpen() && !device->isSequential()) {
+        if (p->mode == mdUnzip) {
+            device->seek(p->zipStartPosition);
+        } else {
+            device->seek(device->size());
+        }
     }
 
     p->clearDirectoryMap();
@@ -1410,15 +1433,15 @@ void QuaZip::setIODevice(QIODevice *ioDevice)
         return;
 
     if (isOpen()) {
-        qWarning("QuaZip::setIoDevice(): ZIP is already open!");
+        qWarning("QuaZip::setIODevice(): ZIP is already open!");
         return;
     }
     p->ioDevice = ioDevice;
     p->zipName = QString();
 
     if (ioDevice && ioDevice->isTextModeEnabled()) {
-        qWarning(
-            "QuaZip::setIoDevice(): Zip should not be opened in text mode!");
+        qWarning("QuaZip::setIODevice(): Zip should not be opened in text "
+                 "mode!");
     }
 }
 
@@ -2129,16 +2152,6 @@ void QuaZip::setZip64Enabled(bool zip64)
 bool QuaZip::isZip64Enabled() const
 {
     return p->zip64;
-}
-
-bool QuaZip::isAutoClose() const
-{
-    return p->autoClose;
-}
-
-void QuaZip::setAutoClose(bool autoClose) const
-{
-    p->autoClose = autoClose;
 }
 
 QTextCodec *QuaZip::defaultFilePathCodec()

@@ -275,9 +275,10 @@ bool JlCompress::compressFile(QString zipArchive, QString file)
         return false;
 
     QSaveFile zipFile(zipArchive);
+    if (!zipFile.open(QFile::Truncate))
+        return false;
     // Creo lo zip
     QuaZip zip(&zipFile);
-    zip.setAutoClose(false);
     if (!zip.open(QuaZip::mdCreate))
         return false;
 
@@ -302,9 +303,10 @@ bool JlCompress::compressFiles(QString zipArchive, QStringList files)
         return false;
 
     QSaveFile zipFile(zipArchive);
+    if (!zipFile.open(QFile::Truncate))
+        return false;
     // Creo lo zip
     QuaZip zip(&zipFile);
-    zip.setAutoClose(false);
     if (!zip.open(QuaZip::mdCreate)) {
         return false;
     }
@@ -341,9 +343,10 @@ bool JlCompress::compressDir(
         return false;
 
     QSaveFile zipFile(zipArchive);
+    if (!zipFile.open(QFile::Truncate))
+        return false;
     // Creo lo zip
     QuaZip zip(&zipFile);
-    zip.setAutoClose(false);
     if (!zip.open(QuaZip::mdCreate)) {
         return false;
     }

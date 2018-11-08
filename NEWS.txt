@@ -10,6 +10,10 @@ QuaZipAC changes
           Possibility to adapt file names to be DOS compatible -
           shorten names in 8.3 format, names with unsupported characters
           replaced with CRC32 hex-representation.
+          QuaZip::isAutoClose and QuaZip::setAutoClose are removed -
+          when device is open inside QuaZip it will be closed automatically;
+          when device is open before QuaZip::open
+          it won't be closed automatically.
         * QuaZipFile is reworked.
           Supported seeking in any position of decompressed stream;
           Supported setting compression level.

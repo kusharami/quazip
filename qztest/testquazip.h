@@ -41,8 +41,7 @@ private slots:
     void dataDescriptorWritingEnabled();
     void testQIODeviceAPI();
     void setZipFilePath();
+    void setIODevice_data();
     void setIODevice();
-    void autoClose_data();
-    void autoClose();
     void sequentialWrite();
 };
