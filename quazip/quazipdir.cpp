@@ -28,6 +28,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include <QSet>
 #include <QSharedData>
 #include <QLocale>
+#include <QDateTime>
 
 #include "unzip.h"
 
@@ -36,7 +37,7 @@ class QuaZipDirPrivate : public QSharedData {
 public:
     QuaZipDirPrivate();
     QuaZipDirPrivate(const QuaZipDirPrivate &other);
-    QuaZipDirPrivate(QuaZip *zip, const QString &dir = QString());
+    QuaZipDirPrivate(QuaZip *zip);
 
     QuaZip *zip;
     QString dir;
@@ -59,7 +60,7 @@ QuaZipDir::QuaZipDir(const QuaZipDir &that)
 }
 
 QuaZipDir::QuaZipDir(QuaZip *zip, const QString &dir)
-    : d(new QuaZipDirPrivate(zip, dir))
+    : d(new QuaZipDirPrivate(zip))
 {
     setPath(dir);
 }
@@ -582,7 +583,7 @@ QDir::SortFlags QuaZipDir::sorting() const
 }
 
 QuaZipDirPrivate::QuaZipDirPrivate()
-    : QuaZipDirPrivate(nullptr, QString())
+    : QuaZipDirPrivate(nullptr)
 {
 }
 
@@ -596,9 +597,9 @@ QuaZipDirPrivate::QuaZipDirPrivate(const QuaZipDirPrivate &other)
 {
 }
 
-QuaZipDirPrivate::QuaZipDirPrivate(QuaZip *zip, const QString &dir)
+QuaZipDirPrivate::QuaZipDirPrivate(QuaZip *zip)
     : zip(zip)
-    , dir(dir.isEmpty() ? QString('/') : dir)
+    , dir('/')
     , caseSensitivity(QuaZip::csDefault)
     , filter(QDir::NoFilter)
     , sorting(QDir::NoSort)
