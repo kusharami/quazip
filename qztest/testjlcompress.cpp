@@ -312,31 +312,65 @@ void TestJlCompress::extractFiles()
     QVERIFY2(createTestFiles(fileNames, -1, filesPath),
         "Couldn't create test files");
 
+    QVector<QFile::Permissions> permissions;
+
     for (const QString &fileName : filesToExtract) {
         QFileInfo srcInfo(dir.filePath(fileName));
         QuaZipFileInfo::applyAttributesTo(
             srcInfo.filePath(), QuaZipFileInfo::ReadOnly);
+        srcInfo.refresh();
+        permissions.append(srcInfo.permissions());
     }
 
-    QVERIFY2(JlCompress::compressDir(zipPath, filesPath),
-        "Couldn't create test archive");
+    bool compressDirOk = JlCompress::compressDir(zipPath, filesPath);
+    for (const QString &fileName : filesToExtract) {
+        QFileInfo srcInfo(dir.filePath(fileName));
+        QuaZipFileInfo::applyAttributesTo(
+            srcInfo.filePath(), QuaZipFileInfo::NoAttr);
+    }
+    QVERIFY(compressDirOk);
 
+    bool extractOk;
     if (useDevice) {
         QFile zipFile(zipPath);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
-        QVERIFY(!JlCompress::extractFiles(
+        extractOk = !JlCompress::extractFiles(
             &zipFile, filesToExtract, targetDir.path())
-                     .isEmpty());
+                         .isEmpty();
     } else {
-        QVERIFY(
+        extractOk =
             !JlCompress::extractFiles(zipPath, filesToExtract, targetDir.path())
-                 .isEmpty());
+                 .isEmpty();
     }
-    for (const QString &fileName : filesToExtract) {
+
+    struct Info {
+        QFile::Permissions permissions;
+        QFile::Permissions expectedPermissions;
+        qint64 size;
+        qint64 expectedSize;
+    };
+
+    QVector<Info> destInfo;
+
+    for (int i = 0, count = filesToExtract.count(); i < count; i++) {
+        const QString &fileName = filesToExtract.at(i);
         QFileInfo dstInfo(targetDir.filePath(fileName));
         QFileInfo srcInfo(dir.filePath(fileName));
-        QCOMPARE(dstInfo.size(), srcInfo.size());
-        QCOMPARE(dstInfo.permissions(), srcInfo.permissions());
+
+        if (!dstInfo.exists())
+            continue;
+
+        destInfo.append({dstInfo.permissions(), permissions.at(i),
+            dstInfo.size(), srcInfo.size()});
+        QuaZipFileInfo::applyAttributesTo(
+            dstInfo.filePath(), QuaZipFileInfo::NoAttr);
+    }
+
+    QVERIFY(extractOk);
+
+    for (auto &info : destInfo) {
+        QCOMPARE(info.permissions, info.expectedPermissions);
+        QCOMPARE(info.size, info.expectedSize);
     }
 }
 

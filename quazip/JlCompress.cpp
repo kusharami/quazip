@@ -408,12 +408,12 @@ QString JlCompress::extractFile(
     return fileDest;
 }
 
-QStringList JlCompress::extractFiles(
-    const QString &zipArchive, const QStringList &files, const QString &dir)
+QStringList JlCompress::extractFiles(const QString &zipArchive,
+    const QStringList &files, const QString &targetDir)
 {
     // Creo lo zip
     QuaZip zip(zipArchive);
-    return extractFiles(&zip, files, dir);
+    return extractFiles(&zip, files, targetDir);
 }
 
 QStringList JlCompress::extractFiles(
@@ -439,37 +439,43 @@ QStringList JlCompress::extractFiles(
 }
 
 QStringList JlCompress::extractDir(
-    const QString &zipArchive, const QString &dir)
+    const QString &zipArchive, const QString &dir, const QString &targetDir)
 {
     // Apro lo zip
     QuaZip zip(zipArchive);
-    return extractDir(&zip, dir);
+    return extractDir(&zip, dir, targetDir);
 }
 
-QStringList JlCompress::extractDir(QuaZip *zip, const QString &dir)
+QStringList JlCompress::extractDir(
+    QuaZip *zip, const QString &dir, const QString &targetDir)
 {
     if (!zip->open(QuaZip::mdUnzip)) {
         return QStringList();
     }
-    QString cleanDir = QDir::cleanPath(dir);
-    QDir directory(cleanDir);
-    QString absCleanDir = directory.absolutePath();
+    QDir directory(targetDir);
+    QString absCleanDir = QDir::cleanPath(directory.absolutePath());
     QStringList extracted;
     if (!zip->goToFirstFile()) {
         return QStringList();
     }
 
-    do {
-        QString name = zip->currentFilePath();
-        QString absFilePath = directory.absoluteFilePath(name);
-        QString absCleanPath = QDir::cleanPath(absFilePath);
-        if (!absCleanPath.startsWith(absCleanDir + '/'))
-            continue;
-        if (!extractSingleFile(zip, QString(), absFilePath)) {
-            continue;
-        }
-        extracted.append(absFilePath);
-    } while (zip->goToNextFile());
+    QuaZipDir zipDir(zip, dir);
+    if (zipDir.isRoot())
+        do {
+            QString name = zip->currentFilePath();
+            QString absFilePath = directory.absoluteFilePath(name);
+            QString absCleanPath = QDir::cleanPath(absFilePath);
+            if (!absCleanPath.startsWith(absCleanDir + '/'))
+                continue;
+
+            if (!extractSingleFile(zip, QString(), absFilePath)) {
+                continue;
+            }
+            extracted.append(absFilePath);
+        } while (zip->goToNextFile());
+    else {
+        zipDir.entryInfoList(QDir::AllDirs);
+    }
 
     // Chiudo il file zip
     zip->close();

@@ -392,7 +392,7 @@ bool QuaZipDirPrivate::entryInfoList(QStringList nameFilters,
         if (entriesFound.contains(caseName))
             continue;
         entriesFound.insert(caseName);
-        if ((fltr & QDir::Dirs) == 0 && isDir)
+        if ((fltr & (QDir::Dirs | QDir::AllDirs)) == 0 && isDir)
             continue;
         if ((fltr & QDir::Files) == 0 && !isDir)
             continue;

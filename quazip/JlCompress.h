@@ -39,7 +39,8 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
   */
 class QUAZIP_EXPORT JlCompress {
 private:
-    static QStringList extractDir(QuaZip *zip, const QString &dir);
+    static QStringList extractDir(
+        QuaZip *zip, const QString &dir, const QString &targetDir);
     static QStringList getFileList(QuaZip *zip);
     static QString extractFile(
         QuaZip *zip, const QString &fileName, const QString &fileDest);
@@ -147,21 +148,23 @@ public:
     /**
       \param zipArchive The name of the archive.
       \param files The file list to extract.
-      \param dir The directory to put the files to, the current
+      \param targetDir The directory to put the files to, the current
       directory if left empty.
       \return The list of the full paths of the files extracted, empty on failure.
       */
     static QStringList extractFiles(const QString &zipArchive,
-        const QStringList &files, const QString &dir = QString());
+        const QStringList &files, const QString &targetDir = QString());
     /// Extract a whole archive.
     /**
       \param zipArchive The name of the archive.
-      \param dir The directory to extract to, the current directory if
+      \param dir The directory in archive from which files and
+        subdirectories will be extracted
+      \param targetDir The directory to extract to, the current directory if
       left empty.
       \return The list of the full paths of the files extracted, empty on failure.
       */
-    static QStringList extractDir(
-        const QString &zipArchive, const QString &dir = QString());
+    static QStringList extractDir(const QString &zipArchive,
+        const QString &dir = QString(), const QString &targetDir = QString());
     /// Get the file list.
     /**
       \return The list of the files in the archive, or, more precisely, the
