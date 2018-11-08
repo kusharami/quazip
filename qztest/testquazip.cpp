@@ -550,7 +550,7 @@ void TestQuaZip::setIODevice()
     zip.setIODevice(&buffer);
 
     if (!autoClose) {
-        QVERIFY(buffer.open(QIODevice::Truncate));
+        QVERIFY(buffer.open(QIODevice::ReadWrite));
     }
 
     QVERIFY(zip.zipFilePath().isEmpty());
@@ -560,10 +560,10 @@ void TestQuaZip::setIODevice()
     zip.close();
     QCOMPARE(zip.zipError(), 0);
     QCOMPARE(buffer.isOpen(), !autoClose);
-    QCOMPARE(buffer.pos(), qint64(0));
     QVERIFY(buffer.size() > 0);
     if (!autoClose) {
-        QVERIFY(buffer.open(QIODevice::ReadOnly));
+        QCOMPARE(buffer.pos(), buffer.size());
+        buffer.reset();
     }
     QVERIFY(zip.open(QuaZip::mdUnzip));
     QCOMPARE(zip.entryCount(), 0);
