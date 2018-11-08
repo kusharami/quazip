@@ -59,13 +59,16 @@ bool QuaChecksum32::update(QIODevice *io, qint64 size)
 
     while (size != 0) {
         qint64 readBytes = sizeof(buf);
-        if (size > 0 && size < readBytes)
+        if (size >= 0 && size < readBytes)
             readBytes = size;
 
         auto actualReadBytes = io->read(buf, readBytes);
 
-        if (actualReadBytes < 0 || (size > 0 && readBytes != actualReadBytes))
+        if (actualReadBytes < 0 || (size >= 0 && readBytes != actualReadBytes))
             return false;
+
+        if (actualReadBytes == 0)
+            break;
 
         update(buf, size_t(actualReadBytes));
 

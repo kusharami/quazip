@@ -64,6 +64,8 @@ void TestQuaChecksum32::calculate_data()
         << ChecksumCalculateBuffer(&zChecksum<QuaCrc32>)
         << ChecksumCalculateDevice(&zChecksum<QuaCrc32>) << QByteArray() << 0u;
     QTest::newRow("crc32") << ChecksumCalculate(&zChecksum<QuaCrc32>)
+                           << ChecksumCalculateBuffer(&zChecksum<QuaCrc32>)
+                           << ChecksumCalculateDevice(&zChecksum<QuaCrc32>)
                            << QByteArrayLiteral("Wikipedia") << 0xADAAC02Eu;
 
     QTest::newRow("adler32 zero")
@@ -72,6 +74,8 @@ void TestQuaChecksum32::calculate_data()
         << ChecksumCalculateDevice(&zChecksum<QuaAdler32>) << QByteArray()
         << 1u;
     QTest::newRow("adler32") << ChecksumCalculate(&zChecksum<QuaAdler32>)
+                             << ChecksumCalculateBuffer(&zChecksum<QuaAdler32>)
+                             << ChecksumCalculateDevice(&zChecksum<QuaAdler32>)
                              << QByteArrayLiteral("Wikipedia") << 0x11E60398u;
 }
 
@@ -100,7 +104,10 @@ void TestQuaChecksum32::calculate()
     QVERIFY(buffer.open(QBuffer::ReadOnly));
     QCOMPARE(calcDevice(&buffer, -1), expectedChecksum);
     QCOMPARE(buffer.pos(), buffer.size());
-    QVERIFY(calcDevice(&buffer, buffer.size()) != expectedChecksum);
+
+    QCOMPARE(calcDevice(&buffer, buffer.size()) != expectedChecksum,
+        buffer.size() > 0);
+
     QVERIFY(buffer.reset());
     QCOMPARE(calcDevice(&buffer, buffer.size()), expectedChecksum);
 
