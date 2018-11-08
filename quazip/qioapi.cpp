@@ -113,7 +113,8 @@ voidpf ZCALLBACK qiodevice_open_file_func(voidpf opaque, voidpf file, int mode)
     }
 
     desiredMode &= ~QIODevice::Truncate;
-    if ((iodevice->openMode() & desiredMode) == desiredMode) {
+    if ((iodevice->openMode() & (desiredMode | QIODevice::Text)) ==
+        desiredMode) {
         if (!iodevice->isSequential()) {
             if (mode & ZLIB_FILEFUNC_MODE_CREATE)
                 iodevice->reset();
@@ -139,6 +140,7 @@ uLong ZCALLBACK qiodevice_read_file_func(
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
     QIODevice *iodevice = reinterpret_cast<QIODevice *>(stream);
+    Q_ASSERT(!iodevice->isTextModeEnabled());
     Q_ASSERT(!iodevice->isSequential());
     if (!iodevice->seek(d->pos)) {
         d->errorCode = Z_STREAM_ERROR;
@@ -160,6 +162,7 @@ uLong ZCALLBACK qiodevice_write_file_func(
 {
     QIODevice_descriptor *d = reinterpret_cast<QIODevice_descriptor *>(opaque);
     QIODevice *iodevice = reinterpret_cast<QIODevice *>(stream);
+    Q_ASSERT(!iodevice->isTextModeEnabled());
     if (!iodevice->isSequential()) {
         if (!iodevice->seek(d->pos)) {
             d->errorCode = Z_STREAM_ERROR;
