@@ -52,7 +52,7 @@ QuaZipFileInfo::Attribute winFileSystemAttr()
 #ifdef Q_OS_WIN
     return QuaZipFileInfo::System;
 #else
-    return QuaZipFileInfo::Attribute(0);
+    return QuaZipFileInfo::NoAttr;
 #endif
 }
 
@@ -61,7 +61,7 @@ QuaZipFileInfo::Attribute winFileArchivedAttr()
 #ifdef Q_OS_WIN
     return QuaZipFileInfo::Archived;
 #else
-    return QuaZipFileInfo::Attribute(0);
+    return QuaZipFileInfo::NoAttr;
 #endif
 }
 

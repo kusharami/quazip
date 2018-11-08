@@ -24,8 +24,6 @@ Original ZIP package is copyrighted by Gilles Vollant and contributors,
 see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
-#include <QByteArray>
-#include <QDateTime>
 #include <QFile>
 
 #include "quazipkeysgenerator.h"
@@ -34,6 +32,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 struct QuaZipRawFileInfo;
 class QFileInfo;
 class QDir;
+class QDateTime;
 
 /// Information about a file inside archive (with zip64 support).
 /** Call QuaZip::getCurrentFileInfo() or QuaZipFile::getFileInfo() to
@@ -69,6 +68,7 @@ public:
 
     enum Attribute : quint8
     {
+        NoAttr = 0x00,
         ReadOnly = 0x01,
         Hidden = 0x02,
         System = 0x04,
