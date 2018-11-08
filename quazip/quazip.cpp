@@ -52,7 +52,6 @@ class QuaZipPrivate {
     friend class QuaZip;
 
 private:
-    Q_DISABLE_COPY(QuaZipPrivate)
     /// The pointer to the corresponding QuaZip instance.
     QuaZip *q;
     /// The codec for file names.
@@ -61,12 +60,9 @@ private:
     QTextCodec *commentCodec;
     /// The codec for passwords
     QTextCodec *passwordCodec;
-    /// The archive file name.
-    QString zipName;
     /// The device to access the archive.
     QIODevice *ioDevice;
-    /// The global comment.
-    QString comment;
+    qint64 zipStartPosition;
     /// The open mode.
     QuaZip::OpenMode mode;
     union
@@ -87,6 +83,11 @@ private:
     bool zip64;
     /// The auto-close flag.
     bool autoClose;
+
+    /// The archive file name.
+    QString zipName;
+    /// The global comment.
+    QString comment;
     inline static QTextCodec *getLegacyTextCodec();
     inline static QTextCodec *getDefaultFileNameCodec();
     inline static QTextCodec *getDefaultCommentCodec();
@@ -242,6 +243,7 @@ QuaZipPrivate::QuaZipPrivate(QuaZip *q, QIODevice *ioDevice)
     , commentCodec(getDefaultCommentCodec())
     , passwordCodec(QuaZipKeysGenerator::defaultPasswordCodec())
     , ioDevice(ioDevice)
+    , zipStartPosition(0)
     , mode(QuaZip::mdNotOpen)
     , compatibility(defaultCompatibility)
     , zipError(UNZ_OK)
@@ -1255,6 +1257,7 @@ bool QuaZip::open(OpenMode mode)
         fileDevice.reset(new QFile(p->zipName));
         ioDevice = fileDevice.data();
     }
+    p->zipStartPosition = ioDevice->pos();
     unsigned flags = 0;
     switch (mode) {
     case mdUnzip: {
@@ -1380,7 +1383,10 @@ void QuaZip::close()
     if (!p->zipName.isEmpty()) {
         delete p->ioDevice;
         p->ioDevice = nullptr;
+    } else if (!p->ioDevice->isSequential()) {
+        p->ioDevice->seek(p->zipStartPosition);
     }
+
     p->clearDirectoryMap();
     p->mode = mdNotOpen;
 }
@@ -1411,7 +1417,6 @@ void QuaZip::setIODevice(QIODevice *ioDevice)
     p->zipName = QString();
 
     if (ioDevice && ioDevice->isTextModeEnabled()) {
-        p->zipError = ZIP_PARAMERROR;
         qWarning(
             "QuaZip::setIoDevice(): Zip should not be opened in text mode!");
     }
