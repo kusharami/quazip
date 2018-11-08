@@ -36,17 +36,16 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 void TestJlCompress::compressFile_data()
 {
-    QADD_COLUMN(QString, fileName);
-    QADD_COLUMN(bool, useDevice);
+    QADD_COLUMN(QString, targetDir);
 
-    QTest::newRow("filepath zip") << "test0.txt" << false;
-    QTest::newRow("device zip") << "test0.txt" << true;
+    QTest::newRow("target dir") << QString("blabla");
+    QTest::newRow("root dir") << QString('.');
 }
 
 void TestJlCompress::compressFile()
 {
-    QFETCH(QString, fileName);
-    QFETCH(bool, useDevice);
+    QFETCH(QString, targetDir);
+    QString fileName("test0.txt");
 
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
@@ -57,32 +56,34 @@ void TestJlCompress::compressFile()
         "Can't create test file");
 
     QStringList fileList;
-    if (useDevice) {
-        QVERIFY(JlCompress::compressFile(zipPath, dir.filePath(fileName)));
-        fileList = JlCompress::getFileList(zipPath);
-    } else {
-        QFile zipFile(zipPath);
-        QVERIFY(zipFile.open(QIODevice::ReadOnly));
-        fileList = JlCompress::getFileList(&zipFile);
-    }
+    QVERIFY(
+        JlCompress::compressFile(zipPath, dir.filePath(fileName), targetDir));
+    fileList = JlCompress::getFileList(zipPath);
     QCOMPARE(fileList.count(), 1);
-    QCOMPARE(fileList.at(0), fileName);
+    QFileInfo zippedFileInfo(fileList.at(0));
+    QCOMPARE(zippedFileInfo.fileName(), fileName);
+    QCOMPARE(zippedFileInfo.path(), targetDir);
+    QFile file(zipPath);
+    QCOMPARE(JlCompress::getFileList(&file), fileList);
 }
 
 void TestJlCompress::compressFiles_data()
 {
     QADD_COLUMN(QStringList, fileNames);
+    QADD_COLUMN(QString, targetDir);
 
     QTest::newRow("simple") << (QStringList() << "test0.txt"
-                                              << "test00.txt");
-    QTest::newRow("different subdirs")
-        << (QStringList() << "subdir1/test1.txt"
-                          << "subdir2/test2.txt");
+                                              << "test00.txt")
+                            << QString("store");
+    QTest::newRow("different subdirs") << (QStringList() << "subdir1/test1.txt"
+                                                         << "subdir2/test2.txt")
+                                       << QString();
 }
 
 void TestJlCompress::compressFiles()
 {
     QFETCH(QStringList, fileNames);
+    QFETCH(QString, targetDir);
 
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
@@ -96,11 +97,16 @@ void TestJlCompress::compressFiles()
     for (const auto &fileName : fileNames) {
         QString realName = dir.filePath(fileName);
         realNamesList += realName;
-        shortNamesList += QFileInfo(realName).fileName();
+        shortNamesList += QDir::cleanPath(
+            QDir(targetDir).filePath(QFileInfo(realName).fileName()));
     }
-    QVERIFY(JlCompress::compressFiles(zipPath, realNamesList));
+    QVERIFY(JlCompress::compressFiles(zipPath, realNamesList, targetDir));
     // get the file list and check it
     QStringList fileList = JlCompress::getFileList(zipPath);
+    {
+        QFile file(zipPath);
+        QCOMPARE(JlCompress::getFileList(&file), fileList);
+    }
     qSort(fileList);
     qSort(shortNamesList);
     QCOMPARE(fileList, shortNamesList);
@@ -110,34 +116,39 @@ void TestJlCompress::compressDir_data()
 {
     QADD_COLUMN(QStringList, fileNames);
     QADD_COLUMN(QStringList, expected);
+    QADD_COLUMN(QDir::Filters, filters);
 
-    QTest::newRow("simple")
-        << (QStringList() << "test0.txt"
-                          << "testdir1/test1.txt"
-                          << "testdir2/test2.txt"
-                          << "testdir2/subdir/test2sub.txt")
-        << (QStringList() << "test0.txt"
-                          << "testdir1/"
-                          << "testdir1/test1.txt"
-                          << "testdir2/"
-                          << "testdir2/test2.txt"
-                          << "testdir2/subdir/"
-                          << "testdir2/subdir/test2sub.txt");
-    QTest::newRow("empty dirs") << (QStringList() << "testdir1/"
+    QTest::newRow("simple") << (QStringList() << "test0.txt"
+                                              << "testdir1/test1.txt"
+                                              << "testdir2/test2.txt"
+                                              << "testdir2/subdir/test2sub.txt")
+                            << (QStringList() << "test0.txt"
+                                              << "testdir1/"
+                                              << "testdir1/test1.txt"
+                                              << "testdir2/"
+                                              << "testdir2/test2.txt"
+                                              << "testdir2/subdir/"
+                                              << "testdir2/subdir/test2sub.txt")
+                            << QDir::Filters();
+    QTest::newRow("empty dirs") << (QStringList() << ".test0.txt"
+                                                  << "testdir1/"
                                                   << "testdir2/testdir3/")
                                 << (QStringList() << "testdir1/"
                                                   << "testdir2/"
-                                                  << "testdir2/testdir3/");
+                                                  << "testdir2/testdir3/")
+                                << QDir::Filters();
     QTest::newRow("hidden files") << (QStringList() << ".test0.txt"
                                                     << "test1.txt")
                                   << (QStringList() << ".test0.txt"
-                                                    << "test1.txt");
+                                                    << "test1.txt")
+                                  << QDir::Filters(QDir::Hidden);
 }
 
 void TestJlCompress::compressDir()
 {
     QFETCH(QStringList, fileNames);
     QFETCH(QStringList, expected);
+    QFETCH(QDir::Filters, filters);
 
     QTemporaryDir tempDir;
     auto zipPath = tempZipPath(tempDir);
@@ -147,16 +158,14 @@ void TestJlCompress::compressDir()
     QVERIFY2(
         createTestFiles(fileNames, -1, filesPath), "Can't create test files");
 
-    QuaZipFileInfo attrInfo;
-    attrInfo.setAttributes(QuaZipFileInfo::Hidden);
-
     for (const auto &fileName : fileNames) {
-        if (fileName.startsWith('.'))
+        if (fileName.startsWith('.')) {
             QuaZipFileInfo::applyAttributesTo(
                 dir.filePath(fileName), QuaZipFileInfo::Hidden);
+        }
     }
 
-    QVERIFY(JlCompress::compressDir(zipPath, filesPath, true, QDir::Hidden));
+    QVERIFY(JlCompress::compressDir(zipPath, filesPath, true, filters));
     // get the file list and check it
     QStringList fileList = JlCompress::getFileList(zipPath);
     qSort(fileList);
@@ -213,12 +222,12 @@ void TestJlCompress::extractFile()
     QuaZipFileInfo::applyAttributesTo(
         srcInfo.filePath(), QuaZipFileInfo::ReadOnly);
 
-    QVERIFY2(!createTestArchive(zipPath, fileNames,
-                 QTextCodec::codecForName(encoding), filesPath),
-        "Can't create test archive");
-
     SaveDefaultZipOptions saveZipOptions;
     QuaZip::setDefaultFilePathCodec(encoding);
+    QuaZip::setDefaultCompatibility(QuaZip::CustomCompatibility);
+
+    auto permissions = srcInfo.permissions();
+    QVERIFY(createTestArchive(zipPath, fileNames, nullptr, filesPath));
 
     QFileInfo destInfo(targetDir.filePath(destName));
     if (useDevice) {
@@ -232,9 +241,15 @@ void TestJlCompress::extractFile()
             zipPath, fileToExtract, destInfo.filePath())
                      .isEmpty());
     }
+    auto destPermissions = destInfo.permissions();
+    QuaZipFileInfo::applyAttributesTo(
+        destInfo.filePath(), QuaZipFileInfo::NoAttr);
     QCOMPARE(destInfo.size(), srcInfo.size());
-    QCOMPARE(destInfo.permissions(), srcInfo.permissions());
-    QVERIFY(QFile::remove(destInfo.filePath()));
+    QCOMPARE(destPermissions, permissions);
+    if (destInfo.isDir() && !destInfo.isSymLink())
+        QVERIFY(QDir(destInfo.filePath()).removeRecursively());
+    else
+        QVERIFY(QFile::remove(destInfo.filePath()));
 
     if (!fileToExtract.endsWith('/')) {
         QVERIFY(curDir.mkdir(destInfo.filePath()));
