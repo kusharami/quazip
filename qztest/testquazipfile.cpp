@@ -338,7 +338,7 @@ void TestQuaZipFile::zipUnzip()
     QCOMPARE(testZip.zipError(), UNZ_OK);
 }
 
-void TestQuaZipFile::getZip()
+void TestQuaZipFile::setZip()
 {
     QuaZip testZip;
     QuaZipFile f1(&testZip);

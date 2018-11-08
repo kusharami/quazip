@@ -34,7 +34,7 @@ private slots:
     void construct();
     void zipUnzip_data();
     void zipUnzip();
-    void getZip();
+    void setZip();
     void setZipFilePath();
     void zipFileInfo_data();
     void zipFileInfo();
