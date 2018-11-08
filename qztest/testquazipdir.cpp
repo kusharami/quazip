@@ -27,7 +27,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "quazip/quazip.h"
 #include "quazip/quazipdir.h"
 
-Q_DECLARE_METATYPE(QDir::Filters)
 Q_DECLARE_METATYPE(QDir::SortFlags)
 
 void TestQuaZipDir::entryList_data()
