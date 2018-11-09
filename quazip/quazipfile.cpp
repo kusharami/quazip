@@ -956,6 +956,8 @@ qint64 QuaZipFilePrivate::readInternal(char *data, qint64 maxlen)
             setZipError(result);
             return -1;
         }
+        if (result == 0)
+            break;
 
         count -= result;
         currentPos += result;
