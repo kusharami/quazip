@@ -148,8 +148,9 @@ public:
     inline bool isSymLink() const;
     inline bool isHidden() const;
     inline bool isSystem() const;
-    inline bool isWritable() const;
     inline bool isArchived() const;
+    inline bool isReadable() const;
+    inline bool isWritable() const;
     inline bool isExecutable() const;
 
     QFile::Permissions permissions() const;
@@ -285,6 +286,14 @@ bool QuaZipFileInfo::isWritable() const
 bool QuaZipFileInfo::isArchived() const
 {
     return 0 != (attributes() & Archived);
+}
+
+bool QuaZipFileInfo::isReadable() const
+{
+    return 0 !=
+        (permissions() &
+            (QFile::ReadGroup | QFile::ReadUser | QFile::ReadOther |
+                QFile::ReadOwner));
 }
 
 bool QuaZipFileInfo::isExecutable() const
