@@ -443,7 +443,7 @@ bool QuaZipDirPrivate::isValid() const
     if (zip->openMode() != QuaZip::mdUnzip)
         return false;
 
-    if (zip->zipError() == UNZ_OK)
+    if (zip->zipError() != UNZ_OK)
         return false;
 
     return !dir.startsWith('/') && !dir.endsWith('/') && dir != ".." &&
