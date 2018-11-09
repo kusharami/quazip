@@ -1239,7 +1239,6 @@ QuaZip::~QuaZip()
 
 bool QuaZip::open(OpenMode mode)
 {
-    p->zipError = UNZ_OK;
     if (isOpen()) {
         qWarning("QuaZip::open(): ZIP already opened");
         return false;
@@ -1281,11 +1280,14 @@ bool QuaZip::open(OpenMode mode)
                          "sequential devices");
                 break;
             }
+            p->zipError = UNZ_OK;
             p->comment = p->readComment();
-            p->mode = mode;
-            p->ioDevice = ioDevice;
-            fileDevice.take();
-            return true;
+            if (p->zipError == UNZ_OK) {
+                p->mode = mode;
+                p->ioDevice = ioDevice;
+                fileDevice.take();
+                return true;
+            }
         }
         break;
     }
@@ -1327,6 +1329,7 @@ bool QuaZip::open(OpenMode mode)
                 zipSetFlags(p->zipFile_f, ZIP_SEQUENTIAL);
             }
             p->mode = mode;
+            p->zipError = ZIP_OK;
             p->ioDevice = ioDevice;
             fileDevice.take();
             return true;
@@ -1347,12 +1350,12 @@ bool QuaZip::open(OpenMode mode)
         }
     }
 
+    p->zipError = UNZ_OPENERROR;
     return false;
 }
 
 void QuaZip::close()
 {
-    p->zipError = UNZ_OK;
     switch (p->mode) {
     case mdNotOpen:
         qWarning("QuaZip::close(): ZIP is not open");
@@ -1447,7 +1450,6 @@ void QuaZip::setIODevice(QIODevice *ioDevice)
 
 int QuaZip::entryCount() const
 {
-    p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::getEntriesCount(): ZIP is not open in mdUnzip mode");
         return -1;
@@ -1471,7 +1473,6 @@ QString QuaZip::globalComment() const
 
 bool QuaZip::setCurrentFile(const QString &fileName, CaseSensitivity cs)
 {
-    p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::setCurrentFile(): ZIP is not open in mdUnzip mode");
         return false;
@@ -1531,11 +1532,15 @@ bool QuaZip::setCurrentFile(const QString &fileName, CaseSensitivity cs)
 
 bool QuaZip::goToFirstFile()
 {
-    p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::goToFirstFile(): ZIP is not open in mdUnzip mode");
         return false;
     }
+    if (entryCount() == 0) {
+        p->hasCurrentFile_f = false;
+        return false;
+    }
+
     p->zipError = unzGoToFirstFile(p->unzFile_f);
     p->hasCurrentFile_f = p->zipError == UNZ_OK;
     return p->hasCurrentFile_f;
@@ -1543,11 +1548,16 @@ bool QuaZip::goToFirstFile()
 
 bool QuaZip::goToNextFile()
 {
-    p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::goToFirstFile(): ZIP is not open in mdUnzip mode");
         return false;
     }
+
+    if (entryCount() == 0) {
+        p->hasCurrentFile_f = false;
+        return false;
+    }
+
     p->zipError = unzGoToNextFile(p->unzFile_f);
     p->hasCurrentFile_f = p->zipError == UNZ_OK;
     if (p->zipError == UNZ_END_OF_LIST_OF_FILE)
@@ -1606,7 +1616,6 @@ bool QuaZip::getCurrentFileInfo(QuaZipFileInfo &info) const
 
 bool QuaZip::getCurrentRawFileInfo(QuaZipRawFileInfo &rawInfo) const
 {
-    p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::getCurrentFileInfo(): ZIP is not open in mdUnzip "
                  "mode");
@@ -1671,7 +1680,6 @@ bool QuaZip::getCurrentRawFileInfo(QuaZipRawFileInfo &rawInfo) const
 
 QString QuaZip::currentFilePath() const
 {
-    p->zipError = UNZ_OK;
     if (p->mode != mdUnzip) {
         qWarning("QuaZip::currentFilePath(): ZIP is not open in mdUnzip "
                  "mode");

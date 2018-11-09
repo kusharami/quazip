@@ -162,7 +162,7 @@ public:
     QStringList nameFilters() const;
     /// Returns the path to the current dir.
     /**
-      The path ALWAYS starts with '/'
+      The path NEVER starts with '/'
       */
     QString path() const;
     /// Returns the path to the specified file relative to the current dir.
@@ -181,9 +181,9 @@ public:
     /// Sets the default case sensitivity mode.
     void setCaseSensitivity(QuaZip::CaseSensitivity caseSensitivity);
     /// Sets the default filter.
-    void setFilter(QDir::Filters filters);
+    void setFilter(QDir::Filters value);
     /// Sets the default name filter.
-    void setNameFilters(const QStringList &nameFilters);
+    void setNameFilters(const QStringList &value);
     /// Goes to the specified path.
     /**
       The difference from cd() is that this function never checks if the
@@ -196,7 +196,7 @@ public:
       */
     void setPath(const QString &path);
     /// Sets the default sorting mode.
-    void setSorting(QDir::SortFlags sort);
+    void setSorting(QDir::SortFlags value);
     /// Returns the default sorting mode.
     QDir::SortFlags sorting() const;
 };
