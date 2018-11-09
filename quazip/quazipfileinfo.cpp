@@ -359,7 +359,7 @@ QuaZipFileInfo::EntryType QuaZipFileInfo::entryType() const
 
 QuaZipFileInfo::EntryType QuaZipFileInfo::Private::entryType() const
 {
-    if (filePath.endsWith('/'))
+    if (filePath.isEmpty() || filePath.endsWith('/'))
         return Directory;
 
     int uAttr = externalAttributes >> 16;
@@ -541,7 +541,9 @@ void QuaZipFileInfo::setFilePath(const QString &filePath)
 
     d->filePath = normalizedFilePath;
     auto attr = d.constData()->attributes();
-    attr.setFlag(DirAttr, filePath.endsWith('/') || filePath.endsWith('\\'));
+    attr.setFlag(DirAttr,
+        normalizedFilePath.isEmpty() || filePath.endsWith('/') ||
+            filePath.endsWith('\\'));
     d->setAttributes(attr);
 }
 
@@ -1362,7 +1364,7 @@ QuaZipFileInfo::Attributes QuaZipFileInfo::attributes() const
 {
     auto result = d->attributes() & AllAttrs;
 
-    if (d->filePath.endsWith('/'))
+    if (d->filePath.isEmpty() || d->filePath.endsWith('/'))
         result |= DirAttr;
 
     return result;
@@ -1533,7 +1535,7 @@ bool QuaZipFileInfo::isSymLinkHost(ZipSystem host)
 
 QuaZipFileInfo::Private::Private()
     : crc(0)
-    , externalAttributes(Archived)
+    , externalAttributes(Archived | DirAttr)
     , internalAttributes(0)
     , flags(0)
     , zipVersionMadeBy(10)
