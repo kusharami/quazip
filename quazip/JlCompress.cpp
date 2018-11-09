@@ -201,7 +201,7 @@ bool JlCompress::extractSingleFile(
     QFileInfo destInfo(fileDest);
     // Controllo esistenza cartella file risultato
     QDir curDir;
-    if (fileDest.endsWith('/')) {
+    if (info.isDir()) {
         if (!curDir.mkpath(fileDest)) {
             return false;
         }
@@ -439,7 +439,7 @@ QStringList JlCompress::extractFiles(
 }
 
 QStringList JlCompress::extractDir(
-    const QString &zipArchive, const QString &dir, const QString &targetDir)
+    const QString &zipArchive, const QString &targetDir, const QString &dir)
 {
     // Apro lo zip
     QuaZip zip(zipArchive);
@@ -452,20 +452,26 @@ QStringList JlCompress::extractDir(
     if (!zip->open(QuaZip::mdUnzip)) {
         return QStringList();
     }
-    QDir directory(targetDir);
-    QString absCleanDir = QDir::cleanPath(directory.absolutePath());
-    QStringList extracted;
-    if (!zip->goToFirstFile()) {
-        return QStringList();
-    }
 
     QuaZipDir zipDir(zip, dir);
-    if (zipDir.isRoot())
+    return extractDir(zipDir, targetDir);
+}
+
+bool JlCompress::extractDir(
+    const QuaZipDir &dir, const QDir &targetDir, QStringList &extracted)
+{
+    if (!dir.isValid())
+        return false;
+
+    auto zip = dir.zip();
+    if (dir.isRoot()) {
+        if (!zip->goToFirstFile())
+            return false;
         do {
-            QString name = zip->currentFilePath();
-            QString absFilePath = directory.absoluteFilePath(name);
-            QString absCleanPath = QDir::cleanPath(absFilePath);
-            if (!absCleanPath.startsWith(absCleanDir + '/'))
+            QString absFilePath = QDir::cleanPath(
+                targetDir.absoluteFilePath(zip->currentFilePath()));
+
+            if (!absFilePath.startsWith(targetDir.path() + '/'))
                 continue;
 
             if (!extractSingleFile(zip, QString(), absFilePath)) {
@@ -473,13 +479,36 @@ QStringList JlCompress::extractDir(
             }
             extracted.append(absFilePath);
         } while (zip->goToNextFile());
-    else {
-        zipDir.entryInfoList(QDir::AllDirs);
+    } else {
+        auto entries = dir.entryInfoList();
+        if (entries.isEmpty())
+            return false;
+
+        for (const auto &entry : entries) {
+            QString absFilePath =
+                QDir::cleanPath(targetDir.absoluteFilePath(entry.filePath()));
+
+            if (!absFilePath.startsWith(targetDir.path() + '/'))
+                continue;
+
+            if (!extractSingleFile(zip, entry.filePath(), absFilePath)) {
+                if (!entry.isDir())
+                    continue;
+
+                if (!QDir().mkpath(absFilePath))
+                    continue;
+            }
+            extracted.append(absFilePath);
+
+            if (entry.isDir()) {
+                QuaZipDir dir(zip, entry.filePath());
+                if (!extractDir(dir, targetDir, extracted))
+                    continue;
+            }
+        }
     }
 
-    // Chiudo il file zip
-    zip->close();
-    return extracted;
+    return true;
 }
 
 QStringList JlCompress::getFileList(const QString &fileCompressed)
@@ -514,10 +543,22 @@ QStringList JlCompress::getFileList(QuaZip *zip)
     return lst;
 }
 
-QStringList JlCompress::extractDir(QIODevice *ioDevice, const QString &dir)
+QStringList JlCompress::extractDir(
+    QIODevice *ioDevice, const QString &targetDir, const QString &dir)
 {
     QuaZip zip(ioDevice);
-    return extractDir(&zip, dir);
+    return extractDir(&zip, dir, targetDir);
+}
+
+QStringList JlCompress::extractDir(
+    const QuaZipDir &dir, const QString &targetDir)
+{
+    QStringList result;
+    if (!extractDir(
+            dir, QDir::cleanPath(QDir(targetDir).absolutePath()), result))
+        return QStringList();
+
+    return result;
 }
 
 QStringList JlCompress::getFileList(QIODevice *ioDevice)

@@ -377,35 +377,40 @@ void TestJlCompress::extractFiles()
 void TestJlCompress::extractDir_data()
 {
     QADD_COLUMN(QStringList, fileNames);
+    QADD_COLUMN(QString, fromDir);
     QADD_COLUMN(QStringList, expectedExtracted);
     QADD_COLUMN(bool, useDevice);
 
-    QTest::newRow("simple") << (QStringList() << "test0.txt"
-                                              << "testdir1/test1.txt"
-                                              << "testdir2/test2.txt"
-                                              << "testdir2/subdir/test2sub.txt")
-                            << (QStringList() << "test0.txt"
-                                              << "testdir1/test1.txt"
-                                              << "testdir2/test2.txt"
-                                              << "testdir2/subdir/test2sub.txt")
-                            << false;
+    QTest::newRow("from dir")
+        << (QStringList() << "test0.txt"
+                          << "testdir1/test1.txt"
+                          << "testdir2/test2.txt"
+                          << "testdir2/subdir/test2sub.txt")
+        << "testdir2"
+        << (QStringList() << "testdir2/test2.txt"
+                          << "testdir2/subdir"
+                          << "testdir2/subdir/test2sub.txt")
+        << false;
     QTest::newRow("separate dir") << (QStringList() << "laj/"
                                                     << "laj/lajfile.txt")
+                                  << QString()
                                   << (QStringList() << "laj/"
                                                     << "laj/lajfile.txt")
                                   << true;
     QTest::newRow("FilePath Zip Slip")
         << (QStringList() << "test0.txt"
                           << "../zipslip.txt")
-        << (QStringList() << "test0.txt") << false;
-    QTest::newRow("Device Zip Slip") << (QStringList() << "test0.txt"
-                                                       << "../zipslip.txt")
-                                     << (QStringList() << "test0.txt") << true;
+        << QString() << (QStringList() << "test0.txt") << false;
+    QTest::newRow("Device Zip Slip")
+        << (QStringList() << "test0.txt"
+                          << "../zipslip.txt")
+        << QString() << (QStringList() << "test0.txt") << true;
 }
 
 void TestJlCompress::extractDir()
 {
     QFETCH(QStringList, fileNames);
+    QFETCH(QString, fromDir);
     QFETCH(QStringList, expectedExtracted);
     QFETCH(bool, useDevice);
 
@@ -427,9 +432,9 @@ void TestJlCompress::extractDir()
     if (useDevice) {
         QFile zipFile(zipPath);
         QVERIFY(zipFile.open(QIODevice::ReadOnly));
-        extracted = JlCompress::extractDir(&zipFile, targetDir.path());
+        extracted = JlCompress::extractDir(&zipFile, targetDir.path(), fromDir);
     } else {
-        extracted = JlCompress::extractDir(zipPath, targetDir.path());
+        extracted = JlCompress::extractDir(zipPath, targetDir.path(), fromDir);
     }
     QCOMPARE(extracted.count(), expectedExtracted.count());
     for (const QString &fileName : expectedExtracted) {
@@ -439,9 +444,8 @@ void TestJlCompress::extractDir()
         QCOMPARE(dstInfo.size(), srcInfo.size());
         QCOMPARE(dstInfo.permissions(), srcInfo.permissions());
 
-        QString absolutePath = targetDir.absoluteFilePath(fileName);
-        if (dstInfo.isDir() && !absolutePath.endsWith('/'))
-            absolutePath += '/';
+        QString absolutePath =
+            QDir::cleanPath(targetDir.absoluteFilePath(fileName));
         QVERIFY(extracted.contains(absolutePath));
     }
 }

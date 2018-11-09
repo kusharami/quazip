@@ -32,6 +32,8 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include <QDir>
 
+class QuaZipDir;
+
 /// Utility class for typical operations.
 /**
   This class contains a number of useful static functions to perform
@@ -41,6 +43,8 @@ class QUAZIP_EXPORT JlCompress {
 private:
     static QStringList extractDir(
         QuaZip *zip, const QString &dir, const QString &targetDir);
+    static bool extractDir(
+        const QuaZipDir &dir, const QDir &targetDir, QStringList &extracted);
     static QStringList getFileList(QuaZip *zip);
     static QString extractFile(
         QuaZip *zip, const QString &fileName, const QString &fileDest);
@@ -164,7 +168,7 @@ public:
       \return The list of the full paths of the files extracted, empty on failure.
       */
     static QStringList extractDir(const QString &zipArchive,
-        const QString &dir = QString(), const QString &targetDir = QString());
+        const QString &targetDir = QString(), const QString &dir = QString());
     /// Get the file list.
     /**
       \return The list of the files in the archive, or, more precisely, the
@@ -195,12 +199,16 @@ public:
     /// Extract a whole archive.
     /**
       \param ioDevice pointer to device with compressed data.
-      \param dir The directory to extract to, the current directory if
+      \param dir The directory in archive from which files and
+        subdirectories will be extracted
+      \param targetDir The directory to extract to, the current directory if
       left empty.
       \return The list of the full paths of the files extracted, empty on failure.
       */
+    static QStringList extractDir(QIODevice *ioDevice,
+        const QString &targetDir = QString(), const QString &dir = QString());
     static QStringList extractDir(
-        QIODevice *ioDevice, const QString &dir = QString());
+        const QuaZipDir &dir, const QString &targetDir = QString());
     /// Get the file list.
     /**
       \return The list of the files in the archive, or, more precisely, the
