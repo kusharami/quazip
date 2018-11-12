@@ -1939,6 +1939,9 @@ extern int ZEXPORT unzReadCurrentFile  (unzFile file, voidp buf, unsigned len)
 
             iRead += uAvailOutBefore - uAvailOutAfter;
 
+            if (err < UNZ_OK)
+                pfile_in_zip_read_info->rest_read_uncompressed = 0;
+
             if (err==Z_STREAM_END)
                 return (iRead==0) ? UNZ_EOF : iRead;
             if (err!=Z_OK)
