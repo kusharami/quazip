@@ -451,7 +451,7 @@ void QuaZipFile::close()
         qWarning("QuaZipFile::close(): file isn't open");
         return;
     }
-    int oldError = p->zip->zipError();
+    int oldError = p->zipError;
     int error = oldError;
     if (isReadable())
         error = unzCloseCurrentFile(p->zip->getUnzFile());
