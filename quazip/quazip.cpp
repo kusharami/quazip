@@ -813,46 +813,52 @@ void QuaZipPrivate::fillTMZDate(tm_zip &out, const QDateTime &dateTime)
     }
 }
 
-QString QuaZipPrivate::decodeZipText(const QByteArray &text, uLong flags,
+QString QuaZipPrivate::decodeZipText(const QByteArray &zipText, uLong flags,
     const QuaZExtraField::Map &centralExtra, ZipTextType textType)
 {
     bool isUtf8 = 0 != (flags & QuaZipFileInfo::Unicode);
-
-    if (isUtf8)
-        return QString::fromUtf8(text);
-
     QString result;
+    if (isUtf8) {
+        result = QString::fromUtf8(zipText);
+        if (textType == ZIP_FILENAME)
+            result = result.normalized(QString::NormalizationForm_C);
+        return result;
+    }
+
     switch (textType) {
     case ZIP_FILENAME:
         result = getInfoZipUnicodeText(
-            INFO_ZIP_UNICODE_PATH_HEADER, centralExtra, text);
+            INFO_ZIP_UNICODE_PATH_HEADER, centralExtra, zipText);
         if (result.isEmpty()) {
-            result = getZipArchiveUnicodeFileName(centralExtra, text);
+            result = getZipArchiveUnicodeFileName(centralExtra, zipText);
         }
+
         if (result.isEmpty()) {
-            if (compatibility == QuaZip::CustomCompatibility) {
-                return filePathCodec->toUnicode(text);
-            }
-            return getLegacyTextCodec()->toUnicode(text);
+            auto codec = (compatibility == QuaZip::CustomCompatibility)
+                ? filePathCodec
+                : getLegacyTextCodec();
+            result = codec->toUnicode(zipText);
         }
+
+        result = result.normalized(QString::NormalizationForm_C);
         break;
 
     case ZIP_COMMENT:
         result = getInfoZipUnicodeText(
-            INFO_ZIP_UNICODE_COMMENT_HEADER, centralExtra, text);
+            INFO_ZIP_UNICODE_COMMENT_HEADER, centralExtra, zipText);
         if (result.isEmpty()) {
-            result = getZipArchiveUnicodeComment(centralExtra, text);
+            result = getZipArchiveUnicodeComment(centralExtra, zipText);
         }
         if (result.isEmpty()) {
             if (compatibility == QuaZip::CustomCompatibility) {
-                return commentCodec->toUnicode(text);
+                return commentCodec->toUnicode(zipText);
             }
 
             if (compatibility & QuaZip::DosCompatible) {
-                return getLegacyTextCodec()->toUnicode(text);
+                return getLegacyTextCodec()->toUnicode(zipText);
             }
 
-            return QuaZipTextCodec::codecForLocale()->toUnicode(text);
+            return QuaZipTextCodec::codecForLocale()->toUnicode(zipText);
         }
         break;
     }
@@ -864,17 +870,19 @@ QByteArray QuaZipPrivate::makeInfoZipText(
     const QString &text, const QByteArray &compatibleText, ZipTextType textType)
 {
     int headerId;
+    QByteArray utf8;
     switch (textType) {
     case ZIP_FILENAME:
         headerId = INFO_ZIP_UNICODE_PATH_HEADER;
+        utf8 = text.normalized(QString::NormalizationForm_C).toUtf8();
         break;
 
     case ZIP_COMMENT:
         headerId = INFO_ZIP_UNICODE_COMMENT_HEADER;
+        utf8 = text.toUtf8();
         break;
     }
 
-    auto utf8 = text.toUtf8();
     if (utf8 == compatibleText)
         return QByteArray();
 
@@ -1056,7 +1064,7 @@ QString QuaZipPrivate::getZipArchiveUnicodeFileName(
         : nullptr;
     if (!codec)
         codec = QuaZipTextCodec::codecForLocale();
-    if (flags & ZIPARCHIVE_ENCODED_FILENAME_FLAG) {
+    if (fileNameLength > 0 && (flags & ZIPARCHIVE_ENCODED_FILENAME_FLAG)) {
         QByteArray fileName;
         fileName.resize(fileNameLength);
         if (fileNameLength !=
@@ -1487,7 +1495,8 @@ bool QuaZip::setCurrentFile(const QString &fileName, CaseSensitivity cs)
     bool caseSensitive = convertCaseSensitivity(cs) == Qt::CaseSensitive;
     QString lower, current;
 
-    QString fileNameNormalized = QDir::cleanPath(fileName);
+    QString fileNameNormalized =
+        QDir::cleanPath(fileName).normalized(QString::NormalizationForm_C);
     if (fileNameNormalized.startsWith('/'))
         fileNameNormalized = fileNameNormalized.mid(1);
 
@@ -1962,7 +1971,7 @@ QByteArray QuaZipPrivate::compatibleFilePath(const QString &filePath) const
         if (compatibility & QuaZip::DosCompatible)
             result = toDosPath(result);
     } else {
-        result = filePath.toUtf8();
+        result = filePath.normalized(QString::NormalizationForm_C).toUtf8();
     }
 
     return result;

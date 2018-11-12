@@ -25,6 +25,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "testquagzipdevice.h"
 
 #include "quazip/quagzipdevice.h"
+#include "quazip/quaziptextcodec.h"
 #include "quazip/private/quaziodeviceprivate.h"
 #include "qztest.h"
 
@@ -177,7 +178,7 @@ void TestQuaGzipDevice::write_data()
 
         QTest::newRow("text")
             << QString("test.txt") << QByteArray("Test write\ntext file")
-            << QByteArray("This is a text file") << extra << Z_BEST_COMPRESSION
+            << QString("This is a text file") << extra << Z_BEST_COMPRESSION
             << true << QByteArray();
     }
 
@@ -219,10 +220,14 @@ void TestQuaGzipDevice::write()
     if (isText)
         writeMode |= QIODevice::Text;
 
+    auto expectedCodec = QTextCodec::codecForName(textCodec);
+    if (!expectedCodec)
+        expectedCodec = QuaZipTextCodec::codecForLocale();
+
     gzDevice.setFileNameCodec(textCodec);
-    QCOMPARE(gzDevice.fileNameCodec(), QTextCodec::codecForName(textCodec));
+    QCOMPARE(gzDevice.fileNameCodec(), expectedCodec);
     gzDevice.setCommentCodec(textCodec);
-    QCOMPARE(gzDevice.commentCodec(), QTextCodec::codecForName(textCodec));
+    QCOMPARE(gzDevice.commentCodec(), expectedCodec);
     gzDevice.setCompressionLevel(compressionLevel);
     QCOMPARE(gzDevice.compressionLevel(), compressionLevel);
     gzDevice.setIODevice(&fileGZ);

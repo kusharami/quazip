@@ -569,9 +569,6 @@ bool QuaZipDir::exists() const
 
 QString QuaZipDir::filePath(const QString &fileName) const
 {
-    if (QDir::cleanPath(fileName).startsWith('/'))
-        return fileName;
-
     return QDir(d->dir).filePath(fileName);
 }
 

@@ -291,7 +291,7 @@ bool QuaZipFileInfo::initWithFile(const QFileInfo &fileInfo)
 #else
     attr.setFlag(ReadOnly, !fileInfo.isWritable());
 #endif
-    attr.setFlag(DirAttr, fileInfo.isDir());
+    attr.setFlag(DirAttr, !fileInfo.isSymLink() && fileInfo.isDir());
     attr.setFlag(Hidden, fileInfo.isHidden());
 
     auto perm = fileInfo.permissions();
@@ -1438,7 +1438,10 @@ QString QuaZipFileInfo::Private::path() const
     if (fileInfo.fileName().isEmpty())
         fileInfo.setFile(fileInfo.path());
 
-    return fileInfo.path();
+    auto result = fileInfo.path();
+    if (result == QChar('.'))
+        result.clear();
+    return result;
 }
 
 void QuaZipFileInfo::setAttributes(Attributes value)

@@ -257,7 +257,7 @@ void TestQuaZipDir::entryList()
         if (fileName == "readonly") {
             attr |= QuaZipFileInfo::ReadOnly;
         } else if (fileName.endsWith(".mod")) {
-            QTest::qWait(100);
+            QTest::qWait(10);
             QFile file(filePath);
             QVERIFY(file.open(QIODevice::Append));
             QVERIFY(file.write(QByteArray(256, Qt::Uninitialized)) == 256);

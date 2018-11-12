@@ -1683,8 +1683,8 @@ extern int ZEXPORT zipCloseFileInZip (zipFile file)
           zip64local_putValue_inmemory(zi->ci.central_header+20, compressed_size,4); /*compr size*/
 
         /* set internal file attributes field */
-        if (zi->ci.stream.data_type == Z_ASCII)
-            zip64local_putValue_inmemory(zi->ci.central_header+36,(uLong)Z_ASCII,2);
+        if (zi->ci.stream.data_type != Z_ASCII)
+            zip64local_putValue_inmemory(zi->ci.central_header+36,(uLong)Z_BINARY,2);
 
         if(uncompressed_size >= maxSize)
           zip64local_putValue_inmemory(zi->ci.central_header+24, maxSize,4); /*uncompr size*/

@@ -45,9 +45,9 @@ void TestQuaZIODevice::read()
     zouts.avail_in = 4;
     zouts.next_out = reinterpret_cast<Bytef *>(buf.data());
     zouts.avail_out = buf.size();
-    qint64 compressedSize = qint64(buf.size()) - zouts.avail_out;
     deflate(&zouts, Z_FINISH);
     deflateEnd(&zouts);
+    qint64 compressedSize = qint64(buf.size()) - zouts.avail_out;
     QBuffer testBuffer(&buf);
     QuaZIODevice testDevice(&testBuffer);
     testBuffer.open(QIODevice::ReadOnly);
@@ -96,9 +96,9 @@ void TestQuaZIODevice::readMany()
     zouts.avail_in = 8;
     zouts.next_out = reinterpret_cast<Bytef *>(buf.data());
     zouts.avail_out = buf.size();
-    qint64 compressedSize = qint64(buf.size()) - zouts.avail_out;
     deflate(&zouts, Z_FINISH);
     deflateEnd(&zouts);
+    qint64 compressedSize = qint64(buf.size()) - zouts.avail_out;
     QBuffer testBuffer(&buf);
     testBuffer.open(QIODevice::ReadWrite);
     QuaZIODevice testDevice(&testBuffer);
@@ -174,10 +174,10 @@ void TestQuaZIODevice::write()
     zouts.avail_in = uInt(data.length());
     zouts.next_out = reinterpret_cast<Bytef *>(expectedCompressedData.data());
     zouts.avail_out = expectedCompressedData.size();
-    qint64 expectedCompressedSize =
-        qint64(expectedCompressedData.size()) - zouts.avail_out;
     deflate(&zouts, Z_FINISH);
     deflateEnd(&zouts);
+    qint64 expectedCompressedSize =
+        qint64(expectedCompressedData.size()) - zouts.avail_out;
     expectedCompressedData.resize(int(expectedCompressedSize));
 
     QByteArray buf(32768, 0);
