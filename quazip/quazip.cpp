@@ -472,20 +472,17 @@ QDateTime QuaZipPrivate::decodeNTFSTime(const QByteArray &extra, TimeOf timeOf)
         fieldReader >> size;
         if (tag == NTFS_FILE_TIME_TAG) {
             quint64 time;
-            quint16 skipSize;
             switch (timeOf) {
             case TimeOfCreation:
-                skipSize = sizeof(time) * 2;
+                fieldReader.skipRawData(sizeof(time));
+                Q_FALLTHROUGH();
+            case TimeOfAccess:
+                fieldReader.skipRawData(sizeof(time));
                 break;
             case TimeOfModification:
-                skipSize = 0;
-                break;
-            case TimeOfAccess:
-                skipSize = sizeof(time);
                 break;
             }
 
-            fieldReader.skipRawData(skipSize);
             fieldReader >> time;
             if (fieldReader.status() != QDataStream::Ok)
                 break;
@@ -1160,7 +1157,7 @@ QByteArray QuaZipPrivate::toDosPath(const QByteArray &path)
         auto fileName = name;
         QByteArray extension;
         if (dotIndex >= 0) {
-            extension = name.right(name.length() - dotIndex);
+            extension = name.mid(dotIndex);
             fileName = name.left(dotIndex);
         }
 
@@ -1197,7 +1194,7 @@ QString QuaZipPrivate::compatibleFilePath(
         QString extension;
         if (dotIndex >= 0) {
             name = sec.left(dotIndex);
-            extension = sec.right(sec.length() - dotIndex);
+            extension = sec.mid(dotIndex);
         } else {
             name = sec;
         }
@@ -1705,12 +1702,16 @@ QString QuaZip::currentFilePath() const
 
     auto extraMap = QuaZExtraField::toMap(centralExtra);
 
-    QString result = p->decodeZipText(
-        fileName, info_z.flag, extraMap, QuaZipPrivate::ZIP_FILENAME);
+    QuaZipFileInfo info;
+    info.setMadeBy(quint16(info_z.version));
+    info.setExternalAttributes(info_z.external_fa);
+
+    info.setFilePath(p->decodeZipText(
+        fileName, info_z.flag, extraMap, QuaZipPrivate::ZIP_FILENAME));
 
     // Add to directory map
-    p->addCurrentFileToDirectoryMap(result);
-    return result;
+    p->addCurrentFileToDirectoryMap(info.filePath());
+    return info.filePath();
 }
 
 void QuaZip::setFilePathCodec(QTextCodec *filePathCodec)
