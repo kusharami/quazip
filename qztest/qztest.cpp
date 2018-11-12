@@ -107,7 +107,8 @@ bool createTestFiles(
             }
         } else {
             QFile testFile(filePath);
-            if (!testFile.open(QIODevice::WriteOnly)) {
+            if (!testFile.open(QIODevice::WriteOnly | QIODevice::Truncate |
+                    QIODevice::Unbuffered)) {
                 qWarning(
                     "Couldn't create %s", fileName.toLocal8Bit().constData());
                 return false;

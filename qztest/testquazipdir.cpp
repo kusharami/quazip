@@ -240,7 +240,10 @@ void TestQuaZipDir::entryList()
     auto filesPath = tempFilesPath(tempDir);
     QDir filesDir(filesPath);
 
-    QVERIFY2(createTestFiles(fileNames, -1, filesPath),
+    QVERIFY2(
+        createTestFiles(fileNames,
+            (filters != QDir::NoFilter && (filters & QDir::Modified)) ? 0 : -1,
+            filesPath),
         "Couldn't create test files for zipping");
     for (auto &fileName : fileNames) {
         auto filePath = filesDir.filePath(fileName);
@@ -254,6 +257,7 @@ void TestQuaZipDir::entryList()
         if (fileName == "readonly") {
             attr |= QuaZipFileInfo::ReadOnly;
         } else if (fileName.endsWith(".mod")) {
+            QTest::qWait(100);
             QFile file(filePath);
             QVERIFY(file.open(QIODevice::Append));
             QVERIFY(file.write(QByteArray(256, Qt::Uninitialized)) == 256);
@@ -351,13 +355,13 @@ void TestQuaZipDir::cd_data()
                                             << "testdir1/test1.txt"
                                             << "testdir2/test2.txt"
                                             << "testdir2/subdir/test2sub.txt")
-                          << "testdir1"
+                          << "/testdir1"
                           << ".." << QString();
     QTest::newRow("cdSide") << (QStringList() << "test0.txt"
                                               << "testdir1/test1.txt"
                                               << "testdir2/test2.txt"
                                               << "testdir2/subdir/test2sub.txt")
-                            << "testdir1"
+                            << "/testdir1"
                             << "../testdir2"
                             << "testdir2";
     QTest::newRow("cdDownUp")
@@ -378,14 +382,14 @@ void TestQuaZipDir::cd_data()
                           << "testdir1/test1.txt"
                           << "testdir2/test2.txt"
                           << "testdir2/subdir/subdir2/subdir3/test2sub.txt")
-        << "testdir2/subdir"
+        << "/testdir2/subdir"
         << "subdir2/subdir3"
         << "testdir2/subdir/subdir2/subdir3";
     QTest::newRow("cdRoot") << (QStringList() << "test0.txt"
                                               << "testdir1/test1.txt"
                                               << "testdir2/test2.txt"
                                               << "testdir2/subdir/test2sub.txt")
-                            << "testdir1"
+                            << "/testdir1"
                             << "/" << QString();
 }
 
@@ -408,6 +412,7 @@ void TestQuaZipDir::cd()
 
     QuaZip zip(zipPath);
     QVERIFY(zip.open(QuaZip::mdUnzip));
+    auto origDirName = dirName;
     QuaZipDir dir(&zip, dirName);
     QVERIFY(dir.isValid());
     if (dirName.startsWith('/')) {
@@ -428,7 +433,7 @@ void TestQuaZipDir::cd()
             }
         } else {
             // dirName is a sequence
-            QCOMPARE(dir.dirName(), dirName.right(lastSlash + 1));
+            QCOMPARE(dir.dirName(), dirName.mid(lastSlash + 1));
         }
     }
     if (targetDirName == "..") {
@@ -439,7 +444,7 @@ void TestQuaZipDir::cd()
     QVERIFY(dir.isValid());
     QCOMPARE(dir.path(), result);
     // Try to go back
-    QVERIFY(dir.cd(dirName));
+    QVERIFY(dir.cd(origDirName));
     QVERIFY(dir.isValid());
     QCOMPARE(dir.path(), dirName);
     dir.setPath(QString());
@@ -473,7 +478,7 @@ void TestQuaZipDir::operators()
 
     QVERIFY(zip.open(QuaZip::mdUnzip));
     QuaZipDir dir(&zip, "dir");
-    QVERIFY(!dir.isValid());
+    QVERIFY(dir.isValid());
     QCOMPARE(dir.path(), QString::fromLatin1("dir"));
     {
         QuaZipDir dir2;
