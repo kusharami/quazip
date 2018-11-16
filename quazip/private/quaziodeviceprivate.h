@@ -72,6 +72,7 @@ public:
     bool flushBuffer(int size = QUAZIO_BUFFER_SIZE);
     bool seekInternal(qint64 newPos);
     bool skip(qint64 skipCount);
+    bool skipInput(qint64 skipCount);
     qint64 readInternal(char *data, qint64 maxlen);
     qint64 writeInternal(const char *data, qint64 maxlen);
     bool seekInit();

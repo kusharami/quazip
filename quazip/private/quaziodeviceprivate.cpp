@@ -125,6 +125,29 @@ bool QuaZIODevicePrivate::skip(qint64 skipCount)
     return true;
 }
 
+bool QuaZIODevicePrivate::skipInput(qint64 skipCount)
+{
+    int blockSize = QUAZIO_BUFFER_SIZE;
+    if (hasUncompressedSize) {
+        QuaZUtils::adjustBlockSize(blockSize, qint64(uncompressedSize));
+    }
+
+    while (skipCount > 0) {
+        QuaZUtils::adjustBlockSize(blockSize, skipCount);
+        if (seekBuffer.size() < blockSize) {
+            seekBuffer.resize(blockSize);
+        }
+
+        auto readBytes = owner->read(seekBuffer.data(), blockSize);
+        if (readBytes != blockSize) {
+            return false;
+        }
+        skipCount -= readBytes;
+    }
+
+    return true;
+}
+
 qint64 QuaZIODevicePrivate::readCompressedData(Bytef *zbuffer, size_t size)
 {
     auto readResult = io->read(reinterpret_cast<char *>(zbuffer), qint64(size));

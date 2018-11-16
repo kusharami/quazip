@@ -247,12 +247,10 @@ qint64 QuaZIODevice::size() const
             if (!sequential || !isTransactionStarted()) {
                 if (sequential) {
                     d->owner->startTransaction();
-                }
-
-                d->skip(std::numeric_limits<qint64>::max());
-
-                if (sequential) {
+                    d->skipInput(QuaZIODevicePrivate::maxUncompressedSize());
                     d->owner->rollbackTransaction();
+                } else {
+                    d->skip(QuaZIODevicePrivate::maxUncompressedSize());
                 }
 
                 if (hasError()) {
