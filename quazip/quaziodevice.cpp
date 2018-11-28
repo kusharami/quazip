@@ -25,7 +25,6 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 
 #include "quaziodevice.h"
 
-#include "quaziodevice_utils.h"
 #include "private/quaziodeviceprivate.h"
 
 QuaZIODevice::QuaZIODevice(QuaZIODevicePrivate *p, QObject *parent)
@@ -52,7 +51,7 @@ QuaZIODevice::~QuaZIODevice()
     delete d;
 }
 
-QIODevice *QuaZIODevice::getIODevice() const
+QIODevice *QuaZIODevice::ioDevice() const
 {
     return d->io;
 }
@@ -69,19 +68,8 @@ bool QuaZIODevice::open(OpenMode mode)
         return false;
     }
 
-    if (mode & Append) {
-        d->setError("Append is not supported for zlib compressed device.");
-        return false;
-    }
-
     if (mode & (WriteOnly | Truncate)) {
         mode |= WriteOnly | Truncate;
-    }
-
-    if ((mode & ReadWrite) == ReadWrite) {
-        d->setError(
-            "Zlib device should be opened in read-only or write-only mode.");
-        return false;
     }
 
     mode |= Unbuffered;
@@ -89,6 +77,17 @@ bool QuaZIODevice::open(OpenMode mode)
     if (isOpen()) {
         qWarning("QuaZIODevice is already open");
         Q_ASSERT(mode == openMode());
+        return false;
+    }
+
+    if (mode & Append) {
+        d->setError("Append is not supported for zlib compressed device.");
+        return false;
+    }
+
+    if ((mode & ReadWrite) == ReadWrite) {
+        d->setError(
+            "Zlib device should be opened in read-only or write-only mode.");
         return false;
     }
 
@@ -104,6 +103,8 @@ bool QuaZIODevice::open(OpenMode mode)
         }
     }
 
+    d->hasError = false;
+    setErrorString(QString());
     setOpenMode(mode);
     d->hasUncompressedSize = false;
 
@@ -121,9 +122,8 @@ bool QuaZIODevice::open(OpenMode mode)
         }
     }
 
+    Q_ASSERT(!d->hasError);
     d->ioPosition = d->ioStartPosition;
-    d->hasError = false;
-    setErrorString(QString());
     return QIODevice::open(mode);
 }
 
@@ -186,7 +186,7 @@ qint64 QuaZIODevice::readData(char *data, qint64 maxSize)
         return d->readInternal(data, maxSize);
     }
 
-    return 0;
+    return -1;
 }
 
 qint64 QuaZIODevice::writeData(const char *data, qint64 maxSize)
@@ -246,12 +246,10 @@ qint64 QuaZIODevice::size() const
             if (!sequential || !isTransactionStarted()) {
                 if (sequential) {
                     d->owner->startTransaction();
-                }
-
-                d->skip(std::numeric_limits<qint64>::max());
-
-                if (sequential) {
+                    d->skipInput(QuaZIODevicePrivate::maxUncompressedSize());
                     d->owner->rollbackTransaction();
+                } else {
+                    d->skip(QuaZIODevicePrivate::maxUncompressedSize());
                 }
 
                 if (hasError()) {
@@ -274,6 +272,16 @@ bool QuaZIODevice::hasError() const
 void QuaZIODevice::setCompressionLevel(int level)
 {
     d->setCompressionLevel(level);
+}
+
+int QuaZIODevice::compressionStrategy() const
+{
+    return d->strategy;
+}
+
+void QuaZIODevice::setCompressionStrategy(int value)
+{
+    d->setStrategy(value);
 }
 
 int QuaZIODevice::compressionLevel() const

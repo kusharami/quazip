@@ -33,12 +33,13 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 class QIODevice;
 class QuaZIODevice;
 
+/// \cond internal
 enum
 {
-    QUAZIO_BUFFER_SIZE = 32768
+    QUAZIO_BUFFER_SIZE = 32768,
+    GZIP_FLAG = 16
 };
 
-/// \cond internal
 class QuaZIODevicePrivate {
 public:
     using SizeType = decltype(z_stream::total_out);
@@ -48,10 +49,12 @@ public:
     qint64 ioStartPosition;
     qint64 ioPosition;
     int compressionLevel;
+    int strategy;
     SizeType uncompressedSize;
     bool hasError : 1;
     bool atEnd : 1;
     bool hasUncompressedSize : 1;
+    bool transaction : 1;
     QByteArray seekBuffer;
     z_stream zstream;
     Byte zbuffer[QUAZIO_BUFFER_SIZE];
@@ -69,6 +72,7 @@ public:
     bool flushBuffer(int size = QUAZIO_BUFFER_SIZE);
     bool seekInternal(qint64 newPos);
     bool skip(qint64 skipCount);
+    bool skipInput(qint64 skipCount);
     qint64 readInternal(char *data, qint64 maxlen);
     qint64 writeInternal(const char *data, qint64 maxlen);
     bool seekInit();
@@ -77,8 +81,9 @@ public:
     void endWrite();
     void setError(const QString &message);
     qint64 readCompressedData(Bytef *zbuffer, size_t size);
-    bool finishReadTransaction(qint64 savedPosition);
+    void finishReadTransaction(qint64 savedPosition);
     void setCompressionLevel(int level);
+    void setStrategy(int value);
 
     static inline Q_DECL_CONSTEXPR SizeType maxUncompressedSize();
 };

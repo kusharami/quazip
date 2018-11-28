@@ -75,7 +75,7 @@ public:
       */
     void setIODevice(QIODevice *device);
     /// Returns the underlying device.
-    QIODevice *getIODevice() const;
+    QIODevice *ioDevice() const;
     /// Returns true if the end of the compressed stream is reached.
     virtual bool atEnd() const override;
     /// Returns if device is sequential.
@@ -90,13 +90,24 @@ public:
     /// Indicates if there was an error on last executed operation.
     bool hasError() const;
 
+    /// Compression level.
+    /// Default is Z_DEFAULT_COMPRESSION
+    int compressionLevel() const;
     /// Set compression level
     /**
       \param level The compression level (Z_BEST_COMPRESSION etc.)
     */
     void setCompressionLevel(int level);
-    /// Compression level
-    int compressionLevel() const;
+
+    /// Compression strategy.
+    /// Default is Z_DEFAULT_STRATEGY
+    int compressionStrategy() const;
+    /// Set compression strategy
+    /**
+      \param value The compression strategy:
+        Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED
+    */
+    void setCompressionStrategy(int value);
 
 protected:
     /// protected constructor for descendants

@@ -22,7 +22,8 @@ HEADERS += \
         $$PWD/zip.h \
     $$PWD/quaziodevice_utils.h \
     $$PWD/quagzipdevice.h \
-    $$PWD/private/quaziodeviceprivate.h
+    $$PWD/private/quaziodeviceprivate.h \
+    $$PWD/quazextrafield.h
 
 SOURCES += $$PWD/qioapi.cpp \
            $$PWD/JlCompress.cpp \
@@ -37,4 +38,5 @@ SOURCES += $$PWD/qioapi.cpp \
            $$PWD/unzip.c \
            $$PWD/zip.c \
     $$PWD/quagzipdevice.cpp \
-    $$PWD/private/quaziodeviceprivate.cpp
+    $$PWD/private/quaziodeviceprivate.cpp \
+    $$PWD/quazextrafield.cpp
