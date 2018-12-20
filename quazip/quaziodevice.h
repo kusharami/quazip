@@ -3,6 +3,7 @@
 
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP.
 
@@ -25,10 +26,8 @@ Original ZIP package is copyrighted by Gilles Vollant and contributors,
 see quazip/(un)zip.h files for details. Basically it's the zlib license.
 */
 
-#include <QIODevice>
 #include "quazip_global.h"
-
-#include <zlib.h>
+#include <QIODevice>
 
 class QuaZIODevicePrivate;
 
@@ -38,65 +37,95 @@ class QuaZIODevicePrivate;
   decompress it back. Compressing data sent over a QTcpSocket is a good
   example.
   */
-class QUAZIP_EXPORT QuaZIODevice: public QIODevice {
-  Q_OBJECT
-public:
-  /// Constructor.
-  /**
-    \param io The QIODevice to read/write.
-    \param parent The parent object, as per QObject logic.
-    */
-  QuaZIODevice(QIODevice *io, QObject *parent = NULL);
-  /// Destructor.
-  ~QuaZIODevice();
-  /// Flushes data waiting to be written.
-  /**
-    Unfortunately, as QIODevice doesn't support flush() by itself, the
-    only thing this method does is write the compressed data into the
-    device using Z_SYNC_FLUSH mode. If you need the compressed data to
-    actually be flushed from the buffer of the underlying QIODevice, you
-    need to call its flush() method as well, providing it supports it
-    (like QTcpSocket does). Example:
-    \code
-    QuaZIODevice dev(&sock);
-    dev.open(QIODevice::Write);
-    dev.write(yourDataGoesHere);
-    dev.flush();
-    sock->flush(); // this actually sends data to network
-    \endcode
+class QUAZIP_EXPORT QuaZIODevice : public QIODevice {
+    Q_OBJECT
+    /// @cond internal
+    friend class QuaZIODevicePrivate;
+    /// @endcond
 
-    This may change in the future versions of QuaZIP by implementing an
-    ugly hack: trying to cast the QIODevice using qobject_cast to known
-    flush()-supporting subclasses, and calling flush if the resulting
-    pointer is not zero.
+public:
+    /// Constructor.
+    /**
+      \param parent The parent object, as per QObject logic.
     */
-  virtual bool flush();
-  /// Opens the device.
-  /**
-    \param mode Neither QIODevice::ReadWrite nor QIODevice::Append are
-    not supported.
+    explicit QuaZIODevice(QObject *parent = nullptr);
+    /// Constructor.
+    /**
+      \param io The QIODevice to read/write.
+      \param parent The parent object, as per QObject logic.
+      */
+    QuaZIODevice(QIODevice *io, QObject *parent = nullptr);
+    /// Destructor.
+    virtual ~QuaZIODevice() override;
+    /// Opens the device.
+    /**
+      \param mode Neither QIODevice::ReadWrite nor QIODevice::Append are
+      not supported.
+      */
+    virtual bool open(QIODevice::OpenMode mode) override;
+    /// Closes this device, but not the underlying one.
+    /**
+      The underlying QIODevice is not closed in case you want to write
+      something else to it.
+      */
+    virtual void close() override;
+    /// Sets dependent IO device. This device is closed.
+    /**
+      \param device The QIODevice to read/write.
+      */
+    void setIODevice(QIODevice *device);
+    /// Returns the underlying device.
+    QIODevice *ioDevice() const;
+    /// Returns true if the end of the compressed stream is reached.
+    virtual bool atEnd() const override;
+    /// Returns if device is sequential.
+    virtual bool isSequential() const override;
+    /// Returns the number of the bytes buffered.
+    virtual qint64 bytesAvailable() const override;
+
+    /// Returns the size of bytes written in write mode.
+    /// Returns the size of uncompressed data in read mode. May be slow.
+    virtual qint64 size() const override;
+
+    /// Indicates if there was an error on last executed operation.
+    bool hasError() const;
+
+    /// Compression level.
+    /// Default is Z_DEFAULT_COMPRESSION
+    int compressionLevel() const;
+    /// Set compression level
+    /**
+      \param level The compression level (Z_BEST_COMPRESSION etc.)
     */
-  virtual bool open(QIODevice::OpenMode mode);
-  /// Closes this device, but not the underlying one.
-  /**
-    The underlying QIODevice is not closed in case you want to write
-    something else to it.
+    void setCompressionLevel(int level);
+
+    /// Compression strategy.
+    /// Default is Z_DEFAULT_STRATEGY
+    int compressionStrategy() const;
+    /// Set compression strategy
+    /**
+      \param value The compression strategy:
+        Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED
     */
-  virtual void close();
-  /// Returns the underlying device.
-  QIODevice *getIoDevice() const;
-  /// Returns true.
-  virtual bool isSequential() const;
-  /// Returns true iff the end of the compressed stream is reached.
-  virtual bool atEnd() const;
-  /// Returns the number of the bytes buffered.
-  virtual qint64 bytesAvailable() const;
+    void setCompressionStrategy(int value);
+
 protected:
-  /// Implementation of QIODevice::readData().
-  virtual qint64 readData(char *data, qint64 maxSize);
-  /// Implementation of QIODevice::writeData().
-  virtual qint64 writeData(const char *data, qint64 maxSize);
+    /// protected constructor for descendants
+    QuaZIODevice(QuaZIODevicePrivate *p, QObject *parent);
+
+    /// Implementation of QIODevice::readData().
+    virtual qint64 readData(char *data, qint64 maxSize) override;
+    /// Implementation of QIODevice::writeData().
+    virtual qint64 writeData(const char *data, qint64 maxSize) override;
+
 private:
-  QuaZIODevicePrivate *d;
+    void dependedDeviceWillClose();
+    void dependentDeviceDestoyed();
+
+protected:
+    /// @cond internal
+    QuaZIODevicePrivate *d;
+    /// @endcond
 };
+
 #endif // QUAZIP_QUAZIODEVICE_H

@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2005-2014 Sergey A. Tachenov
+Copyright (C) 2018 Alexandra Cherdantseva
 
 This file is part of QuaZIP test suite.
 
@@ -28,7 +29,7 @@ see quazip/(un)zip.h files for details. Basically it's the zlib license.
 #include "testquachecksum32.h"
 #include "testjlcompress.h"
 #include "testquazipdir.h"
-#include "testquagzipfile.h"
+#include "testquagzipdevice.h"
 #include "testquaziodevice.h"
 #include "testquazipnewinfo.h"
 #include "testquazipfileinfo.h"
@@ -51,22 +52,20 @@ bool createTestFiles(const QStringList &fileNames, int size, const QString &dir)
         QDir testDir = QFileInfo(filePath).dir();
         if (!testDir.exists()) {
             if (!curDir.mkpath(testDir.path())) {
-                qWarning("Couldn't mkpath %s",
-                        testDir.path().toUtf8().constData());
+                qWarning(
+                    "Couldn't mkpath %s", testDir.path().toUtf8().constData());
                 return false;
             }
         }
         if (fileName.endsWith('/')) {
             if (!curDir.mkpath(filePath)) {
-                qWarning("Couldn't mkpath %s",
-				fileName.toUtf8().constData());
+                qWarning("Couldn't mkpath %s", fileName.toUtf8().constData());
                 return false;
             }
         } else {
             QFile testFile(filePath);
             if (!testFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                qWarning("Couldn't create %s",
-                        fileName.toUtf8().constData());
+                qWarning("Couldn't create %s", fileName.toUtf8().constData());
                 return false;
             }
             if (size == -1) {
@@ -83,9 +82,7 @@ bool createTestFiles(const QStringList &fileNames, int size, const QString &dir)
 }
 
 bool createTestArchive(QuaZip &zip, const QString &zipName,
-                       const QStringList &fileNames,
-                       QTextCodec *codec,
-                       const QString &dir)
+    const QStringList &fileNames, QTextCodec *codec, const QString &dir)
 {
     if (codec != NULL) {
         zip.setFileNameCodec(codec);
@@ -107,26 +104,23 @@ bool createTestArchive(QuaZip &zip, const QString &zipName,
             dt1 = newInfo.dateTime;
         else if (i == 2) // to test identical timestamps
             newInfo.dateTime = dt1;
-        if (!zipFile.open(QIODevice::WriteOnly,
-                newInfo, NULL, 0,
+        if (!zipFile.open(QIODevice::WriteOnly, newInfo, NULL, 0,
                 fileInfo.isDir() ? 0 : 8)) {
-            qWarning("Couldn't open %s in %s", fileName.toUtf8()
-                .constData(), zipName.toUtf8().constData());
+            qWarning("Couldn't open %s in %s", fileName.toUtf8().constData(),
+                zipName.toUtf8().constData());
             return false;
         }
         if (!fileInfo.isDir()) {
             QFile file(filePath);
             if (!file.open(QIODevice::ReadOnly)) {
-                qWarning("Couldn't open %s", filePath.toUtf8()
-                    .constData());
+                qWarning("Couldn't open %s", filePath.toUtf8().constData());
                 return false;
             }
             while (true) {
                 char buf[4096];
                 qint64 l = file.read(buf, 4096);
                 if (l < 0) {
-                    qWarning("Couldn't read %s", filePath.toUtf8()
-                        .constData());
+                    qWarning("Couldn't read %s", filePath.toUtf8().constData());
                     return false;
                 }
                 if (l == 0) {
@@ -153,25 +147,22 @@ bool createTestArchive(QuaZip &zip, const QString &zipName,
     }
 }
 
-bool createTestArchive(const QString &zipName,
-                       const QStringList &fileNames,
-                       const QString &dir) {
+bool createTestArchive(
+    const QString &zipName, const QStringList &fileNames, const QString &dir)
+{
     return createTestArchive(zipName, fileNames, NULL, dir);
 }
 
-bool createTestArchive(QIODevice *ioDevice,
-                              const QStringList &fileNames,
-                              QTextCodec *codec,
-                              const QString &dir)
+bool createTestArchive(QIODevice *ioDevice, const QStringList &fileNames,
+    QTextCodec *codec, const QString &dir)
 {
     QuaZip zip(ioDevice);
     return createTestArchive(zip, "<QIODevice pointer>", fileNames, codec, dir);
 }
 
-bool createTestArchive(const QString &zipName,
-                              const QStringList &fileNames,
-                              QTextCodec *codec,
-                              const QString &dir) {
+bool createTestArchive(const QString &zipName, const QStringList &fileNames,
+    QTextCodec *codec, const QString &dir)
+{
     QuaZip zip(zipName);
     return createTestArchive(zip, zipName, fileNames, codec, dir);
 }
@@ -220,8 +211,8 @@ int main(int argc, char **argv)
         err = qMax(err, QTest::qExec(&testQuaZIODevice, app.arguments()));
     }
     {
-        TestQuaGzipFile testQuaGzipFile;
-        err = qMax(err, QTest::qExec(&testQuaGzipFile, app.arguments()));
+        TestQuaGzipDevice testQuaGzipDevice;
+        err = qMax(err, QTest::qExec(&testQuaGzipDevice, app.arguments()));
     }
     {
         TestQuaZipNewInfo testQuaZipNewInfo;
