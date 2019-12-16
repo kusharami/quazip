@@ -1,5 +1,5 @@
-win32:INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
-unix:LIBS += -lz
+win32|emscripten:INCLUDEPATH += $$[QT_INSTALL_HEADERS]/QtZlib
+else:unix:LIBS += -lz
 
 DEFINES += ZLIB_CONST
 

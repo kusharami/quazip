@@ -14,24 +14,27 @@ QMAKE_PKGCONFIG_REQUIRES = Qt5Core
 # The ABI version.
 
 TARGET = QuaZipAC
-VERSION = 1.2.0
+VERSION = 1.2.1
 
 # This one handles dllimport/dllexport directives.
 DEFINES += QUAZIP_BUILD
 
 # You'll need to define this one manually if using a build system other
 # than qmake or using QuaZIP sources directly in your project.
-CONFIG(staticlib): DEFINES += QUAZIP_STATIC
+CONFIG(static, static) {
+    DEFINES += QUAZIP_STATIC
+} else {
+    win32 {
+        TARGET_EXT = .dll
+    }
+    
+    macx {
+        QMAKE_SONAME_PREFIX = @executable_path/../lib
+    }
+}
 
 INCLUDEPATH += $$PWD
 
 # Input
 include(quazip.pri)
 
-win32 {
-    TARGET_EXT = .dll
-}
-
-macx {
-    QMAKE_SONAME_PREFIX = @executable_path/../lib
-}
