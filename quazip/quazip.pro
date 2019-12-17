@@ -7,6 +7,12 @@ QT -= gui
     CONFIG += create_prl no_install_prl create_pc
 }
 
+DEFINES += QT_NO_DEPRECATED_WARNINGS
+
+clang:QMAKE_CXXFLAGS_WARN_ON += \
+    -Wno-deprecated-copy \
+    -Wno-unknown-warning-option
+
 QMAKE_PKGCONFIG_PREFIX = $$PREFIX
 QMAKE_PKGCONFIG_INCDIR = $$headers.path
 QMAKE_PKGCONFIG_REQUIRES = Qt5Core
